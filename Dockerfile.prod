@@ -1,0 +1,62 @@
+# Proofport Demo - Production Dockerfile
+# Multi-stage build using Next.js standalone output for minimal image size
+
+# --- Stage 1: Install dependencies ---
+FROM node:20-alpine AS deps
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+# --- Stage 2: Build ---
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json* ./
+COPY tsconfig.json next.config.ts ./
+COPY app ./app
+COPY lib ./lib
+RUN mkdir -p public
+COPY public* ./public/
+
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+
+# Build-time env vars baked into the client bundle.
+# Server-side vars (API_URL, RELAY_URL) are set at Cloud Run runtime.
+ARG DASHBOARD_URL
+ENV DASHBOARD_URL=${DASHBOARD_URL}
+ARG DEMO_CLIENT_ID
+ENV DEMO_CLIENT_ID=${DEMO_CLIENT_ID}
+ARG DEMO_API_KEY
+ENV DEMO_API_KEY=${DEMO_API_KEY}
+
+RUN npm run build
+
+# --- Stage 3: Runtime ---
+FROM node:20-alpine
+
+RUN apk add --no-cache dumb-init
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Copy standalone output (includes server.js and required node_modules)
+COPY --from=builder /app/.next/standalone ./
+# Copy static assets (not included in standalone)
+COPY --from=builder /app/.next/static ./.next/static
+# Copy public assets if they exist
+COPY --from=builder /app/public ./public/
+
+EXPOSE 3300
+
+ENV PORT=3300
+ENV HOSTNAME="0.0.0.0"
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "server.js"]

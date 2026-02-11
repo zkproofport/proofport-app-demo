@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   env: {
     DASHBOARD_URL: process.env.DASHBOARD_URL,
     DEMO_CLIENT_ID: process.env.DEMO_CLIENT_ID,

@@ -689,14 +689,21 @@ export default function LandingPage() {
             {/* QR / Open App */}
             <div style={{ textAlign: 'center', margin: '16px 0' }}>
               {isMobile ? (
-                <a
-                  href={state.deepLink || '#'}
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (state.deepLink) {
+                      window.location.href = state.deepLink;
+                    }
+                  }}
                   style={{
                     display: 'inline-block',
                     padding: '16px 32px',
                     background: `linear-gradient(180deg, ${C.gold}, ${C.gold2})`,
                     color: '#1a222c',
                     textDecoration: 'none',
+                    border: 'none',
                     borderRadius: 12,
                     fontSize: 18,
                     fontWeight: 700,
@@ -704,11 +711,12 @@ export default function LandingPage() {
                     textAlign: 'center',
                     width: '100%',
                     boxSizing: 'border-box',
+                    cursor: 'pointer',
                     transition: 'opacity 0.2s',
                   }}
                 >
                   Open ZKProofport App
-                </a>
+                </button>
               ) : state.qrHtml ? (
                 <img
                   src={state.qrHtml}

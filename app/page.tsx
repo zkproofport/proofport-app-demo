@@ -4,19 +4,25 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createSDK } from '@/lib/sdk';
 import type { ProofportSDK as ProofportSDKType, AuthToken, RelayProofResult, ProofResponse } from '@zkproofport-app/sdk';
 
-/* ─── Color tokens (mirrors CSS custom properties from the HTML) ─── */
+/* ─── Color tokens (matching portal-web design system) ─── */
 const C = {
-  navyDeep: '#0a0f1e',
-  navyMid: '#131a2f',
-  navyLight: '#1a2440',
-  blue: '#2563eb',
-  purple: '#7c3aed',
-  cyan: '#06b6d4',
+  bgDeep: '#0a0e14',
+  bgCard: '#0e1219',
+  bgCardHover: '#131a24',
+  gold: '#d6b15c',
+  gold2: '#f0d488',
+  goldLine: 'rgba(214,177,92,0.15)',
+  cream: '#e8dcc8',
+  muted: '#5a6577',
+  ink: '#c9d7e2',
   white: '#ffffff',
-  gray100: '#f3f4f6',
-  gray300: '#cbd5e1',
-  gray400: '#94a3b8',
-  gray600: '#64748b',
+  navy: '#0e2233',
+} as const;
+
+const FONT = {
+  mono: "var(--font-mono, 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace)",
+  serif: "var(--font-serif, 'DM Serif Display', Georgia, serif)",
+  sans: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial",
 } as const;
 
 /* ─── Keyframe CSS injected once via <style> ─── */
@@ -80,8 +86,8 @@ function Spinner() {
         display: 'inline-block',
         width: 14,
         height: 14,
-        border: '2px solid rgba(234, 179, 8, 0.3)',
-        borderTopColor: '#eab308',
+        border: `2px solid ${C.goldLine}`,
+        borderTopColor: C.gold,
         borderRadius: '50%',
         animation: 'spin 0.8s linear infinite',
         verticalAlign: 'middle',
@@ -263,7 +269,7 @@ export default function LandingPage() {
     try {
       setAuthenticating(true);
       setAuthStatus('Authenticating...');
-      setAuthStatusColor(C.gray400);
+      setAuthStatusColor(C.muted);
       const sdk = getSDK();
       const auth = await sdk.login({ clientId: authClientId, apiKey: authApiKey }) as AuthToken;
       setAuthenticated(true);
@@ -612,47 +618,47 @@ export default function LandingPage() {
 
     const waitingStyle: React.CSSProperties = {
       ...callbackBaseStyle,
-      background: 'rgba(234, 179, 8, 0.1)',
-      border: '1px solid rgba(234, 179, 8, 0.3)',
+      background: 'rgba(214, 177, 92, 0.1)',
+      border: '1px solid rgba(214, 177, 92, 0.3)',
     };
 
     const failedStyle: React.CSSProperties = {
       ...callbackBaseStyle,
-      background: 'rgba(239, 68, 68, 0.1)',
-      border: '1px solid rgba(239, 68, 68, 0.3)',
+      background: 'rgba(248, 113, 113, 0.1)',
+      border: '1px solid rgba(248, 113, 113, 0.3)',
     };
 
     const receivedStyle: React.CSSProperties = {
       ...callbackBaseStyle,
       background: state.receivedClass === 'duplicate'
-        ? 'rgba(234, 179, 8, 0.1)'
-        : 'rgba(34, 197, 94, 0.1)',
+        ? 'rgba(214, 177, 92, 0.1)'
+        : 'rgba(52, 211, 153, 0.1)',
       border: state.receivedClass === 'duplicate'
-        ? '1px solid rgba(234, 179, 8, 0.3)'
-        : '1px solid rgba(34, 197, 94, 0.3)',
+        ? '1px solid rgba(214, 177, 92, 0.3)'
+        : '1px solid rgba(52, 211, 153, 0.3)',
     };
 
-    const receivedH4Color = state.receivedClass === 'duplicate' ? '#eab308' : '#22c55e';
+    const receivedH4Color = state.receivedClass === 'duplicate' ? C.gold : '#34d399';
 
     // Verify result styles
     let verifyStyle: React.CSSProperties = {};
     if (state.verifyResultClass === 'verifying') {
       verifyStyle = {
-        background: 'rgba(234, 179, 8, 0.1)',
-        border: '1px solid rgba(234, 179, 8, 0.3)',
-        color: '#eab308',
+        background: 'rgba(214, 177, 92, 0.1)',
+        border: '1px solid rgba(214, 177, 92, 0.3)',
+        color: C.gold,
       };
     } else if (state.verifyResultClass === 'success') {
       verifyStyle = {
-        background: 'rgba(34, 197, 94, 0.15)',
-        border: '1px solid rgba(34, 197, 94, 0.4)',
-        color: '#22c55e',
+        background: 'rgba(52, 211, 153, 0.15)',
+        border: '1px solid rgba(52, 211, 153, 0.4)',
+        color: '#34d399',
       };
     } else if (state.verifyResultClass === 'failure') {
       verifyStyle = {
-        background: 'rgba(239, 68, 68, 0.15)',
-        border: '1px solid rgba(239, 68, 68, 0.4)',
-        color: '#ef4444',
+        background: 'rgba(248, 113, 113, 0.15)',
+        border: '1px solid rgba(248, 113, 113, 0.4)',
+        color: '#f87171',
       };
     }
 
@@ -663,12 +669,12 @@ export default function LandingPage() {
           <div style={{
             marginTop: 24,
             padding: 20,
-            background: 'rgba(6, 182, 212, 0.1)',
-            border: '1px solid rgba(6, 182, 212, 0.3)',
+            background: 'rgba(214, 177, 92, 0.06)',
+            border: `1px solid ${C.goldLine}`,
             borderRadius: 12,
             animation: 'slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           }}>
-            <h4 style={{ fontSize: 16, marginBottom: 12, color: C.cyan }}>Request Generated</h4>
+            <h4 style={{ fontSize: 16, marginBottom: 12, color: C.gold, fontFamily: FONT.mono, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' as const }}>Request Generated</h4>
 
             {/* QR / Open App */}
             <div style={{ textAlign: 'center', margin: '16px 0' }}>
@@ -678,12 +684,13 @@ export default function LandingPage() {
                   style={{
                     display: 'inline-block',
                     padding: '16px 32px',
-                    background: `linear-gradient(135deg, ${C.purple}, ${C.cyan})`,
-                    color: 'white',
+                    background: `linear-gradient(180deg, ${C.gold}, ${C.gold2})`,
+                    color: '#1a222c',
                     textDecoration: 'none',
                     borderRadius: 12,
                     fontSize: 18,
-                    fontWeight: 600,
+                    fontWeight: 700,
+                    fontFamily: FONT.mono,
                     textAlign: 'center',
                     width: '100%',
                     boxSizing: 'border-box',
@@ -711,7 +718,7 @@ export default function LandingPage() {
                 fontFamily: "'Courier New', monospace",
                 fontSize: 12,
                 wordBreak: 'break-all',
-                color: C.gray300,
+                color: C.muted,
               }}>
                 {state.deepLink}
               </div>
@@ -720,10 +727,10 @@ export default function LandingPage() {
             {/* Waiting */}
             {state.showWaiting && (
               <div style={waitingStyle}>
-                <h4 style={{ fontSize: 14, marginBottom: 8, color: '#eab308' }}>
+                <h4 style={{ fontSize: 14, marginBottom: 8, color: C.gold, fontFamily: FONT.mono }}>
                   <Spinner />Waiting for proof...
                 </h4>
-                <p style={{ fontSize: 13, color: C.gray400 }}>
+                <p style={{ fontSize: 13, color: C.muted }}>
                   Scan the QR code with ZKProofport app to generate a proof
                 </p>
               </div>
@@ -732,15 +739,15 @@ export default function LandingPage() {
             {/* Failed */}
             {state.showFailed && (
               <div style={failedStyle}>
-                <h4 style={{ fontSize: 14, marginBottom: 8, color: '#ef4444' }}>Proof Failed</h4>
-                <p style={{ fontSize: 13, color: C.gray400 }}>{state.failedReason}</p>
+                <h4 style={{ fontSize: 14, marginBottom: 8, color: '#f87171', fontFamily: FONT.mono }}>Proof Failed</h4>
+                <p style={{ fontSize: 13, color: C.muted }}>{state.failedReason}</p>
               </div>
             )}
 
             {/* Received */}
             {state.showReceived && (
               <div style={receivedStyle}>
-                <h4 style={{ fontSize: 14, marginBottom: 8, color: receivedH4Color }}>
+                <h4 style={{ fontSize: 14, marginBottom: 8, color: receivedH4Color, fontFamily: FONT.mono }}>
                   {state.receivedClass === 'duplicate' ? '\u26A0\uFE0F ' : '\u2705 '}{state.receivedTitle}
                 </h4>
                 <pre style={{
@@ -751,7 +758,7 @@ export default function LandingPage() {
                   fontFamily: "'SF Mono', 'Monaco', 'Courier New', monospace",
                   fontSize: 12,
                   lineHeight: 1.6,
-                  color: C.gray300,
+                  color: C.ink,
                   maxHeight: 200,
                   overflowY: 'auto',
                   wordBreak: 'break-all',
@@ -774,7 +781,7 @@ export default function LandingPage() {
                       cursor: 'pointer',
                       transition: 'all 0.2s',
                       color: 'white',
-                      background: `linear-gradient(135deg, ${C.cyan}, #0891b2)`,
+                      background: `linear-gradient(180deg, ${C.gold}, ${C.gold2})`,
                     }}
                   >
                     Off-Chain Verify
@@ -790,8 +797,10 @@ export default function LandingPage() {
                       borderRadius: 8,
                       cursor: 'pointer',
                       transition: 'all 0.2s',
-                      color: 'white',
-                      background: `linear-gradient(135deg, ${C.blue}, ${C.purple})`,
+                      color: '#1a222c',
+                      background: 'rgba(255,255,255,.07)',
+                      border: '1.5px solid rgba(255,255,255,.16)',
+                      color: C.cream,
                     }}
                   >
                     On-Chain Verify
@@ -804,8 +813,8 @@ export default function LandingPage() {
                       fontSize: 13,
                       fontWeight: 600,
                       background: state.copyClass === 'copied'
-                        ? `linear-gradient(135deg, ${C.gray600}, ${C.gray400})`
-                        : 'linear-gradient(135deg, #22c55e, #16a34a)',
+                        ? 'rgba(255,255,255,.07)'
+                        : 'rgba(52,211,153,.15)',
                       color: 'white',
                       border: 'none',
                       borderRadius: 8,
@@ -843,10 +852,10 @@ export default function LandingPage() {
   /* ── Plan badge color ── */
   const planBadgeStyle = (tier: string): React.CSSProperties => {
     const map: Record<string, React.CSSProperties> = {
-      free: { background: 'rgba(34,197,94,0.15)', color: '#22c55e' },
-      credit: { background: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
-      plan1: { background: 'rgba(168,85,247,0.15)', color: '#a855f7' },
-      plan2: { background: 'rgba(234,179,8,0.15)', color: '#eab308' },
+      free: { background: 'rgba(52,211,153,0.15)', color: '#34d399' },
+      credit: { background: 'rgba(214,177,92,0.15)', color: C.gold },
+      plan1: { background: 'rgba(240,212,136,0.15)', color: C.gold2 },
+      plan2: { background: 'rgba(214,177,92,0.15)', color: C.gold },
     };
     return {
       fontSize: 11,
@@ -862,13 +871,18 @@ export default function LandingPage() {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '0.4rem',
-    color: C.gray300,
+    color: C.cream,
     textDecoration: 'none',
-    fontSize: '0.8rem',
-    padding: '0.3rem 0.7rem',
-    border: `1px solid ${hovered ? C.cyan : C.gray600}`,
-    borderRadius: 6,
-    transition: 'border-color 0.2s',
+    fontSize: '1.2rem',
+    fontFamily: FONT.mono,
+    fontWeight: 700,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase' as const,
+    padding: '0.6rem 1.2rem',
+    border: `1.5px solid ${hovered ? C.gold : 'rgba(255,255,255,.16)'}`,
+    borderRadius: 8,
+    background: hovered ? 'rgba(214,177,92,.06)' : 'rgba(255,255,255,.07)',
+    transition: 'all 0.2s',
     cursor: 'pointer',
   });
 
@@ -878,20 +892,9 @@ export default function LandingPage() {
       {/* Inject keyframes */}
       <style dangerouslySetInnerHTML={{ __html: KEYFRAMES_CSS }} />
 
-      {/* Background gradient mesh */}
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        background: `
-          radial-gradient(circle at 20% 30%, rgba(37, 99, 235, 0.15) 0%, transparent 50%),
-          radial-gradient(circle at 80% 70%, rgba(124, 58, 237, 0.15) 0%, transparent 50%)
-        `,
-        pointerEvents: 'none',
-        zIndex: -1,
-      }} />
+      {/* Noise & dot-matrix textures (matching portal-web) */}
+      <div className="noise" aria-hidden="true" />
+      <div className="dot-matrix" aria-hidden="true" />
 
       {/* Confetti container */}
       {confettiPieces.length > 0 && (
@@ -926,30 +929,65 @@ export default function LandingPage() {
       )}
 
       {/* ── HEADER ── */}
-      <header style={{ padding: '32px 0', position: 'relative' }}>
-        <div style={{
-          maxWidth: 1200,
+      <header style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 20,
+        minHeight: 64,
+        backdropFilter: 'blur(10px)',
+        background: 'linear-gradient(180deg, rgba(10,14,20,.85), rgba(10,14,20,.45))',
+        borderBottom: `1px solid ${C.goldLine}`,
+      }}>
+        <div className="header-inner" style={{
+          maxWidth: 1280,
+          width: 'calc(100% - 2rem)',
           margin: '0 auto',
-          padding: '0 24px',
+          padding: '16px 0',
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
+          justifyContent: 'space-between',
         }}>
           {/* Logo */}
-          <div style={{
-            fontSize: 32,
-            fontWeight: 700,
-            background: `linear-gradient(135deg, ${C.blue}, ${C.purple})`,
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-            letterSpacing: '-0.02em',
-          }}>
-            ZKProofport
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
+            <img src="/logo.png" alt="" width={30} height={30} style={{ borderRadius: 8 }} />
+            <span style={{
+              fontFamily: FONT.mono,
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              fontSize: 'clamp(1.3rem, 2.5vw, 1.7rem)',
+              textTransform: 'uppercase' as const,
+              color: C.cream,
+            }}>ZKProofport</span>
           </div>
 
+          {/* Nav (iOS/Android) */}
+          <nav className="header-nav" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <a
+              href="#"
+              onClick={(e) => { e.preventDefault(); openBetaModal('iOS'); }}
+              title="Download on the App Store"
+              style={navLinkStyle(iosHover)}
+              onMouseEnter={() => setIosHover(true)}
+              onMouseLeave={() => setIosHover(false)}
+            >
+              <AppleIcon /> iOS
+            </a>
+            <a
+              href="#"
+              onClick={(e) => { e.preventDefault(); openBetaModal('Android'); }}
+              title="Get it on Google Play"
+              style={navLinkStyle(androidHover)}
+              onMouseEnter={() => setAndroidHover(true)}
+              onMouseLeave={() => setAndroidHover(false)}
+            >
+              <AndroidIcon /> Android
+            </a>
+          </nav>
+
           {/* Auth section */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="header-auth" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'flex-end' }}>
             {showManualAuth && (
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 {authenticated ? null : (
@@ -990,7 +1028,7 @@ export default function LandingPage() {
                       style={{
                         padding: '4px 12px',
                         fontSize: 12,
-                        background: C.blue,
+                        background: C.gold,
                         color: 'white',
                         border: 'none',
                         borderRadius: 4,
@@ -1028,224 +1066,22 @@ export default function LandingPage() {
               </span>
             )}
           </div>
-
-          {/* Nav */}
-          <nav style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <a
-              href="#"
-              onClick={(e) => { e.preventDefault(); openBetaModal('iOS'); }}
-              title="Download on the App Store"
-              style={navLinkStyle(iosHover)}
-              onMouseEnter={() => setIosHover(true)}
-              onMouseLeave={() => setIosHover(false)}
-            >
-              <AppleIcon /> iOS
-            </a>
-            <a
-              href="#"
-              onClick={(e) => { e.preventDefault(); openBetaModal('Android'); }}
-              title="Get it on Google Play"
-              style={navLinkStyle(androidHover)}
-              onMouseEnter={() => setAndroidHover(true)}
-              onMouseLeave={() => setAndroidHover(false)}
-            >
-              <AndroidIcon /> Android
-            </a>
-          </nav>
         </div>
       </header>
 
-      {/* ── HERO ── */}
-      <section style={{ textAlign: 'center', padding: '80px 0 120px', position: 'relative' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
-          <div style={{
-            fontSize: 28,
-            fontWeight: 600,
-            marginBottom: 16,
-            background: `linear-gradient(135deg, ${C.blue}, ${C.cyan})`,
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}>
-            Privacy-First Identity Verification
-          </div>
-          <h1 style={{
-            fontSize: 64,
-            fontWeight: 800,
-            lineHeight: 1.1,
-            marginBottom: 24,
-            letterSpacing: '-0.03em',
-            background: `linear-gradient(135deg, ${C.white}, ${C.gray300})`,
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}>
-            Prove who you are<br />without revealing who you are
-          </h1>
-          <p style={{
-            fontSize: 20,
-            color: C.gray400,
-            marginBottom: 48,
-            maxWidth: 600,
-            marginLeft: 'auto',
-            marginRight: 'auto',
-          }}>
-            Zero-knowledge proofs for identity verification. Verify credentials without exposing personal data.
-          </p>
-          <p style={{ color: C.gray400, fontSize: '0.95rem', marginTop: '1rem', marginBottom: '1.5rem' }}>
-            See live integration example:{' '}
-            <a href="/zkpswap" style={{ color: C.cyan, textDecoration: 'underline' }}>ZKPSwap</a>{' '}
-            demonstrates a compliant DEX using ZK proofs.
-          </p>
-          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <a
-              href="#demo-kyc"
-              onClick={(e) => { e.preventDefault(); scrollTo('demo-kyc'); }}
-              onMouseEnter={() => setHoveredBtn('hero-kyc')}
-              onMouseLeave={() => setHoveredBtn(null)}
-              style={{
-                padding: '16px 32px',
-                fontSize: 16,
-                fontWeight: 600,
-                border: 'none',
-                borderRadius: 12,
-                cursor: 'pointer',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                textDecoration: 'none',
-                display: 'inline-block',
-                background: `linear-gradient(135deg, ${C.blue}, ${C.purple})`,
-                color: C.white,
-                boxShadow: hoveredBtn === 'hero-kyc'
-                  ? '0 12px 32px rgba(37, 99, 235, 0.4)'
-                  : '0 8px 24px rgba(37, 99, 235, 0.3)',
-                transform: hoveredBtn === 'hero-kyc' ? 'translateY(-2px)' : 'none',
-              }}
-            >
-              Try KYC Demo
-            </a>
-            <a
-              href="#demo-country"
-              onClick={(e) => { e.preventDefault(); scrollTo('demo-country'); }}
-              onMouseEnter={() => setHoveredBtn('hero-country')}
-              onMouseLeave={() => setHoveredBtn(null)}
-              style={{
-                padding: '16px 32px',
-                fontSize: 16,
-                fontWeight: 600,
-                border: 'none',
-                borderRadius: 12,
-                cursor: 'pointer',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                textDecoration: 'none',
-                display: 'inline-block',
-                background: 'rgba(255, 255, 255, 0.1)',
-                color: C.white,
-                backdropFilter: 'blur(10px)',
-                WebkitBackdropFilter: 'blur(10px)',
-                borderWidth: 1,
-                borderStyle: 'solid',
-                borderColor: 'rgba(255, 255, 255, 0.2)',
-                transform: hoveredBtn === 'hero-country' ? 'translateY(-2px)' : 'none',
-              }}
-            >
-              Try Country Demo
-            </a>
-            <a
-              href="/zkpswap"
-              onMouseEnter={() => setHoveredBtn('hero-zkpswap')}
-              onMouseLeave={() => setHoveredBtn(null)}
-              style={{
-                padding: '16px 32px',
-                fontSize: 16,
-                fontWeight: 600,
-                border: 'none',
-                borderRadius: 12,
-                cursor: 'pointer',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                textDecoration: 'none',
-                display: 'inline-block',
-                background: 'rgba(255, 255, 255, 0.1)',
-                color: C.white,
-                backdropFilter: 'blur(10px)',
-                WebkitBackdropFilter: 'blur(10px)',
-                borderWidth: 1,
-                borderStyle: 'solid',
-                borderColor: 'rgba(255, 255, 255, 0.2)',
-                transform: hoveredBtn === 'hero-zkpswap' ? 'translateY(-2px)' : 'none',
-              }}
-            >
-              ZKPSwap
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* ── HOW IT WORKS ── */}
-      <section style={{ padding: '80px 0' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
-          <h2 style={{ textAlign: 'center', fontSize: 48, fontWeight: 700, marginBottom: 64, letterSpacing: '-0.02em' }}>
-            How It Works
-          </h2>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-            gap: 32,
-            marginBottom: 80,
-          }}>
-            {[
-              { num: 1, title: 'Request', desc: 'Your dApp creates a proof request via the ZKProofport SDK with specific verification requirements.' },
-              { num: 2, title: 'Prove', desc: 'User generates a zero-knowledge proof on their mobile device using private credentials.' },
-              { num: 3, title: 'Verify', desc: 'Your dApp verifies the cryptographic proof on-chain or off-chain without accessing personal data.' },
-            ].map((step) => (
-              <div
-                key={step.num}
-                onMouseEnter={() => setHoveredStep(step.num)}
-                onMouseLeave={() => setHoveredStep(null)}
-                style={{
-                  background: hoveredStep === step.num ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.05)',
-                  backdropFilter: 'blur(20px)',
-                  WebkitBackdropFilter: 'blur(20px)',
-                  border: `1px solid ${hoveredStep === step.num ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)'}`,
-                  borderRadius: 24,
-                  padding: 40,
-                  position: 'relative',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  transform: hoveredStep === step.num ? 'translateY(-4px)' : 'none',
-                }}
-              >
-                <div style={{
-                  position: 'absolute',
-                  top: -16,
-                  left: 32,
-                  width: 48,
-                  height: 48,
-                  borderRadius: 12,
-                  background: `linear-gradient(135deg, ${C.blue}, ${C.purple})`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 24,
-                  fontWeight: 700,
-                  boxShadow: '0 4px 16px rgba(37, 99, 235, 0.4)',
-                  color: C.white,
-                }}>
-                  {step.num}
-                </div>
-                <h3 style={{ fontSize: 24, margin: '16px 0 12px', fontWeight: 600 }}>{step.title}</h3>
-                <p style={{ color: C.gray400, fontSize: 16 }}>{step.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ── LIVE DEMOS ── */}
-      <section style={{ padding: '80px 0' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
-          <h2 style={{ textAlign: 'center', fontSize: 48, fontWeight: 700, marginBottom: 64, letterSpacing: '-0.02em' }}>
-            Live Demos
+      <section style={{ padding: '80px 0 60px', marginTop: 64 }}>
+        <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 24px' }}>
+          <h2 style={{ textAlign: 'center', fontFamily: FONT.serif, fontSize: 'clamp(2.8rem, 5vw, 4.5rem)', fontWeight: 400, marginBottom: 32, color: C.cream }}>
+            Try it live.
           </h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 32, maxWidth: 700, margin: '0 auto' }}>
+
+          {/* All cards in one row: KYC + Country (large) + coming-soon grid (compact) */}
+          <div className="demo-cards-row" style={{
+            display: 'flex',
+            gap: 20,
+            alignItems: 'stretch',
+          }}>
 
             {/* ── KYC Demo Card ── */}
             <div
@@ -1253,61 +1089,64 @@ export default function LandingPage() {
               onMouseEnter={() => setHoveredDemoCard('kyc')}
               onMouseLeave={() => setHoveredDemoCard(null)}
               style={{
-                background: hoveredDemoCard === 'kyc' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.05)',
-                backdropFilter: 'blur(20px)',
-                WebkitBackdropFilter: 'blur(20px)',
-                border: `1px solid ${hoveredDemoCard === 'kyc' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)'}`,
-                borderRadius: 24,
-                padding: 40,
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                flex: '2 1 0',
+                background: hoveredDemoCard === 'kyc' ? C.bgCardHover : C.bgCard,
+                border: `1.5px solid ${C.goldLine}`,
+                borderRadius: 0,
+                padding: 36,
+                transition: 'all 0.3s',
+                display: 'flex',
+                flexDirection: 'column',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-                <div style={{ fontSize: 48, filter: 'drop-shadow(0 4px 12px rgba(37, 99, 235, 0.4))' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ fontSize: 36, filter: 'drop-shadow(0 4px 12px rgba(214, 177, 92, 0.3))' }}>
                   {'\uD83D\uDEE1\uFE0F'}
                 </div>
-                <div>
-                  <h3 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>Coinbase KYC Verification</h3>
-                </div>
+                <span style={{
+                  fontFamily: FONT.mono, fontSize: '1rem', fontWeight: 700, letterSpacing: '0.08em',
+                  padding: '4px 10px', borderRadius: 4,
+                  background: 'rgba(52,211,153,0.15)', color: '#34d399',
+                }}>LIVE</span>
               </div>
-              <p style={{ color: C.gray400, marginBottom: 24, fontSize: 15 }}>
-                Prove your Coinbase identity verification status without revealing your personal information.
+              <h3 style={{ fontFamily: FONT.serif, fontSize: '2rem', fontWeight: 400, marginBottom: 10, color: C.cream }}>KYC Verification</h3>
+              <p style={{ color: C.muted, marginBottom: 20, fontFamily: FONT.mono, fontSize: '1.2rem', lineHeight: 1.6, flex: 1 }}>
+                Prove Coinbase identity verification without revealing personal data.
               </p>
-              <div style={{ display: 'flex', gap: 24, marginBottom: 24, fontSize: 14 }}>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: '1.1rem', fontFamily: FONT.mono }}>
                 <div style={{ flex: 1 }}>
-                  <strong style={{ color: C.cyan, display: 'block', marginBottom: 4 }}>Prove</strong>
-                  KYC completion
+                  <strong style={{ color: C.gold2, display: 'block', marginBottom: 4, fontSize: '1rem', letterSpacing: '0.05em' }}>PROVE</strong>
+                  <span style={{ color: C.muted }}>KYC completion</span>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <strong style={{ color: C.cyan, display: 'block', marginBottom: 4 }}>Hide</strong>
-                  Personal identity
+                  <strong style={{ color: C.gold2, display: 'block', marginBottom: 4, fontSize: '1rem', letterSpacing: '0.05em' }}>HIDE</strong>
+                  <span style={{ color: C.muted }}>Personal identity</span>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-                <button
-                  onClick={requestKycProof}
-                  onMouseEnter={() => setHoveredBtn('kyc-request')}
-                  onMouseLeave={() => setHoveredBtn(null)}
-                  style={{
-                    flex: 1,
-                    padding: '12px 24px',
-                    fontSize: 14,
-                    fontWeight: 600,
-                    border: 'none',
-                    borderRadius: 12,
-                    cursor: 'pointer',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    background: `linear-gradient(135deg, ${C.blue}, ${C.purple})`,
-                    color: C.white,
-                    boxShadow: hoveredBtn === 'kyc-request'
-                      ? '0 12px 32px rgba(37, 99, 235, 0.4)'
-                      : '0 8px 24px rgba(37, 99, 235, 0.3)',
-                    transform: hoveredBtn === 'kyc-request' ? 'translateY(-2px)' : 'none',
-                  }}
-                >
-                  Request Proof
-                </button>
-              </div>
+              <button
+                onClick={requestKycProof}
+                onMouseEnter={() => setHoveredBtn('kyc-request')}
+                onMouseLeave={() => setHoveredBtn(null)}
+                style={{
+                  width: '100%',
+                  padding: '12px 20px',
+                  fontSize: '1.2rem',
+                  fontWeight: 700,
+                  fontFamily: FONT.mono,
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  transition: 'all 0.25s',
+                  background: `linear-gradient(180deg, ${C.gold}, ${C.gold2})`,
+                  color: '#1a222c',
+                  boxShadow: hoveredBtn === 'kyc-request'
+                    ? '0 10px 28px rgba(214, 177, 92, 0.5), inset 0 1px 0 rgba(255,255,255,.8)'
+                    : '0 6px 18px rgba(214, 177, 92, 0.3), inset 0 1px 0 rgba(255,255,255,.6)',
+                  transform: hoveredBtn === 'kyc-request' ? 'translateY(-1px)' : 'none',
+                }}
+              >
+                Request Proof
+              </button>
               {renderDemoCard('kyc', kycState)}
             </div>
 
@@ -1317,41 +1156,45 @@ export default function LandingPage() {
               onMouseEnter={() => setHoveredDemoCard('country')}
               onMouseLeave={() => setHoveredDemoCard(null)}
               style={{
-                background: hoveredDemoCard === 'country' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.05)',
-                backdropFilter: 'blur(20px)',
-                WebkitBackdropFilter: 'blur(20px)',
-                border: `1px solid ${hoveredDemoCard === 'country' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)'}`,
-                borderRadius: 24,
-                padding: 40,
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                flex: '2 1 0',
+                background: hoveredDemoCard === 'country' ? C.bgCardHover : C.bgCard,
+                border: `1.5px solid ${C.goldLine}`,
+                borderRadius: 0,
+                padding: 36,
+                transition: 'all 0.3s',
+                display: 'flex',
+                flexDirection: 'column',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-                <div style={{ fontSize: 48, filter: 'drop-shadow(0 4px 12px rgba(37, 99, 235, 0.4))' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ fontSize: 36, filter: 'drop-shadow(0 4px 12px rgba(214, 177, 92, 0.3))' }}>
                   {'\uD83C\uDF0D'}
                 </div>
-                <div>
-                  <h3 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>Coinbase Country Attestation</h3>
-                </div>
+                <span style={{
+                  fontFamily: FONT.mono, fontSize: '1rem', fontWeight: 700, letterSpacing: '0.08em',
+                  padding: '4px 10px', borderRadius: 4,
+                  background: 'rgba(52,211,153,0.15)', color: '#34d399',
+                }}>LIVE</span>
               </div>
-              <p style={{ color: C.gray400, marginBottom: 24, fontSize: 15 }}>
-                Prove your country of residence eligibility without revealing your exact location.
+              <h3 style={{ fontFamily: FONT.serif, fontSize: '2rem', fontWeight: 400, marginBottom: 10, color: C.cream }}>Country Attestation</h3>
+              <p style={{ color: C.muted, marginBottom: 20, fontFamily: FONT.mono, fontSize: '1.2rem', lineHeight: 1.6, flex: 1 }}>
+                Prove country of residence eligibility without revealing exact location.
               </p>
-              <div style={{ display: 'flex', gap: 24, marginBottom: 24, fontSize: 14 }}>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: '1.1rem', fontFamily: FONT.mono }}>
                 <div style={{ flex: 1 }}>
-                  <strong style={{ color: C.cyan, display: 'block', marginBottom: 4 }}>Prove</strong>
-                  Country eligibility
+                  <strong style={{ color: C.gold2, display: 'block', marginBottom: 4, fontSize: '1rem', letterSpacing: '0.05em' }}>PROVE</strong>
+                  <span style={{ color: C.muted }}>Country eligibility</span>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <strong style={{ color: C.cyan, display: 'block', marginBottom: 4 }}>Hide</strong>
-                  Exact location
+                  <strong style={{ color: C.gold2, display: 'block', marginBottom: 4, fontSize: '1rem', letterSpacing: '0.05em' }}>HIDE</strong>
+                  <span style={{ color: C.muted }}>Exact location</span>
                 </div>
               </div>
 
               {/* Country list input */}
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 500, color: C.gray300 }}>
-                  Country List (comma-separated ISO codes)
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: '1.1rem', fontWeight: 500, fontFamily: FONT.mono, color: C.ink }}>
+                  Country List (ISO codes)
                 </label>
                 <input
                   type="text"
@@ -1360,18 +1203,19 @@ export default function LandingPage() {
                   placeholder="US,KR,JP,GB,FR"
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
+                    padding: '10px 14px',
                     background: 'rgba(255, 255, 255, 0.05)',
                     border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: 12,
+                    borderRadius: 8,
                     color: C.white,
-                    fontSize: 14,
+                    fontSize: '1.2rem',
+                    fontFamily: FONT.mono,
                     transition: 'all 0.2s',
                     outline: 'none',
                     boxSizing: 'border-box',
                   }}
                   onFocus={(e) => {
-                    e.target.style.borderColor = C.blue;
+                    e.target.style.borderColor = C.gold;
                     e.target.style.background = 'rgba(255, 255, 255, 0.08)';
                   }}
                   onBlur={(e) => {
@@ -1383,20 +1227,21 @@ export default function LandingPage() {
 
               {/* List type toggle */}
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 500, color: C.gray300 }}>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: '1.1rem', fontWeight: 500, fontFamily: FONT.mono, color: C.ink }}>
                   List Type
                 </label>
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     onClick={() => setIsIncluded(true)}
                     style={{
                       flex: 1,
-                      padding: '8px 16px',
-                      background: isIncluded ? C.blue : 'rgba(255, 255, 255, 0.05)',
-                      border: `1px solid ${isIncluded ? C.blue : 'rgba(255, 255, 255, 0.1)'}`,
-                      borderRadius: 8,
-                      color: isIncluded ? C.white : C.gray400,
-                      fontSize: 14,
+                      padding: '8px 12px',
+                      background: isIncluded ? C.gold : 'rgba(255, 255, 255, 0.05)',
+                      border: `1px solid ${isIncluded ? C.gold : 'rgba(255, 255, 255, 0.1)'}`,
+                      borderRadius: 6,
+                      color: isIncluded ? '#1a222c' : C.muted,
+                      fontSize: '1.1rem',
+                      fontFamily: FONT.mono,
                       cursor: 'pointer',
                       transition: 'all 0.2s',
                     }}
@@ -1407,12 +1252,13 @@ export default function LandingPage() {
                     onClick={() => setIsIncluded(false)}
                     style={{
                       flex: 1,
-                      padding: '8px 16px',
-                      background: !isIncluded ? C.blue : 'rgba(255, 255, 255, 0.05)',
-                      border: `1px solid ${!isIncluded ? C.blue : 'rgba(255, 255, 255, 0.1)'}`,
-                      borderRadius: 8,
-                      color: !isIncluded ? C.white : C.gray400,
-                      fontSize: 14,
+                      padding: '8px 12px',
+                      background: !isIncluded ? C.gold : 'rgba(255, 255, 255, 0.05)',
+                      border: `1px solid ${!isIncluded ? C.gold : 'rgba(255, 255, 255, 0.1)'}`,
+                      borderRadius: 6,
+                      color: !isIncluded ? '#1a222c' : C.muted,
+                      fontSize: '1.1rem',
+                      fontFamily: FONT.mono,
                       cursor: 'pointer',
                       transition: 'all 0.2s',
                     }}
@@ -1422,94 +1268,160 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-                <button
-                  onClick={requestCountryProof}
-                  onMouseEnter={() => setHoveredBtn('country-request')}
-                  onMouseLeave={() => setHoveredBtn(null)}
-                  style={{
-                    flex: 1,
-                    padding: '12px 24px',
-                    fontSize: 14,
-                    fontWeight: 600,
-                    border: 'none',
-                    borderRadius: 12,
-                    cursor: 'pointer',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    background: `linear-gradient(135deg, ${C.blue}, ${C.purple})`,
-                    color: C.white,
-                    boxShadow: hoveredBtn === 'country-request'
-                      ? '0 12px 32px rgba(37, 99, 235, 0.4)'
-                      : '0 8px 24px rgba(37, 99, 235, 0.3)',
-                    transform: hoveredBtn === 'country-request' ? 'translateY(-2px)' : 'none',
-                  }}
-                >
-                  Request Proof
-                </button>
-              </div>
+              <button
+                onClick={requestCountryProof}
+                onMouseEnter={() => setHoveredBtn('country-request')}
+                onMouseLeave={() => setHoveredBtn(null)}
+                style={{
+                  width: '100%',
+                  padding: '12px 20px',
+                  fontSize: '1.2rem',
+                  fontWeight: 700,
+                  fontFamily: FONT.mono,
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  transition: 'all 0.25s',
+                  background: `linear-gradient(180deg, ${C.gold}, ${C.gold2})`,
+                  color: '#1a222c',
+                  boxShadow: hoveredBtn === 'country-request'
+                    ? '0 10px 28px rgba(214, 177, 92, 0.5), inset 0 1px 0 rgba(255,255,255,.8)'
+                    : '0 6px 18px rgba(214, 177, 92, 0.3), inset 0 1px 0 rgba(255,255,255,.6)',
+                  transform: hoveredBtn === 'country-request' ? 'translateY(-1px)' : 'none',
+                }}
+              >
+                Request Proof
+              </button>
               {renderDemoCard('country', countryState)}
             </div>
+
+            {/* ── Coming-soon 3×2 grid beside live cards ── */}
+            <div className="coming-soon-grid" style={{
+              flex: '1 1 520px',
+              minWidth: 280,
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gridTemplateRows: 'repeat(2, 1fr)',
+              gap: 14,
+            }}>
+              {[
+                { icon: '💰', title: 'DeFi Assets', desc: 'Prove holdings privately' },
+                { icon: '🏢', title: 'RWA', desc: 'Prove asset ownership' },
+                { icon: '🤖', title: 'Agent', desc: 'Prove agent identity' },
+                { icon: '📧', title: 'Email Corp', desc: 'Prove company affiliation' },
+                { icon: '𝕏', title: 'X Follow', desc: 'Prove social follows' },
+                { icon: '🎂', title: 'Age', desc: 'Prove age eligibility' },
+              ].map((item, i) => (
+                <div key={i} style={{
+                  background: C.bgCard,
+                  border: `1.5px dashed rgba(214,177,92,0.3)`,
+                  borderRadius: 0,
+                  padding: '20px 14px',
+                  textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}>
+                  {/* Subtle diagonal stripe overlay */}
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    opacity: 0.04,
+                    backgroundImage: 'repeating-linear-gradient(135deg, transparent, transparent 8px, rgba(214,177,92,0.5) 8px, rgba(214,177,92,0.5) 9px)',
+                    pointerEvents: 'none',
+                  }} />
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>{item.icon}</div>
+                  <div style={{ fontFamily: FONT.mono, fontSize: '1rem', fontWeight: 700, letterSpacing: '0.08em', color: C.gold, marginBottom: 6, background: 'rgba(214,177,92,0.1)', padding: '2px 8px', borderRadius: 3 }}>SOON</div>
+                  <h4 style={{ fontFamily: FONT.serif, fontSize: '1.5rem', fontWeight: 400, margin: '0 0 6px', color: C.cream }}>{item.title}</h4>
+                  <p style={{ color: 'rgba(232,220,200,0.55)', fontFamily: FONT.mono, fontSize: '1.1rem', lineHeight: 1.4, margin: 0 }}>{item.desc}</p>
+                </div>
+              ))}
+            </div>
+
           </div>
+
         </div>
       </section>
 
-      {/* ── FEATURES ── */}
+      {/* ── SEPARATOR ── */}
+      <div style={{ height: 1, maxWidth: 700, margin: '0 auto', background: 'linear-gradient(to right, transparent, rgba(214,177,92,0.15), transparent)' }} />
+
+      {/* ── HOW IT WORKS ── */}
       <section style={{ padding: '80px 0' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
-          <h2 style={{ textAlign: 'center', fontSize: 48, fontWeight: 700, marginBottom: 64, letterSpacing: '-0.02em' }}>
-            Why ZKProofport?
+          <h2 style={{ textAlign: 'center', fontFamily: FONT.serif, fontSize: 'clamp(2.8rem, 5vw, 4.5rem)', fontWeight: 400, marginBottom: 64, color: C.cream }}>
+            Three simple steps.
           </h2>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
             gap: 32,
           }}>
             {[
-              { icon: '\uD83D\uDD12', title: 'Zero Knowledge', desc: "No personal data leaves the user's device. Verify credentials cryptographically." },
-              { icon: '\u26D3\uFE0F', title: 'On-Chain Verified', desc: 'Proofs are verified by smart contracts on Base network for trustless verification.' },
-              { icon: '\uD83D\uDCF1', title: 'Mobile Native', desc: 'Optimized for mobile proof generation with iOS and Android support.' },
-              { icon: '\uD83C\uDF10', title: 'Open Source', desc: 'Fully auditable SDK and circuits built with cutting-edge cryptographic technology.' },
-            ].map((feature, idx) => (
+              { num: 1, title: 'Request', desc: 'Your dApp creates a proof request via the ZKProofport SDK with specific verification requirements.' },
+              { num: 2, title: 'Prove', desc: 'User generates a zero-knowledge proof on their mobile device using private credentials.' },
+              { num: 3, title: 'Verify', desc: 'Your dApp verifies the cryptographic proof on-chain or off-chain without accessing personal data.' },
+            ].map((step) => (
               <div
-                key={idx}
-                onMouseEnter={() => setHoveredFeature(idx)}
-                onMouseLeave={() => setHoveredFeature(null)}
+                key={step.num}
+                onMouseEnter={() => setHoveredStep(step.num)}
+                onMouseLeave={() => setHoveredStep(null)}
                 style={{
-                  textAlign: 'center',
-                  padding: 32,
-                  background: hoveredFeature === idx ? 'rgba(255, 255, 255, 0.06)' : 'rgba(255, 255, 255, 0.03)',
-                  backdropFilter: 'blur(10px)',
-                  WebkitBackdropFilter: 'blur(10px)',
-                  border: `1px solid ${hoveredFeature === idx ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.08)'}`,
-                  borderRadius: 20,
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  transform: hoveredFeature === idx ? 'translateY(-4px)' : 'none',
+                  background: hoveredStep === step.num ? C.bgCardHover : C.bgCard,
+                  border: `1.5px solid ${C.goldLine}`,
+                  borderRadius: 0,
+                  padding: 40,
+                  position: 'relative',
+                  transition: 'all 0.3s',
+                  transform: hoveredStep === step.num ? 'translateY(-2px)' : 'none',
                 }}
               >
-                <div style={{ fontSize: 48, marginBottom: 16, filter: 'drop-shadow(0 4px 12px rgba(124, 58, 237, 0.4))' }}>
-                  {feature.icon}
+                <div style={{
+                  position: 'absolute',
+                  top: -16,
+                  left: 32,
+                  width: 48,
+                  height: 48,
+                  borderRadius: 12,
+                  background: `linear-gradient(180deg, ${C.gold}, ${C.gold2})`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 24,
+                  fontWeight: 700,
+                  fontFamily: FONT.mono,
+                  boxShadow: '0 4px 16px rgba(214, 177, 92, 0.4)',
+                  color: '#1a222c',
+                }}>
+                  {step.num}
                 </div>
-                <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 12 }}>{feature.title}</h3>
-                <p style={{ color: C.gray400, fontSize: 14 }}>{feature.desc}</p>
+                <h3 style={{ fontSize: 24, margin: '16px 0 12px', fontWeight: 600, fontFamily: FONT.serif, color: C.cream }}>{step.title}</h3>
+                <p style={{ color: C.muted, fontSize: '1.4rem', fontFamily: FONT.mono, lineHeight: 1.7 }}>{step.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
+      {/* ── SEPARATOR ── */}
+      <div style={{ height: 1, maxWidth: 700, margin: '0 auto', background: 'linear-gradient(to right, transparent, rgba(214,177,92,0.15), transparent)' }} />
+
       {/* ── CODE SECTION ── */}
       <section style={{ padding: '80px 0' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
-          <h2 style={{ textAlign: 'center', fontSize: 48, fontWeight: 700, marginBottom: 64, letterSpacing: '-0.02em' }}>
-            Quick Integration
+        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px' }}>
+          <h2 style={{ textAlign: 'center', fontFamily: FONT.serif, fontSize: 'clamp(2.8rem, 5vw, 4.5rem)', fontWeight: 400, marginBottom: 16, color: C.cream }}>
+            Get started in minutes.
           </h2>
-          <p style={{ textAlign: 'center', color: C.gray400, fontSize: '0.95rem', marginBottom: '1.5rem' }}>
-            SDK is currently being prepared for public release. Stay tuned!
+          <p style={{ textAlign: 'center', fontFamily: FONT.mono, fontSize: '1.1rem', marginBottom: '3rem' }}>
+            <a href="https://www.npmjs.com/package/@zkproofport-app/sdk" target="_blank" rel="noopener noreferrer" style={{ color: C.gold, textDecoration: 'underline', textUnderlineOffset: '4px' }}>@zkproofport-app/sdk on npm →</a>
           </p>
           <div style={{
-            background: 'rgba(0, 0, 0, 0.4)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: 16,
+            background: C.bgCard,
+            border: `1.5px solid ${C.goldLine}`,
+            borderRadius: 0,
             padding: 32,
             overflowX: 'auto',
             position: 'relative',
@@ -1519,7 +1431,7 @@ export default function LandingPage() {
               top: 12,
               right: 20,
               fontSize: 12,
-              color: C.gray600,
+              color: C.muted,
               fontWeight: 600,
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
@@ -1528,34 +1440,34 @@ export default function LandingPage() {
             </span>
             <pre style={{
               margin: 0,
-              fontFamily: "'SF Mono', 'Monaco', 'Courier New', monospace",
-              fontSize: 14,
+              fontFamily: FONT.mono,
+              fontSize: '1.3rem',
               lineHeight: 1.8,
-              color: C.gray300,
+              color: C.ink,
             }}>
-              <span style={{ color: C.purple }}>import</span>{' '}
+              <span style={{ color: '#c586c0' }}>import</span>{' '}
               {'{ ProofportSDK }'}{' '}
-              <span style={{ color: C.purple }}>from</span>{' '}
-              <span style={{ color: C.cyan }}>{`'@zkproofport-app/sdk'`}</span>;{'\n'}
+              <span style={{ color: '#c586c0' }}>from</span>{' '}
+              <span style={{ color: '#ce9178' }}>{`'@zkproofport-app/sdk'`}</span>;{'\n'}
               {'\n'}
-              <span style={{ color: C.gray600 }}>{'// Initialize SDK'}</span>{'\n'}
-              <span style={{ color: C.purple }}>const</span>{' '}sdk = ProofportSDK.<span style={{ color: C.blue }}>create</span>();{'\n'}
+              <span style={{ color: '#6a9955' }}>{'// Initialize SDK'}</span>{'\n'}
+              <span style={{ color: '#569cd6' }}>const</span>{' '}sdk = ProofportSDK.<span style={{ color: '#dcdcaa' }}>create</span>();{'\n'}
               {'\n'}
-              <span style={{ color: C.gray600 }}>{'// Authenticate with your API credentials'}</span>{'\n'}
-              <span style={{ color: C.purple }}>await</span>{' '}sdk.<span style={{ color: C.blue }}>login</span>{'({ clientId: '}<span style={{ color: C.cyan }}>{`'your-client-id'`}</span>{', apiKey: '}<span style={{ color: C.cyan }}>{`'your-api-key'`}</span>{' });'}{'\n'}
+              <span style={{ color: '#6a9955' }}>{'// Authenticate with your API credentials'}</span>{'\n'}
+              <span style={{ color: '#c586c0' }}>await</span>{' '}sdk.<span style={{ color: '#dcdcaa' }}>login</span>{'({ clientId: '}<span style={{ color: '#ce9178' }}>{`'your-client-id'`}</span>{', apiKey: '}<span style={{ color: '#ce9178' }}>{`'your-api-key'`}</span>{' });'}{'\n'}
               {'\n'}
-              <span style={{ color: C.gray600 }}>{'// Create a proof request via relay'}</span>{'\n'}
-              <span style={{ color: C.purple }}>const</span>{' '}relay = <span style={{ color: C.purple }}>await</span>{' '}sdk.<span style={{ color: C.blue }}>createRelayRequest</span>(<span style={{ color: C.cyan }}>{`'coinbase_attestation'`}</span>{', {'}{'\n'}
-              {'  scope: '}<span style={{ color: C.cyan }}>{`'myapp.com'`}</span>{'\n'}
+              <span style={{ color: '#6a9955' }}>{'// Create a proof request via relay'}</span>{'\n'}
+              <span style={{ color: '#569cd6' }}>const</span>{' '}relay = <span style={{ color: '#c586c0' }}>await</span>{' '}sdk.<span style={{ color: '#dcdcaa' }}>createRelayRequest</span>(<span style={{ color: '#ce9178' }}>{`'coinbase_attestation'`}</span>{', {'}{'\n'}
+              {'  scope: '}<span style={{ color: '#ce9178' }}>{`'myapp.com'`}</span>{'\n'}
               {'});'}{'\n'}
               {'\n'}
-              <span style={{ color: C.gray600 }}>{'// Generate QR code for desktop users'}</span>{'\n'}
-              <span style={{ color: C.purple }}>const</span>{' '}qrDataUrl = <span style={{ color: C.purple }}>await</span>{' '}sdk.<span style={{ color: C.blue }}>generateQRCode</span>{'(relay.deepLink);'}{'\n'}
+              <span style={{ color: '#6a9955' }}>{'// Generate QR code for desktop users'}</span>{'\n'}
+              <span style={{ color: '#569cd6' }}>const</span>{' '}qrDataUrl = <span style={{ color: '#c586c0' }}>await</span>{' '}sdk.<span style={{ color: '#dcdcaa' }}>generateQRCode</span>{'(relay.deepLink);'}{'\n'}
               {'\n'}
-              <span style={{ color: C.gray600 }}>{'// Wait for proof via WebSocket'}</span>{'\n'}
-              <span style={{ color: C.purple }}>const</span>{' '}result = <span style={{ color: C.purple }}>await</span>{' '}sdk.<span style={{ color: C.blue }}>waitForProof</span>{'(relay.requestId);'}{'\n'}
-              <span style={{ color: C.purple }}>if</span>{' (result.status === '}<span style={{ color: C.cyan }}>{`'completed'`}</span>{') {'}{'\n'}
-              {'  console.'}<span style={{ color: C.blue }}>log</span>{'('}<span style={{ color: C.cyan }}>{`'Proof received:'`}</span>{', result.proof);'}{'\n'}
+              <span style={{ color: '#6a9955' }}>{'// Wait for proof via WebSocket'}</span>{'\n'}
+              <span style={{ color: '#569cd6' }}>const</span>{' '}result = <span style={{ color: '#c586c0' }}>await</span>{' '}sdk.<span style={{ color: '#dcdcaa' }}>waitForProof</span>{'(relay.requestId);'}{'\n'}
+              <span style={{ color: '#c586c0' }}>if</span>{' (result.status === '}<span style={{ color: '#ce9178' }}>{`'completed'`}</span>{') {'}{'\n'}
+              {'  console.'}<span style={{ color: '#dcdcaa' }}>log</span>{'('}<span style={{ color: '#ce9178' }}>{`'Proof received:'`}</span>{', result.proof);'}{'\n'}
               {'}'}
             </pre>
           </div>
@@ -1566,18 +1478,18 @@ export default function LandingPage() {
       <footer style={{
         padding: '80px 0 40px',
         textAlign: 'center',
-        borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+        borderTop: `1px solid ${C.goldLine}`,
         marginTop: 80,
       }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
-          <p style={{ color: C.gray400, marginBottom: 16 }}>
-            Built with zero-knowledge proofs by ZKProofport
+        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px' }}>
+          <p style={{ color: C.muted, fontFamily: FONT.mono, fontSize: '1.2rem', marginBottom: 16 }}>
+            Privacy, proven. — ZKProofport
           </p>
           <a
             href="https://github.com/zkproofport"
             target="_blank"
             rel="noreferrer"
-            style={{ color: C.blue, textDecoration: 'none', transition: 'color 0.2s' }}
+            style={{ color: C.gold, fontFamily: FONT.mono, fontSize: '1.2rem', textDecoration: 'none', borderBottom: '1px solid rgba(214,177,92,0.3)', transition: 'color 0.2s' }}
           >
             GitHub
           </a>
@@ -1607,9 +1519,9 @@ export default function LandingPage() {
             style={{
               width: '100%',
               maxWidth: 420,
-              background: C.navyMid,
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              borderRadius: 16,
+              background: C.bgCard,
+              border: `1.5px solid ${C.goldLine}`,
+              borderRadius: 0,
               overflow: 'hidden',
               animation: 'betaSlideUp 300ms cubic-bezier(0.16, 1, 0.3, 1)',
             }}
@@ -1621,14 +1533,14 @@ export default function LandingPage() {
               justifyContent: 'space-between',
               padding: '20px 24px 0',
             }}>
-              <h3 style={{ fontSize: 18, fontWeight: 600, color: '#fff', margin: 0 }}>Closed Beta</h3>
+              <h3 style={{ fontFamily: FONT.serif, fontSize: '2rem', fontWeight: 400, color: C.cream, margin: 0 }}>Closed Beta</h3>
               <button
                 onClick={closeBetaModal}
                 aria-label="Close"
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: C.gray400,
+                  color: C.muted,
                   cursor: 'pointer',
                   padding: 4,
                   lineHeight: 1,
@@ -1640,13 +1552,13 @@ export default function LandingPage() {
 
             {/* Modal body */}
             <div style={{ padding: '16px 24px 24px' }}>
-              <p style={{ color: C.gray400, fontSize: 14, lineHeight: 1.6, margin: '0 0 20px' }}>
+              <p style={{ color: C.muted, fontFamily: FONT.mono, fontSize: '1.2rem', lineHeight: 1.7, margin: '0 0 20px' }}>
                 ZKProofport is currently in closed beta testing. Leave your email and preferred platform — we{"'"}ll send you an invite as soon as a spot opens up.
               </p>
 
               {/* Email */}
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.gray300, marginBottom: 6 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.ink, marginBottom: 6 }}>
                   Email *
                 </label>
                 <input
@@ -1665,14 +1577,14 @@ export default function LandingPage() {
                     outline: 'none',
                     boxSizing: 'border-box',
                   }}
-                  onFocus={(e) => { e.target.style.borderColor = C.cyan; }}
+                  onFocus={(e) => { e.target.style.borderColor = C.gold2; }}
                   onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; }}
                 />
               </div>
 
               {/* Organization */}
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.gray300, marginBottom: 6 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.ink, marginBottom: 6 }}>
                   Organization *
                 </label>
                 <input
@@ -1691,14 +1603,14 @@ export default function LandingPage() {
                     outline: 'none',
                     boxSizing: 'border-box',
                   }}
-                  onFocus={(e) => { e.target.style.borderColor = C.cyan; }}
+                  onFocus={(e) => { e.target.style.borderColor = C.gold2; }}
                   onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; }}
                 />
               </div>
 
               {/* Platform */}
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.gray300, marginBottom: 6 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.ink, marginBottom: 6 }}>
                   Platform
                 </label>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -1711,10 +1623,10 @@ export default function LandingPage() {
                         padding: '8px 0',
                         fontSize: 13,
                         fontWeight: 500,
-                        background: betaPlatform === plat ? 'rgba(0, 212, 255, 0.08)' : 'rgba(0,0,0,0.3)',
-                        border: `1px solid ${betaPlatform === plat ? C.cyan : 'rgba(255,255,255,0.1)'}`,
+                        background: betaPlatform === plat ? 'rgba(214, 177, 92, 0.12)' : 'rgba(0,0,0,0.3)',
+                        border: `1px solid ${betaPlatform === plat ? C.gold2 : 'rgba(255,255,255,0.1)'}`,
                         borderRadius: 8,
-                        color: betaPlatform === plat ? C.cyan : C.gray400,
+                        color: betaPlatform === plat ? C.gold2 : C.muted,
                         cursor: 'pointer',
                         transition: 'all 0.15s',
                       }}
@@ -1732,17 +1644,19 @@ export default function LandingPage() {
                   disabled={betaSubmitting}
                   style={{
                     width: '100%',
-                    padding: 10,
-                    fontSize: 14,
-                    fontWeight: 600,
-                    background: C.cyan,
-                    color: '#000',
+                    padding: 12,
+                    fontSize: '1.3rem',
+                    fontWeight: 700,
+                    fontFamily: FONT.mono,
+                    background: `linear-gradient(180deg, ${C.gold}, ${C.gold2})`,
+                    color: '#1a222c',
                     border: 'none',
                     borderRadius: 8,
                     cursor: betaSubmitting ? 'not-allowed' : 'pointer',
                     marginTop: 8,
                     transition: 'opacity 0.15s',
                     opacity: betaSubmitting ? 0.5 : 1,
+                    boxShadow: '0 8px 20px rgba(214,177,92,.35), inset 0 1px 0 rgba(255,255,255,.6)',
                   }}
                 >
                   Request Invite
@@ -1754,11 +1668,12 @@ export default function LandingPage() {
                 <div style={{
                   marginTop: 12,
                   padding: 12,
-                  background: 'rgba(34,197,94,0.1)',
-                  border: '1px solid rgba(34,197,94,0.2)',
+                  background: 'rgba(52,211,153,0.1)',
+                  border: '1px solid rgba(52,211,153,0.2)',
                   borderRadius: 8,
-                  color: '#22c55e',
-                  fontSize: 13,
+                  color: '#34d399',
+                  fontSize: '1.2rem',
+                  fontFamily: FONT.mono,
                   textAlign: 'center',
                 }}>
                   Thanks! We{"'"}ll reach out when your invite is ready.
@@ -1770,11 +1685,12 @@ export default function LandingPage() {
                 <div style={{
                   marginTop: 12,
                   padding: 12,
-                  background: 'rgba(239,68,68,0.1)',
-                  border: '1px solid rgba(239,68,68,0.2)',
+                  background: 'rgba(248,113,113,0.1)',
+                  border: '1px solid rgba(248,113,113,0.2)',
                   borderRadius: 8,
-                  color: '#ef4444',
-                  fontSize: 13,
+                  color: '#f87171',
+                  fontSize: '1.2rem',
+                  fontFamily: FONT.mono,
                   textAlign: 'center',
                 }}>
                   {betaError}

@@ -1,4 +1,23 @@
-/* Reset */
+/* ================================
+   ZKProofport Demo — Global Styles
+   Matching portal-web design system
+   ================================ */
+
+/* ---- CSS Custom Properties (portal-web tokens) ---- */
+:root {
+  --color-bg-deep: #0a0e14;
+  --color-cream: #e8dcc8;
+  --color-muted: #5a6577;
+  --color-gold: #d6b15c;
+  --color-gold-2: #f0d488;
+  --color-gold-line: rgba(214,177,92,0.15);
+
+  --font-mono: var(--font-mono-next, 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace);
+  --font-serif: var(--font-serif-next, 'DM Serif Display', Georgia, serif);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial;
+}
+
+/* ---- RESET ---- */
 *,
 *::before,
 *::after {
@@ -7,28 +26,112 @@
   padding: 0;
 }
 
+html { font-size: 75% } /* 1rem = 12px */
+html, body { height: 100% }
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  line-height: 1.6;
+  font-family: var(--font-sans);
+  color: var(--color-cream);
+  font-size: 1.6rem;
+  line-height: 1.55;
+  background: var(--color-bg-deep);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Shared utility classes */
+/* ---- NOISE TEXTURE ---- */
+.noise {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+}
+
+/* ---- DOT MATRIX ---- */
+.dot-matrix {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  opacity: 0.04;
+  background-image: radial-gradient(circle, var(--color-gold) 0.8px, transparent 0.8px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse 70% 60% at 80% 20%, black, transparent);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 80% 20%, black, transparent);
+}
+
+/* ---- UTILITIES ---- */
 .hidden {
   display: none !important;
 }
 
-/* Monospace text */
 .mono {
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
+  font-family: var(--font-mono);
 }
 
-/* Badge */
 .badge {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 600;
+}
+
+/* ---- RESPONSIVE ---- */
+
+/* Tablet & smaller laptops */
+@media (max-width: 1200px) {
+  .demo-cards-row {
+    flex-wrap: wrap !important;
+  }
+  .demo-cards-row > div {
+    flex: 1 1 100% !important;
+  }
+  .coming-soon-grid {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    grid-template-rows: repeat(2, 1fr) !important;
+  }
+}
+
+/* Tablets */
+@media (max-width: 900px) {
+  .header-inner {
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    padding: 10px 0 !important;
+  }
+  .header-inner > div:first-child {
+    flex: 0 0 100% !important;
+    justify-content: center !important;
+  }
+  .header-nav {
+    order: 2;
+  }
+  .header-auth {
+    order: 3;
+    flex: 0 !important;
+  }
+  .demo-cards-row > div:nth-child(1),
+  .demo-cards-row > div:nth-child(2) {
+    flex: 1 1 calc(50% - 10px) !important;
+  }
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+  .header-auth {
+    display: none !important;
+  }
+  .demo-cards-row {
+    flex-direction: column !important;
+  }
+  .demo-cards-row > div {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
+  .coming-soon-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    grid-template-rows: repeat(3, 1fr) !important;
+  }
 }

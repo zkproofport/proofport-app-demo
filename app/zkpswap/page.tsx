@@ -583,8 +583,9 @@ export default function ZKPSwapPage() {
         setKycShieldAnimating(false);
       }
     } catch (err) {
-      if ((err as Error).message.includes('Not authenticated') && await ensureAuth()) {
-        openKycModal();
+      if ((err as Error).message.includes('Not authenticated')) {
+        console.error('Authentication failed during relay request');
+        setManualAuthVisible(true);
       } else {
         devLog('SDK', `Relay connection failed: ${(err as Error).message}`);
         console.error('Failed to connect to relay:', (err as Error).message);

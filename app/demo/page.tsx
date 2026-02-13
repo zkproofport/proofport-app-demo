@@ -171,8 +171,8 @@ export default function DemoPage() {
   const handleKycSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!authToken) {
-      if (await ensureAuth()) { handleKycSubmit(e); }
-      return;
+      const reauthed = await ensureAuth();
+      if (!reauthed) return;
     }
 
     try {
@@ -186,8 +186,8 @@ export default function DemoPage() {
       await displayResult(relay);
       await waitForProof(relay.requestId);
     } catch (err) {
-      if ((err as Error).message.includes('Not authenticated') && await ensureAuth()) {
-        handleKycSubmit(e);
+      if ((err as Error).message.includes('Not authenticated')) {
+        console.error('Authentication failed:', err);
       } else {
         console.error('KYC request failed:', err);
       }
@@ -196,8 +196,8 @@ export default function DemoPage() {
 
   const handleKycOpen = async () => {
     if (!authToken) {
-      if (await ensureAuth()) { handleKycOpen(); }
-      return;
+      const reauthed = await ensureAuth();
+      if (!reauthed) return;
     }
     try {
       if (!currentRelayRef.current) {
@@ -209,8 +209,8 @@ export default function DemoPage() {
       }
       window.location.href = currentRelayRef.current.deepLink;
     } catch (err) {
-      if ((err as Error).message.includes('Not authenticated') && await ensureAuth()) {
-        handleKycOpen();
+      if ((err as Error).message.includes('Not authenticated')) {
+        console.error('Authentication failed:', err);
       } else {
         console.error('KYC open failed:', err);
       }
@@ -220,8 +220,8 @@ export default function DemoPage() {
   const handleCountrySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!authToken) {
-      if (await ensureAuth()) { handleCountrySubmit(e); }
-      return;
+      const reauthed = await ensureAuth();
+      if (!reauthed) return;
     }
 
     try {
@@ -239,8 +239,8 @@ export default function DemoPage() {
       await displayResult(relay);
       await waitForProof(relay.requestId);
     } catch (err) {
-      if ((err as Error).message.includes('Not authenticated') && await ensureAuth()) {
-        handleCountrySubmit(e);
+      if ((err as Error).message.includes('Not authenticated')) {
+        console.error('Authentication failed:', err);
       } else {
         console.error('Country request failed:', err);
       }
@@ -249,8 +249,8 @@ export default function DemoPage() {
 
   const handleCountryOpen = async () => {
     if (!authToken) {
-      if (await ensureAuth()) { handleCountryOpen(); }
-      return;
+      const reauthed = await ensureAuth();
+      if (!reauthed) return;
     }
     try {
       if (!currentRelayRef.current) {
@@ -265,8 +265,8 @@ export default function DemoPage() {
       }
       window.location.href = currentRelayRef.current.deepLink;
     } catch (err) {
-      if ((err as Error).message.includes('Not authenticated') && await ensureAuth()) {
-        handleCountryOpen();
+      if ((err as Error).message.includes('Not authenticated')) {
+        console.error('Authentication failed:', err);
       } else {
         console.error('Country open failed:', err);
       }

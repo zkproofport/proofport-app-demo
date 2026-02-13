@@ -422,8 +422,9 @@ export default function LandingPage() {
   const requestKycProof = useCallback(async () => {
     console.log('[requestKycProof] called, authenticated=', authenticated);
     if (!authenticated) {
-      if (await ensureAuth()) { requestKycProof(); }
-      return;
+      const reauthed = await ensureAuth();
+      if (!reauthed) return;
+      // Fall through after re-auth (don't recurse — state closure is stale)
     }
     setProofModalPrefix('kyc');
     setProofModalOpen(true);
@@ -473,8 +474,7 @@ export default function LandingPage() {
       if ((err as Error).message.includes('timeout')) {
         showProofTimeout('kyc');
       } else if ((err as Error).message.includes('Not authenticated')) {
-        if (await ensureAuth()) { requestKycProof(); }
-        else { setShowManualAuth(true); setAuthenticated(false); }
+        setShowManualAuth(true); setAuthenticated(false);
       } else {
         console.error('Failed to create proof request:', (err as Error).message);
       }
@@ -485,8 +485,9 @@ export default function LandingPage() {
   const requestCountryProof = useCallback(async () => {
     console.log('[requestCountryProof] called, authenticated=', authenticated);
     if (!authenticated) {
-      if (await ensureAuth()) { requestCountryProof(); }
-      return;
+      const reauthed = await ensureAuth();
+      if (!reauthed) return;
+      // Fall through after re-auth (don't recurse — state closure is stale)
     }
     const countries = countryList.split(',').map(c => c.trim().toUpperCase()).filter(c => c);
 
@@ -538,8 +539,7 @@ export default function LandingPage() {
       if ((err as Error).message.includes('timeout')) {
         showProofTimeout('country');
       } else if ((err as Error).message.includes('Not authenticated')) {
-        if (await ensureAuth()) { requestCountryProof(); }
-        else { setShowManualAuth(true); setAuthenticated(false); }
+        setShowManualAuth(true); setAuthenticated(false);
       } else {
         console.error('Failed to create proof request:', (err as Error).message);
       }

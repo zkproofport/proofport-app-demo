@@ -690,12 +690,13 @@ export default function LandingPage() {
             <div style={{ textAlign: 'center', margin: '16px 0' }}>
               {isMobile ? (
                 <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (state.deepLink) {
-                      window.location.href = state.deepLink;
-                    }
+                  onClick={() => {
+                    if (!state.deepLink) return;
+                    const iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.src = state.deepLink;
+                    document.body.appendChild(iframe);
+                    setTimeout(() => document.body.removeChild(iframe), 1000);
                   }}
                   style={{
                     display: 'inline-block',

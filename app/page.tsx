@@ -145,6 +145,7 @@ export default function LandingPage() {
   const [authenticating, setAuthenticating] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [planBadge, setPlanBadge] = useState<{ tier: string; visible: boolean }>({ tier: '', visible: false });
+  const credentialsRef = useRef<{ clientId: string; apiKey: string } | null>(null);
 
   /* ── Country form ── */
   const [countryList, setCountryList] = useState('US,KR,JP');
@@ -246,6 +247,7 @@ export default function LandingPage() {
 
     if (hasAutoCreds) {
       const sdk = getSDK();
+      credentialsRef.current = { clientId: demoClientId, apiKey: demoApiKey };
       sdk.login({ clientId: demoClientId, apiKey: demoApiKey })
         .then((auth: AuthToken) => {
           console.log(`[Auto-login] ${auth.clientId} (${auth.tier})`);
@@ -276,6 +278,7 @@ export default function LandingPage() {
       setAuthStatus('Authenticating...');
       setAuthStatusColor(C.muted);
       const sdk = getSDK();
+      credentialsRef.current = { clientId: authClientId, apiKey: authApiKey };
       const auth = await sdk.login({ clientId: authClientId, apiKey: authApiKey }) as AuthToken;
       setAuthenticated(true);
       setShowManualAuth(false);
@@ -297,9 +300,27 @@ export default function LandingPage() {
     setShowManualAuth(true);
     setAuthStatus('');
     setPlanBadge({ tier: '', visible: false });
+    credentialsRef.current = null;
     const sdk = sdkRef.current;
     if (sdk) sdk.logout();
   }, []);
+
+  /* ── Silent re-auth helper ── */
+  const ensureAuth = useCallback(async (): Promise<boolean> => {
+    const creds = credentialsRef.current;
+    if (!creds) return false;
+    try {
+      const sdk = getSDK();
+      const auth = await sdk.login(creds) as AuthToken;
+      console.log(`[Re-auth] ${auth.clientId} (${auth.tier})`);
+      setAuthenticated(true);
+      setPlanBadge({ tier: auth.tier, visible: true });
+      return true;
+    } catch (err) {
+      console.error('[Re-auth] Failed:', err);
+      return false;
+    }
+  }, [getSDK]);
 
   /* ── Confetti launcher ── */
   const launchConfetti = useCallback(() => {
@@ -400,7 +421,10 @@ export default function LandingPage() {
   /* ── KYC request ── */
   const requestKycProof = useCallback(async () => {
     console.log('[requestKycProof] called, authenticated=', authenticated);
-    if (!authenticated) { alert('Please log in first to request a proof.'); return; }
+    if (!authenticated) {
+      if (await ensureAuth()) { requestKycProof(); }
+      return;
+    }
     setProofModalPrefix('kyc');
     setProofModalOpen(true);
     proofModalOpenRef.current = true;
@@ -448,16 +472,22 @@ export default function LandingPage() {
       if (!proofModalOpenRef.current) return; // user closed modal, suppress
       if ((err as Error).message.includes('timeout')) {
         showProofTimeout('kyc');
+      } else if ((err as Error).message.includes('Not authenticated')) {
+        if (await ensureAuth()) { requestKycProof(); }
+        else { setShowManualAuth(true); setAuthenticated(false); }
       } else {
-        alert(`Failed to create proof request: ${(err as Error).message}`);
+        console.error('Failed to create proof request:', (err as Error).message);
       }
     }
-  }, [authenticated, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout]);
+  }, [authenticated, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, ensureAuth]);
 
   /* ── Country request ── */
   const requestCountryProof = useCallback(async () => {
     console.log('[requestCountryProof] called, authenticated=', authenticated);
-    if (!authenticated) { alert('Please log in first to request a proof.'); return; }
+    if (!authenticated) {
+      if (await ensureAuth()) { requestCountryProof(); }
+      return;
+    }
     const countries = countryList.split(',').map(c => c.trim().toUpperCase()).filter(c => c);
 
     setProofModalPrefix('country');
@@ -507,11 +537,14 @@ export default function LandingPage() {
       if (!proofModalOpenRef.current) return; // user closed modal, suppress
       if ((err as Error).message.includes('timeout')) {
         showProofTimeout('country');
+      } else if ((err as Error).message.includes('Not authenticated')) {
+        if (await ensureAuth()) { requestCountryProof(); }
+        else { setShowManualAuth(true); setAuthenticated(false); }
       } else {
-        alert(`Failed to create proof request: ${(err as Error).message}`);
+        console.error('Failed to create proof request:', (err as Error).message);
       }
     }
-  }, [authenticated, countryList, isIncluded, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout]);
+  }, [authenticated, countryList, isIncluded, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, ensureAuth]);
 
   /* ── Copy proof ── */
   const handleCopyProof = useCallback((prefix: 'kyc' | 'country') => {

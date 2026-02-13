@@ -188,6 +188,7 @@ export default function ZKPSwapPage() {
   const currentRequestIdRef = useRef<string | null>(null);
   const currentDeepLinkRef = useRef<string | null>(null);
   const jwtTokenRef = useRef('');
+  const credentialsRef = useRef<{ clientId: string; apiKey: string } | null>(null);
   const devLogsRef = useRef<LogEntry[]>([]);
   const devLogsPanelRef = useRef<HTMLDivElement | null>(null);
 
@@ -248,6 +249,7 @@ export default function ZKPSwapPage() {
     const apiKey = process.env.DEMO_API_KEY || '';
 
     if (clientId && apiKey && !clientId.startsWith('__')) {
+      credentialsRef.current = { clientId, apiKey };
       const sdk = getSDK();
       sdk.login({ clientId, apiKey }).then((auth: AuthToken) => {
         setJwtToken(auth.token);
@@ -402,6 +404,7 @@ export default function ZKPSwapPage() {
     try {
       setAuthBtnDisabled(true);
       setAuthStatus('Authenticating...');
+      credentialsRef.current = { clientId: authInputClientId, apiKey: authInputApiKey };
       const sdk = getSDK();
       const auth = await sdk.login({ clientId: authInputClientId, apiKey: authInputApiKey });
       setJwtToken(auth.token);
@@ -424,10 +427,28 @@ export default function ZKPSwapPage() {
     setAuthInputClientId('');
     setAuthInputApiKey('');
     setAuthStatus('');
+    credentialsRef.current = null;
     const sdk = sdkRef.current;
     if (sdk) sdk.logout();
     devLog('AUTH', 'Logged out');
   }, [devLog]);
+
+  const ensureAuth = useCallback(async (): Promise<boolean> => {
+    const creds = credentialsRef.current;
+    if (!creds) return false;
+    try {
+      const sdk = getSDK();
+      const auth = await sdk.login(creds) as AuthToken;
+      setJwtToken(auth.token);
+      setAuthClientId(auth.clientId);
+      setLoggedIn(true);
+      console.log(`[Re-auth] ${auth.clientId} (${auth.tier})`);
+      return true;
+    } catch (err) {
+      console.error('[Re-auth] Failed:', err);
+      return false;
+    }
+  }, [getSDK]);
 
   const executeSwap = useCallback(async (withKyc: boolean) => {
     setSwapLoading(true);
@@ -505,8 +526,12 @@ export default function ZKPSwapPage() {
     setKycShieldAnimating(true);
 
     if (!jwtTokenRef.current) {
-      alert('Please authenticate first (enter Client ID and API Key in the header)');
-      return;
+      if (await ensureAuth()) {
+        devLog('SDK', 'Re-authenticated, retrying...');
+      } else {
+        setManualAuthVisible(true);
+        return;
+      }
     }
 
     devLog('SDK', 'Requesting proof via relay...');
@@ -558,11 +583,15 @@ export default function ZKPSwapPage() {
         setKycShieldAnimating(false);
       }
     } catch (err) {
-      devLog('SDK', `Relay connection failed: ${(err as Error).message}`);
-      alert(`Failed to connect to relay: ${(err as Error).message}`);
-      setKycShieldAnimating(false);
+      if ((err as Error).message.includes('Not authenticated') && await ensureAuth()) {
+        openKycModal();
+      } else {
+        devLog('SDK', `Relay connection failed: ${(err as Error).message}`);
+        console.error('Failed to connect to relay:', (err as Error).message);
+        setKycShieldAnimating(false);
+      }
     }
-  }, [tokens, fromToken, toToken, fromAmount, getSDK, devLog]);
+  }, [tokens, fromToken, toToken, fromAmount, getSDK, devLog, ensureAuth]);
 
   const handleProofResult = useCallback(async (data: RelayProofResult) => {
     setLastProofData(data as unknown as Record<string, unknown>);

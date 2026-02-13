@@ -25,6 +25,7 @@ export default function DemoPage() {
   const sdkRef = useRef<ProofportSDKType | null>(null);
   const [activeTab, setActiveTab] = useState<'kyc' | 'country'>('kyc');
   const [authToken, setAuthToken] = useState<AuthToken | null>(null);
+  const credentialsRef = useRef<{ clientId: string; apiKey: string } | null>(null);
   const [authStatus, setAuthStatus] = useState('');
   const [authStatusColor, setAuthStatusColor] = useState('#666');
   const [authenticating, setAuthenticating] = useState(false);
@@ -74,6 +75,7 @@ export default function DemoPage() {
       setAuthStatusColor('#f59e0b');
 
       const sdk = getSDK();
+      credentialsRef.current = { clientId, apiKey };
       const token = await sdk.login({ clientId, apiKey });
       setAuthToken(token as AuthToken);
       setAuthStatus('Authenticated');
@@ -93,8 +95,26 @@ export default function DemoPage() {
     setClientId('');
     setApiKey('');
     setAuthStatus('');
+    credentialsRef.current = null;
     const sdk = sdkRef.current;
     if (sdk) sdk.logout();
+  };
+
+  const ensureAuth = async (): Promise<boolean> => {
+    const creds = credentialsRef.current;
+    if (!creds) return false;
+    try {
+      const sdk = getSDK();
+      const token = await sdk.login(creds);
+      setAuthToken(token as AuthToken);
+      setAuthStatus('Authenticated');
+      setAuthStatusColor('#22c55e');
+      console.log('[Re-auth] Success');
+      return true;
+    } catch (err) {
+      console.error('[Re-auth] Failed:', err);
+      return false;
+    }
   };
 
   const displayResult = async (relayRequest: RelayRequest) => {
@@ -150,7 +170,10 @@ export default function DemoPage() {
 
   const handleKycSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!authToken) { alert('Please authenticate first'); return; }
+    if (!authToken) {
+      if (await ensureAuth()) { handleKycSubmit(e); }
+      return;
+    }
 
     try {
       const sdk = getSDK();
@@ -163,13 +186,19 @@ export default function DemoPage() {
       await displayResult(relay);
       await waitForProof(relay.requestId);
     } catch (err) {
-      alert('Request failed: ' + (err as Error).message);
-      console.error('KYC request failed:', err);
+      if ((err as Error).message.includes('Not authenticated') && await ensureAuth()) {
+        handleKycSubmit(e);
+      } else {
+        console.error('KYC request failed:', err);
+      }
     }
   };
 
   const handleKycOpen = async () => {
-    if (!authToken) { alert('Please authenticate first'); return; }
+    if (!authToken) {
+      if (await ensureAuth()) { handleKycOpen(); }
+      return;
+    }
     try {
       if (!currentRelayRef.current) {
         const sdk = getSDK();
@@ -180,17 +209,24 @@ export default function DemoPage() {
       }
       window.location.href = currentRelayRef.current.deepLink;
     } catch (err) {
-      alert('Request failed: ' + (err as Error).message);
+      if ((err as Error).message.includes('Not authenticated') && await ensureAuth()) {
+        handleKycOpen();
+      } else {
+        console.error('KYC open failed:', err);
+      }
     }
   };
 
   const handleCountrySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!authToken) { alert('Please authenticate first'); return; }
+    if (!authToken) {
+      if (await ensureAuth()) { handleCountrySubmit(e); }
+      return;
+    }
 
     try {
       const countries = countryList.split(',').map(c => c.trim().toUpperCase()).filter(c => c);
-      if (countries.length === 0) { alert('Country list is required'); return; }
+      if (countries.length === 0) { console.error('Country list is required'); return; }
 
       const sdk = getSDK();
       const inputs = { countryList: countries, isIncluded, scope: 'zkproofport:demo' };
@@ -203,17 +239,23 @@ export default function DemoPage() {
       await displayResult(relay);
       await waitForProof(relay.requestId);
     } catch (err) {
-      alert('Request failed: ' + (err as Error).message);
-      console.error('Country request failed:', err);
+      if ((err as Error).message.includes('Not authenticated') && await ensureAuth()) {
+        handleCountrySubmit(e);
+      } else {
+        console.error('Country request failed:', err);
+      }
     }
   };
 
   const handleCountryOpen = async () => {
-    if (!authToken) { alert('Please authenticate first'); return; }
+    if (!authToken) {
+      if (await ensureAuth()) { handleCountryOpen(); }
+      return;
+    }
     try {
       if (!currentRelayRef.current) {
         const countries = countryList.split(',').map(c => c.trim().toUpperCase()).filter(c => c);
-        if (countries.length === 0) { alert('Country list is required'); return; }
+        if (countries.length === 0) { console.error('Country list is required'); return; }
         const sdk = getSDK();
         const inputs = { countryList: countries, isIncluded, scope: 'zkproofport:demo' };
         const options: Record<string, string> = {};
@@ -223,7 +265,11 @@ export default function DemoPage() {
       }
       window.location.href = currentRelayRef.current.deepLink;
     } catch (err) {
-      alert('Request failed: ' + (err as Error).message);
+      if ((err as Error).message.includes('Not authenticated') && await ensureAuth()) {
+        handleCountryOpen();
+      } else {
+        console.error('Country open failed:', err);
+      }
     }
   };
 

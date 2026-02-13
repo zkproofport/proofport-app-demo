@@ -195,9 +195,10 @@ export default function LandingPage() {
   const activeKycRequestIdRef = useRef<string | null>(null);
   const activeCountryRequestIdRef = useRef<string | null>(null);
 
-  /* ── Proof modal ── */
-  const [proofModalOpen, setProofModalOpen] = useState(false);
-  const [proofModalPrefix, setProofModalPrefix] = useState<'kyc' | 'country' | null>(null);
+  /* ── Proof panel (inline, below demo cards) ── */
+  const [proofPanelOpen, setProofPanelOpen] = useState(false);
+  const [proofPanelPrefix, setProofPanelPrefix] = useState<'kyc' | 'country' | null>(null);
+  const proofPanelRef = useRef<HTMLDivElement>(null);
 
   /* ── Beta modal ── */
   const [betaOpen, setBetaOpen] = useState(false);
@@ -376,16 +377,18 @@ export default function LandingPage() {
   }, [setDemoState]);
 
   const showProofResult = useCallback(async (deepLink: string, prefix: 'kyc' | 'country') => {
+    console.log(`[showProofResult] prefix=${prefix}, deepLink=${deepLink}, isMobile=${isMobileDevice()}`);
     if (isMobileDevice()) {
+      console.log('[showProofResult] Mobile: storing deepLink for Open App button');
       setDemoState(prefix, (prev) => ({
         ...prev,
         qrHtml: '',
-        deepLink: '',
+        deepLink: deepLink,
       }));
-      // We'll render the "Open App" button via state
     } else {
       const sdk = getSDK();
       const qrDataUrl = await sdk.generateQRCode(deepLink, { width: 200 });
+      console.log('[showProofResult] Desktop: QR generated, deepLink stored');
       setDemoState(prefix, (prev) => ({
         ...prev,
         qrHtml: qrDataUrl,
@@ -396,9 +399,10 @@ export default function LandingPage() {
 
   /* ── KYC request ── */
   const requestKycProof = useCallback(async () => {
+    console.log('[requestKycProof] called, authenticated=', authenticated);
     if (!authenticated) { alert('Please log in first to request a proof.'); return; }
-    setProofModalPrefix('kyc');
-    setProofModalOpen(true);
+    setProofPanelPrefix('kyc');
+    setProofPanelOpen(true);
     setKycState((prev) => ({
       ...prev,
       showReceived: false,
@@ -412,12 +416,14 @@ export default function LandingPage() {
       const result = await sdk.createRelayRequest('coinbase_attestation', {}, {
         dappName: 'ZKProofport Demo',
       });
+      console.log('[requestKycProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 
       activeKycRequestIdRef.current = result.requestId;
 
       const deepLink = result.deepLink;
       await showProofResult(deepLink, 'kyc');
       setKycState((prev) => ({ ...prev, showResult: true, showWaiting: true }));
+      setTimeout(() => proofPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
 
       const finalResult = await sdk.waitForProof(result.requestId, {
         timeoutMs: 180000,
@@ -446,11 +452,12 @@ export default function LandingPage() {
 
   /* ── Country request ── */
   const requestCountryProof = useCallback(async () => {
+    console.log('[requestCountryProof] called, authenticated=', authenticated);
     if (!authenticated) { alert('Please log in first to request a proof.'); return; }
     const countries = countryList.split(',').map(c => c.trim().toUpperCase()).filter(c => c);
 
-    setProofModalPrefix('country');
-    setProofModalOpen(true);
+    setProofPanelPrefix('country');
+    setProofPanelOpen(true);
     setCountryState((prev) => ({
       ...prev,
       showReceived: false,
@@ -464,12 +471,14 @@ export default function LandingPage() {
       const result = await sdk.createRelayRequest('coinbase_country_attestation', { countryList: countries, isIncluded }, {
         dappName: 'ZKProofport Demo',
       });
+      console.log('[requestCountryProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 
       activeCountryRequestIdRef.current = result.requestId;
 
       const deepLink = result.deepLink;
       await showProofResult(deepLink, 'country');
       setCountryState((prev) => ({ ...prev, showResult: true, showWaiting: true }));
+      setTimeout(() => proofPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
 
       const finalResult = await sdk.waitForProof(result.requestId, {
         timeoutMs: 180000,
@@ -689,22 +698,15 @@ export default function LandingPage() {
             {/* QR / Open App */}
             <div style={{ textAlign: 'center', margin: '16px 0' }}>
               {isMobile ? (
-                <button
-                  onClick={() => {
-                    if (!state.deepLink) return;
-                    const iframe = document.createElement('iframe');
-                    iframe.style.display = 'none';
-                    iframe.src = state.deepLink;
-                    document.body.appendChild(iframe);
-                    setTimeout(() => document.body.removeChild(iframe), 1000);
-                  }}
+                <a
+                  href={state.deepLink || '#'}
+                  onClick={() => console.log('[DeepLink] tapped, href=', state.deepLink)}
                   style={{
                     display: 'inline-block',
                     padding: '16px 32px',
                     background: `linear-gradient(180deg, ${C.gold}, ${C.gold2})`,
                     color: '#1a222c',
                     textDecoration: 'none',
-                    border: 'none',
                     borderRadius: 12,
                     fontSize: 18,
                     fontWeight: 700,
@@ -712,12 +714,11 @@ export default function LandingPage() {
                     textAlign: 'center',
                     width: '100%',
                     boxSizing: 'border-box',
-                    cursor: 'pointer',
                     transition: 'opacity 0.2s',
                   }}
                 >
                   Open ZKProofport App
-                </button>
+                </a>
               ) : state.qrHtml ? (
                 <img
                   src={state.qrHtml}
@@ -1346,6 +1347,57 @@ export default function LandingPage() {
 
           </div>
 
+          {/* ── PROOF RESULT PANEL (inline, below cards) ── */}
+          {proofPanelOpen && proofPanelPrefix && (
+            <div
+              ref={proofPanelRef}
+              style={{
+                marginTop: 24,
+                padding: 32,
+                background: C.bgCard,
+                border: `1.5px solid ${C.goldLine}`,
+                borderRadius: 16,
+                position: 'relative',
+                animation: 'betaSlideUp 0.3s ease-out',
+              }}
+            >
+              {/* Close button */}
+              <button
+                onClick={() => setProofPanelOpen(false)}
+                style={{
+                  position: 'absolute',
+                  top: 16,
+                  right: 16,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: C.muted,
+                  fontSize: 24,
+                  lineHeight: 1,
+                  padding: 4,
+                }}
+              >
+                <CloseIcon />
+              </button>
+              {/* Title */}
+              <h3 style={{
+                fontFamily: FONT.serif,
+                fontSize: '1.8rem',
+                fontWeight: 400,
+                color: C.cream,
+                marginBottom: 8,
+              }}>
+                {proofPanelPrefix === 'kyc' ? '🛡️ KYC Verification' : '🌍 Country Attestation'}
+              </h3>
+              <p style={{ fontFamily: FONT.mono, fontSize: '1rem', color: C.muted, marginBottom: 16 }}>
+                {proofPanelPrefix === 'kyc'
+                  ? 'Scan the QR code with ZKProofport app to generate a proof.'
+                  : 'Scan the QR code with ZKProofport app to prove country eligibility.'}
+              </p>
+              {renderDemoCard(proofPanelPrefix, proofPanelPrefix === 'kyc' ? kycState : countryState)}
+            </div>
+          )}
+
         </div>
       </section>
 
@@ -1499,73 +1551,6 @@ export default function LandingPage() {
         </div>
       </footer>
 
-      {/* ── PROOF MODAL ── */}
-      {proofModalOpen && proofModalPrefix && (
-        <div
-          onClick={(e) => { if (e.target === e.currentTarget) setProofModalOpen(false); }}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.75)',
-            backdropFilter: 'blur(6px)',
-            WebkitBackdropFilter: 'blur(6px)',
-            zIndex: 200,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            animation: 'betaFadeIn 0.2s ease-out',
-            padding: 20,
-          }}
-        >
-          <div style={{
-            background: C.bgCard,
-            border: `1.5px solid ${C.goldLine}`,
-            borderRadius: 16,
-            padding: 32,
-            maxWidth: 480,
-            width: '100%',
-            maxHeight: '85vh',
-            overflowY: 'auto',
-            position: 'relative',
-            animation: 'betaSlideUp 0.3s ease-out',
-          }}>
-            {/* Close button */}
-            <button
-              onClick={() => setProofModalOpen(false)}
-              style={{
-                position: 'absolute',
-                top: 16,
-                right: 16,
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: C.muted,
-                fontSize: 24,
-                lineHeight: 1,
-                padding: 4,
-              }}
-            >
-              <CloseIcon />
-            </button>
-            {/* Title */}
-            <h3 style={{
-              fontFamily: FONT.serif,
-              fontSize: '1.8rem',
-              fontWeight: 400,
-              color: C.cream,
-              marginBottom: 8,
-            }}>
-              {proofModalPrefix === 'kyc' ? '🛡️ KYC Verification' : '🌍 Country Attestation'}
-            </h3>
-            <p style={{ fontFamily: FONT.mono, fontSize: '1rem', color: C.muted, marginBottom: 16 }}>
-              {proofModalPrefix === 'kyc'
-                ? 'Scan the QR code with ZKProofport app to generate a proof.'
-                : 'Scan the QR code with ZKProofport app to prove country eligibility.'}
-            </p>
-            {renderDemoCard(proofModalPrefix, proofModalPrefix === 'kyc' ? kycState : countryState)}
-          </div>
-        </div>
-      )}
 
       {/* ── BETA INVITE MODAL ── */}
       {betaOpen && (

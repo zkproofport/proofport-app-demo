@@ -195,6 +195,10 @@ export default function LandingPage() {
   const activeKycRequestIdRef = useRef<string | null>(null);
   const activeCountryRequestIdRef = useRef<string | null>(null);
 
+  /* ── Proof modal ── */
+  const [proofModalOpen, setProofModalOpen] = useState(false);
+  const [proofModalPrefix, setProofModalPrefix] = useState<'kyc' | 'country' | null>(null);
+
   /* ── Beta modal ── */
   const [betaOpen, setBetaOpen] = useState(false);
   const [betaPlatform, setBetaPlatformState] = useState<string | null>(null);
@@ -392,6 +396,9 @@ export default function LandingPage() {
 
   /* ── KYC request ── */
   const requestKycProof = useCallback(async () => {
+    if (!authenticated) { alert('Please log in first to request a proof.'); return; }
+    setProofModalPrefix('kyc');
+    setProofModalOpen(true);
     setKycState((prev) => ({
       ...prev,
       showReceived: false,
@@ -439,8 +446,11 @@ export default function LandingPage() {
 
   /* ── Country request ── */
   const requestCountryProof = useCallback(async () => {
+    if (!authenticated) { alert('Please log in first to request a proof.'); return; }
     const countries = countryList.split(',').map(c => c.trim().toUpperCase()).filter(c => c);
 
+    setProofModalPrefix('country');
+    setProofModalOpen(true);
     setCountryState((prev) => ({
       ...prev,
       showReceived: false,
@@ -708,21 +718,7 @@ export default function LandingPage() {
               ) : null}
             </div>
 
-            {/* Deep link text (desktop only) */}
-            {!isMobile && state.deepLink && (
-              <div style={{
-                marginTop: 12,
-                padding: 12,
-                background: 'rgba(0, 0, 0, 0.3)',
-                borderRadius: 8,
-                fontFamily: "'Courier New', monospace",
-                fontSize: 12,
-                wordBreak: 'break-all',
-                color: C.muted,
-              }}>
-                {state.deepLink}
-              </div>
-            )}
+
 
             {/* Waiting */}
             {state.showWaiting && (
@@ -1145,7 +1141,7 @@ export default function LandingPage() {
               >
                 Request Proof
               </button>
-              {renderDemoCard('kyc', kycState)}
+
             </div>
 
             {/* ── Country Demo Card ── */}
@@ -1176,7 +1172,7 @@ export default function LandingPage() {
               </div>
               <h3 style={{ fontFamily: FONT.serif, fontSize: '2rem', fontWeight: 400, marginBottom: 10, color: C.cream }}>Country Attestation</h3>
               <p style={{ color: C.muted, marginBottom: 20, fontFamily: FONT.mono, fontSize: '1.2rem', lineHeight: 1.6, flex: 1 }}>
-                Prove country of residence eligibility without revealing exact location.
+                Prove Coinbase country of residence eligibility without revealing exact location.
               </p>
               <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: '1.1rem', fontFamily: FONT.mono }}>
                 <div style={{ flex: 1 }}>
@@ -1290,7 +1286,7 @@ export default function LandingPage() {
               >
                 Request Proof
               </button>
-              {renderDemoCard('country', countryState)}
+
             </div>
 
             {/* ── Coming-soon 3×2 grid beside live cards ── */}
@@ -1493,6 +1489,74 @@ export default function LandingPage() {
           </a>
         </div>
       </footer>
+
+      {/* ── PROOF MODAL ── */}
+      {proofModalOpen && proofModalPrefix && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) setProofModalOpen(false); }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            zIndex: 200,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            animation: 'betaFadeIn 0.2s ease-out',
+            padding: 20,
+          }}
+        >
+          <div style={{
+            background: C.bgCard,
+            border: `1.5px solid ${C.goldLine}`,
+            borderRadius: 16,
+            padding: 32,
+            maxWidth: 480,
+            width: '100%',
+            maxHeight: '85vh',
+            overflowY: 'auto',
+            position: 'relative',
+            animation: 'betaSlideUp 0.3s ease-out',
+          }}>
+            {/* Close button */}
+            <button
+              onClick={() => setProofModalOpen(false)}
+              style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: C.muted,
+                fontSize: 24,
+                lineHeight: 1,
+                padding: 4,
+              }}
+            >
+              <CloseIcon />
+            </button>
+            {/* Title */}
+            <h3 style={{
+              fontFamily: FONT.serif,
+              fontSize: '1.8rem',
+              fontWeight: 400,
+              color: C.cream,
+              marginBottom: 8,
+            }}>
+              {proofModalPrefix === 'kyc' ? '🛡️ KYC Verification' : '🌍 Country Attestation'}
+            </h3>
+            <p style={{ fontFamily: FONT.mono, fontSize: '1rem', color: C.muted, marginBottom: 16 }}>
+              {proofModalPrefix === 'kyc'
+                ? 'Scan the QR code with ZKProofport app to generate a proof.'
+                : 'Scan the QR code with ZKProofport app to prove country eligibility.'}
+            </p>
+            {renderDemoCard(proofModalPrefix, proofModalPrefix === 'kyc' ? kycState : countryState)}
+          </div>
+        </div>
+      )}
 
       {/* ── BETA INVITE MODAL ── */}
       {betaOpen && (

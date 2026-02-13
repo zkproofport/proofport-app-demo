@@ -442,7 +442,7 @@ export default function LandingPage() {
         alert(`Failed to create proof request: ${(err as Error).message}`);
       }
     }
-  }, [getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout]);
+  }, [authenticated, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout]);
 
   /* ── Country request ── */
   const requestCountryProof = useCallback(async () => {
@@ -494,7 +494,7 @@ export default function LandingPage() {
         alert(`Failed to create proof request: ${(err as Error).message}`);
       }
     }
-  }, [countryList, isIncluded, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout]);
+  }, [authenticated, countryList, isIncluded, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout]);
 
   /* ── Copy proof ── */
   const handleCopyProof = useCallback((prefix: 'kyc' | 'country') => {

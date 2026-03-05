@@ -3,15 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { createSDK } from '@/lib/sdk';
 import type { ProofportSDK as ProofportSDKType } from '@zkproofport-app/sdk';
-
-type AuthToken = {
-  token: string;
-  clientId: string;
-  dappId: string;
-  tier: string;
-  expiresIn: number;
-  expiresAt: number;
-};
+import { ethers } from 'ethers';
 
 type RelayRequest = {
   requestId: string;
@@ -24,15 +16,13 @@ type RelayRequest = {
 export default function DemoPage() {
   const sdkRef = useRef<ProofportSDKType | null>(null);
   const [activeTab, setActiveTab] = useState<'kyc' | 'country'>('kyc');
-  const [authToken, setAuthToken] = useState<AuthToken | null>(null);
-  const credentialsRef = useRef<{ clientId: string; apiKey: string } | null>(null);
+  const [signerReady, setSignerReady] = useState(false);
+  const [walletAddress, setWalletAddress] = useState('');
   const [authStatus, setAuthStatus] = useState('');
   const [authStatusColor, setAuthStatusColor] = useState('#666');
-  const [authenticating, setAuthenticating] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   // Form fields
-  const [clientId, setClientId] = useState('');
-  const [apiKey, setApiKey] = useState('');
   const [kycDappName, setKycDappName] = useState('');
   const [kycMessage, setKycMessage] = useState('');
   const [countryList, setCountryList] = useState('US,KR,JP');
@@ -62,59 +52,34 @@ export default function DemoPage() {
     return sdkRef.current;
   }, []);
 
-  const handleAuthenticate = async () => {
-    if (!clientId || !apiKey) {
-      setAuthStatus('Both fields required');
-      setAuthStatusColor('#ef4444');
-      return;
-    }
-
+  const handleGenerateWallet = async () => {
     try {
-      setAuthenticating(true);
-      setAuthStatus('Authenticating...');
+      setGenerating(true);
+      setAuthStatus('Generating wallet...');
       setAuthStatusColor('#f59e0b');
 
+      const wallet = ethers.Wallet.createRandom();
       const sdk = getSDK();
-      credentialsRef.current = { clientId, apiKey };
-      const token = await sdk.login({ clientId, apiKey });
-      setAuthToken(token as AuthToken);
-      setAuthStatus('Authenticated');
+      sdk.setSigner(wallet);
+      setWalletAddress(wallet.address);
+      setSignerReady(true);
+      setAuthStatus('Demo wallet ready');
       setAuthStatusColor('#22c55e');
-      console.log('Authenticated:', token);
+      console.log('Demo wallet generated:', wallet.address);
     } catch (err) {
-      setAuthStatus('Auth failed: ' + (err as Error).message);
+      setAuthStatus('Failed: ' + (err as Error).message);
       setAuthStatusColor('#ef4444');
-      console.error('Authentication failed:', err);
+      console.error('Wallet generation failed:', err);
     } finally {
-      setAuthenticating(false);
+      setGenerating(false);
     }
   };
 
-  const handleClearAuth = () => {
-    setAuthToken(null);
-    setClientId('');
-    setApiKey('');
+  const handleDisconnect = () => {
+    setSignerReady(false);
+    setWalletAddress('');
     setAuthStatus('');
-    credentialsRef.current = null;
-    const sdk = sdkRef.current;
-    if (sdk) sdk.logout();
-  };
-
-  const ensureAuth = async (): Promise<boolean> => {
-    const creds = credentialsRef.current;
-    if (!creds) return false;
-    try {
-      const sdk = getSDK();
-      const token = await sdk.login(creds);
-      setAuthToken(token as AuthToken);
-      setAuthStatus('Authenticated');
-      setAuthStatusColor('#22c55e');
-      console.log('[Re-auth] Success');
-      return true;
-    } catch (err) {
-      console.error('[Re-auth] Failed:', err);
-      return false;
-    }
+    sdkRef.current = null;
   };
 
   const displayResult = async (relayRequest: RelayRequest) => {
@@ -170,9 +135,10 @@ export default function DemoPage() {
 
   const handleKycSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!authToken) {
-      const reauthed = await ensureAuth();
-      if (!reauthed) return;
+    if (!signerReady) {
+      setAuthStatus('Generate a demo wallet first');
+      setAuthStatusColor('#ef4444');
+      return;
     }
 
     try {
@@ -186,18 +152,15 @@ export default function DemoPage() {
       await displayResult(relay);
       await waitForProof(relay.requestId);
     } catch (err) {
-      if ((err as Error).message.includes('Not authenticated')) {
-        console.error('Authentication failed:', err);
-      } else {
-        console.error('KYC request failed:', err);
-      }
+      console.error('KYC request failed:', err);
     }
   };
 
   const handleKycOpen = async () => {
-    if (!authToken) {
-      const reauthed = await ensureAuth();
-      if (!reauthed) return;
+    if (!signerReady) {
+      setAuthStatus('Generate a demo wallet first');
+      setAuthStatusColor('#ef4444');
+      return;
     }
     try {
       if (!currentRelayRef.current) {
@@ -209,19 +172,16 @@ export default function DemoPage() {
       }
       window.location.href = currentRelayRef.current.deepLink;
     } catch (err) {
-      if ((err as Error).message.includes('Not authenticated')) {
-        console.error('Authentication failed:', err);
-      } else {
-        console.error('KYC open failed:', err);
-      }
+      console.error('KYC open failed:', err);
     }
   };
 
   const handleCountrySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!authToken) {
-      const reauthed = await ensureAuth();
-      if (!reauthed) return;
+    if (!signerReady) {
+      setAuthStatus('Generate a demo wallet first');
+      setAuthStatusColor('#ef4444');
+      return;
     }
 
     try {
@@ -239,18 +199,15 @@ export default function DemoPage() {
       await displayResult(relay);
       await waitForProof(relay.requestId);
     } catch (err) {
-      if ((err as Error).message.includes('Not authenticated')) {
-        console.error('Authentication failed:', err);
-      } else {
-        console.error('Country request failed:', err);
-      }
+      console.error('Country request failed:', err);
     }
   };
 
   const handleCountryOpen = async () => {
-    if (!authToken) {
-      const reauthed = await ensureAuth();
-      if (!reauthed) return;
+    if (!signerReady) {
+      setAuthStatus('Generate a demo wallet first');
+      setAuthStatusColor('#ef4444');
+      return;
     }
     try {
       if (!currentRelayRef.current) {
@@ -265,16 +222,9 @@ export default function DemoPage() {
       }
       window.location.href = currentRelayRef.current.deepLink;
     } catch (err) {
-      if ((err as Error).message.includes('Not authenticated')) {
-        console.error('Authentication failed:', err);
-      } else {
-        console.error('Country open failed:', err);
-      }
+      console.error('Country open failed:', err);
     }
   };
-
-  const dashboardUrl = process.env.DASHBOARD_URL || 'http://localhost:3000';
-  const isAuthed = !!authToken;
 
   return (
     <div style={{ background: '#f5f5f5', padding: 20, minHeight: '100vh' }}>
@@ -285,53 +235,39 @@ export default function DemoPage() {
         {/* Auth Card */}
         <div style={{ background: 'white', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', padding: 30, marginBottom: 20 }}>
           <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 16 }}>API Key Authentication (Required)</span>
-            {isAuthed && (
+            <span style={{ fontSize: 16 }}>Demo Wallet</span>
+            {signerReady && (
               <span style={{ background: 'rgba(34, 197, 94, 0.2)', color: '#22c55e', padding: '2px 8px', borderRadius: 4, fontSize: 12, fontWeight: 600 }}>
-                Authenticated
+                Connected
               </span>
             )}
           </div>
           <p style={{ color: '#666', fontSize: 13, marginBottom: 16 }}>
-            Enter your API credentials to authenticate. Get these from the{' '}
-            <a href={`${dashboardUrl}/dashboard/dapps`} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Dashboard</a>.
+            Generate an ephemeral demo wallet to sign relay requests. No real assets are used.
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: 8, color: '#333', fontWeight: 500 }}>Client ID</label>
-              <input
-                type="text"
-                value={clientId}
-                onChange={e => setClientId(e.target.value)}
-                placeholder="Your client_id from dashboard"
-                style={{ width: '100%', padding: 12, border: '1px solid #ddd', borderRadius: 6, fontSize: 14 }}
-              />
+          {signerReady && walletAddress && (
+            <div style={{ marginBottom: 12, padding: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6 }}>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>Wallet Address</div>
+              <div style={{ fontFamily: 'monospace', fontSize: 13, color: '#1e293b', wordBreak: 'break-all' }}>
+                {walletAddress}
+              </div>
             </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: 8, color: '#333', fontWeight: 500 }}>API Key</label>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={e => setApiKey(e.target.value)}
-                placeholder="Your api_key (shown once)"
-                style={{ width: '100%', padding: 12, border: '1px solid #ddd', borderRadius: 6, fontSize: 14 }}
-              />
-            </div>
-          </div>
+          )}
           <div style={{ marginBottom: 24, display: 'flex', gap: 12, alignItems: 'center' }}>
-            <button
-              onClick={handleAuthenticate}
-              disabled={authenticating}
-              style={{ padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: 'pointer', background: '#f3f4f6', color: '#374151' }}
-            >
-              Authenticate
-            </button>
-            {isAuthed && (
+            {!signerReady ? (
               <button
-                onClick={handleClearAuth}
+                onClick={handleGenerateWallet}
+                disabled={generating}
+                style={{ padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: 'pointer', background: '#2563eb', color: 'white' }}
+              >
+                {generating ? 'Generating...' : 'Generate Demo Wallet'}
+              </button>
+            ) : (
+              <button
+                onClick={handleDisconnect}
                 style={{ padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: 'pointer', background: '#f3f4f6', color: '#374151' }}
               >
-                Clear Auth
+                Disconnect
               </button>
             )}
             <span style={{ fontSize: 13, color: authStatusColor }}>{authStatus}</span>
@@ -372,12 +308,12 @@ export default function DemoPage() {
                   style={{ width: '100%', padding: 12, border: '1px solid #ddd', borderRadius: 6, fontSize: 14 }} />
               </div>
               <div style={{ display: 'flex', gap: 10, marginTop: 30 }}>
-                <button type="submit" disabled={!isAuthed}
-                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: isAuthed ? 'pointer' : 'not-allowed', background: '#2563eb', color: 'white', opacity: isAuthed ? 1 : 0.5 }}>
+                <button type="submit" disabled={!signerReady}
+                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: signerReady ? 'pointer' : 'not-allowed', background: '#2563eb', color: 'white', opacity: signerReady ? 1 : 0.5 }}>
                   Generate QR Code
                 </button>
-                <button type="button" onClick={handleKycOpen} disabled={!isAuthed}
-                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: isAuthed ? 'pointer' : 'not-allowed', background: '#f3f4f6', color: '#374151', opacity: isAuthed ? 1 : 0.5 }}>
+                <button type="button" onClick={handleKycOpen} disabled={!signerReady}
+                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: signerReady ? 'pointer' : 'not-allowed', background: '#f3f4f6', color: '#374151', opacity: signerReady ? 1 : 0.5 }}>
                   Open in ZKProofport
                 </button>
               </div>
@@ -425,12 +361,12 @@ export default function DemoPage() {
                   style={{ width: '100%', padding: 12, border: '1px solid #ddd', borderRadius: 6, fontSize: 14 }} />
               </div>
               <div style={{ display: 'flex', gap: 10, marginTop: 30 }}>
-                <button type="submit" disabled={!isAuthed}
-                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: isAuthed ? 'pointer' : 'not-allowed', background: '#2563eb', color: 'white', opacity: isAuthed ? 1 : 0.5 }}>
+                <button type="submit" disabled={!signerReady}
+                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: signerReady ? 'pointer' : 'not-allowed', background: '#2563eb', color: 'white', opacity: signerReady ? 1 : 0.5 }}>
                   Generate QR Code
                 </button>
-                <button type="button" onClick={handleCountryOpen} disabled={!isAuthed}
-                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: isAuthed ? 'pointer' : 'not-allowed', background: '#f3f4f6', color: '#374151', opacity: isAuthed ? 1 : 0.5 }}>
+                <button type="button" onClick={handleCountryOpen} disabled={!signerReady}
+                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: signerReady ? 'pointer' : 'not-allowed', background: '#f3f4f6', color: '#374151', opacity: signerReady ? 1 : 0.5 }}>
                   Open in ZKProofport
                 </button>
               </div>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createSDK } from '@/lib/sdk';
-import type { ProofportSDK as ProofportSDKType, AuthToken, RelayProofResult } from '@zkproofport-app/sdk';
+import type { ProofportSDK as ProofportSDKType, RelayProofResult } from '@zkproofport-app/sdk';
 import { ethers } from 'ethers';
 
 // ========== TYPES ==========
@@ -168,14 +168,8 @@ export default function ZKPSwapPage() {
   const [swapLoading, setSwapLoading] = useState(false);
 
   // Auth state
-  const [jwtToken, setJwtToken] = useState('');
-  const [authClientId, setAuthClientId] = useState('');
-  const [manualAuthVisible, setManualAuthVisible] = useState(false);
-  const [authInputClientId, setAuthInputClientId] = useState('');
-  const [authInputApiKey, setAuthInputApiKey] = useState('');
+  const [signerReady, setSignerReady] = useState(false);
   const [authStatus, setAuthStatus] = useState('');
-  const [authBtnDisabled, setAuthBtnDisabled] = useState(false);
-  const [loggedIn, setLoggedIn] = useState(false);
 
   // Dev panel
   const [devPanelOpen, setDevPanelOpen] = useState(false);
@@ -187,13 +181,10 @@ export default function ZKPSwapPage() {
   // Current request state
   const currentRequestIdRef = useRef<string | null>(null);
   const currentDeepLinkRef = useRef<string | null>(null);
-  const jwtTokenRef = useRef('');
-  const credentialsRef = useRef<{ clientId: string; apiKey: string } | null>(null);
   const devLogsRef = useRef<LogEntry[]>([]);
   const devLogsPanelRef = useRef<HTMLDivElement | null>(null);
 
   // Keep refs in sync
-  useEffect(() => { jwtTokenRef.current = jwtToken; }, [jwtToken]);
   useEffect(() => { devLogsRef.current = devLogs; }, [devLogs]);
 
   // ========== SDK INIT ==========
@@ -243,26 +234,17 @@ export default function ZKPSwapPage() {
     sessionStorage.removeItem('tokenDefaultBalances');
   }, []);
 
-  // Auto-login with demo credentials
+  // Auto-generate demo wallet on mount
   useEffect(() => {
-    const clientId = process.env.DEMO_CLIENT_ID || '';
-    const apiKey = process.env.DEMO_API_KEY || '';
-
-    if (clientId && apiKey && !clientId.startsWith('__')) {
-      credentialsRef.current = { clientId, apiKey };
+    try {
+      const wallet = ethers.Wallet.createRandom();
       const sdk = getSDK();
-      sdk.login({ clientId, apiKey }).then((auth: AuthToken) => {
-        setJwtToken(auth.token);
-        setAuthClientId(auth.clientId);
-        setLoggedIn(true);
-        console.log(`[Auto-login] ${auth.clientId} (${auth.tier})`);
-      }).catch((err: Error) => {
-        console.error(`[Auto-login] Failed: ${err.message}`);
-        setAuthStatus(`Auto-login failed: ${err.message}`);
-        setManualAuthVisible(true);
-      });
-    } else {
-      setManualAuthVisible(true);
+      sdk.setSigner(wallet);
+      setSignerReady(true);
+      console.log(`[Auto-wallet] Demo wallet: ${wallet.address}`);
+    } catch (err) {
+      console.error(`[Auto-wallet] Failed: ${(err as Error).message}`);
+      setAuthStatus(`Wallet generation failed: ${(err as Error).message}`);
     }
   }, [getSDK]);
 
@@ -396,59 +378,19 @@ export default function ZKPSwapPage() {
     devLog('UI', 'KYC verification reset');
   }, [devLog]);
 
-  const authenticateWithApiKey = useCallback(async () => {
-    if (!authInputClientId || !authInputApiKey) {
-      setAuthStatus('Both fields required');
-      return;
-    }
+  const generateDemoWallet = useCallback(() => {
     try {
-      setAuthBtnDisabled(true);
-      setAuthStatus('Authenticating...');
-      credentialsRef.current = { clientId: authInputClientId, apiKey: authInputApiKey };
+      const wallet = ethers.Wallet.createRandom();
       const sdk = getSDK();
-      const auth = await sdk.login({ clientId: authInputClientId, apiKey: authInputApiKey });
-      setJwtToken(auth.token);
-      setAuthClientId(auth.clientId);
-      setLoggedIn(true);
+      sdk.setSigner(wallet);
+      setSignerReady(true);
       setAuthStatus('');
-      devLog('AUTH', `Authenticated as ${auth.clientId} (tier=${auth.tier})`);
+      devLog('AUTH', `Demo wallet generated: ${wallet.address}`);
     } catch (err) {
       setAuthStatus((err as Error).message);
-      devLog('AUTH', `Failed: ${(err as Error).message}`);
-    } finally {
-      setAuthBtnDisabled(false);
+      devLog('AUTH', `Wallet generation failed: ${(err as Error).message}`);
     }
-  }, [authInputClientId, authInputApiKey, getSDK, devLog]);
-
-  const clearAuth = useCallback(() => {
-    setJwtToken('');
-    setAuthClientId('');
-    setLoggedIn(false);
-    setAuthInputClientId('');
-    setAuthInputApiKey('');
-    setAuthStatus('');
-    credentialsRef.current = null;
-    const sdk = sdkRef.current;
-    if (sdk) sdk.logout();
-    devLog('AUTH', 'Logged out');
-  }, [devLog]);
-
-  const ensureAuth = useCallback(async (): Promise<boolean> => {
-    const creds = credentialsRef.current;
-    if (!creds) return false;
-    try {
-      const sdk = getSDK();
-      const auth = await sdk.login(creds) as AuthToken;
-      setJwtToken(auth.token);
-      setAuthClientId(auth.clientId);
-      setLoggedIn(true);
-      console.log(`[Re-auth] ${auth.clientId} (${auth.tier})`);
-      return true;
-    } catch (err) {
-      console.error('[Re-auth] Failed:', err);
-      return false;
-    }
-  }, [getSDK]);
+  }, [getSDK, devLog]);
 
   const executeSwap = useCallback(async (withKyc: boolean) => {
     setSwapLoading(true);
@@ -525,13 +467,8 @@ export default function ZKPSwapPage() {
     setKycStatusText('');
     setKycShieldAnimating(true);
 
-    if (!jwtTokenRef.current) {
-      if (await ensureAuth()) {
-        devLog('SDK', 'Re-authenticated, retrying...');
-      } else {
-        setManualAuthVisible(true);
-        return;
-      }
+    if (!signerReady) {
+      generateDemoWallet();
     }
 
     devLog('SDK', 'Requesting proof via relay...');
@@ -583,16 +520,11 @@ export default function ZKPSwapPage() {
         setKycShieldAnimating(false);
       }
     } catch (err) {
-      if ((err as Error).message.includes('Not authenticated')) {
-        console.error('Authentication failed during relay request');
-        setManualAuthVisible(true);
-      } else {
-        devLog('SDK', `Relay connection failed: ${(err as Error).message}`);
-        console.error('Failed to connect to relay:', (err as Error).message);
-        setKycShieldAnimating(false);
-      }
+      devLog('SDK', `Relay connection failed: ${(err as Error).message}`);
+      console.error('Failed to connect to relay:', (err as Error).message);
+      setKycShieldAnimating(false);
     }
-  }, [tokens, fromToken, toToken, fromAmount, getSDK, devLog, ensureAuth]);
+  }, [tokens, fromToken, toToken, fromAmount, signerReady, getSDK, devLog, generateDemoWallet]);
 
   const handleProofResult = useCallback(async (data: RelayProofResult) => {
     setLastProofData(data as unknown as Record<string, unknown>);
@@ -831,30 +763,15 @@ export default function ZKPSwapPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* Manual auth form */}
-          {manualAuthVisible && (
-            <span style={{ display: loggedIn ? 'none' : 'flex', alignItems: 'center', gap: '4px' }}>
-              <input
-                type="text" placeholder="Client ID" value={authInputClientId}
-                onChange={e => setAuthInputClientId(e.target.value)}
-                style={{ width: '100px', padding: '3px 8px', fontSize: '11px', background: V.bgInput, border: `1px solid ${V.border}`, borderRadius: '4px', color: V.textPrimary, outline: 'none' }}
-              />
-              <input
-                type="password" placeholder="API Key" value={authInputApiKey}
-                onChange={e => setAuthInputApiKey(e.target.value)}
-                style={{ width: '100px', padding: '3px 8px', fontSize: '11px', background: V.bgInput, border: `1px solid ${V.border}`, borderRadius: '4px', color: V.textPrimary, outline: 'none' }}
-              />
-              <button
-                onClick={authenticateWithApiKey} disabled={authBtnDisabled}
-                style={{ padding: '3px 10px', fontSize: '11px', background: V.accent, color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-              >Login</button>
+          {/* Wallet status */}
+          {signerReady && (
+            <span style={{
+              fontSize: '11px', padding: '3px 8px', borderRadius: '4px',
+              fontWeight: 600, fontFamily: V.fontMono,
+              background: 'rgba(34,197,94,0.15)', color: V.success,
+            }}>
+              Wallet Ready
             </span>
-          )}
-          {loggedIn && (
-            <button
-              onClick={clearAuth}
-              style={{ padding: '3px 10px', fontSize: '11px', background: V.bgInput, color: V.textSecondary, border: `1px solid ${V.border}`, borderRadius: '4px', cursor: 'pointer' }}
-            >Logout</button>
           )}
           {authStatus && (
             <span style={{ fontSize: '11px', color: V.error }}>{authStatus}</span>

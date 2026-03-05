@@ -2,8 +2,8 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createSDK, detectSDKEnv } from '@/lib/sdk';
-import { ProofportSDK } from '@zkproofport-app/sdk';
-import type { ProofportSDK as ProofportSDKType, AuthToken, RelayProofResult } from '@zkproofport-app/sdk';
+import type { ProofportSDK as ProofportSDKType, RelayProofResult } from '@zkproofport-app/sdk';
+import { ethers } from 'ethers';
 
 // ---------------------------------------------------------------------------
 // Design tokens (matching the HTML CSS variables exactly)
@@ -229,7 +229,7 @@ const styles = {
 };
 
 // Badge style helper
-function badgeStyle(tier: string): React.CSSProperties {
+function badgeStyle(variant: string): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: '6px 12px',
     borderRadius: 8,
@@ -238,11 +238,9 @@ function badgeStyle(tier: string): React.CSSProperties {
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   };
-  switch (tier) {
-    case 'free':
-      return { ...base, background: 'rgba(100,116,139,0.2)', color: T.gray400 };
-    case 'credit':
-      return { ...base, background: 'rgba(234,179,8,0.2)', color: T.yellow };
+  switch (variant) {
+    case 'connected':
+      return { ...base, background: 'rgba(34,197,94,0.2)', color: T.green };
     case 'plan1':
       return { ...base, background: 'rgba(37,99,235,0.2)', color: T.blue };
     case 'plan2':
@@ -357,17 +355,11 @@ export default function RelayDemoPage() {
   const sdkEnvRef = useRef<string>('local');
 
   // Auth state
-  const [authToken, setAuthToken] = useState<AuthToken | null>(null);
-  const [jwtToken, setJwtToken] = useState('');
-  const [tier, setTier] = useState('');
-  const [clientIdInput, setClientIdInput] = useState('');
-  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [signerReady, setSignerReady] = useState(false);
+  const [walletAddress, setWalletAddress] = useState('');
   const [authStatus, setAuthStatus] = useState('');
   const [authStatusColor, setAuthStatusColor] = useState<string>(T.gray400);
-  const [authenticating, setAuthenticating] = useState(false);
-  const [showAuthBadge, setShowAuthBadge] = useState(false);
-  const [showClearAuth, setShowClearAuth] = useState(false);
-  const [showTokenInfo, setShowTokenInfo] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   // Demo init
   const [demoIniting, setDemoIniting] = useState(false);
@@ -380,7 +372,6 @@ export default function RelayDemoPage() {
   const [countryListInput, setCountryListInput] = useState('');
   const [isIncluded, setIsIncluded] = useState('true');
   const [proofBtnDisabled, setProofBtnDisabled] = useState(true);
-  const [showScopeNote, setShowScopeNote] = useState(false);
 
   // Proof request result
   const [showProofRequestResult, setShowProofRequestResult] = useState(false);
@@ -394,7 +385,6 @@ export default function RelayDemoPage() {
   // Proof result
   const [showProofResult, setShowProofResult] = useState(false);
   const [proofData, setProofData] = useState<ProofData | null>(null);
-  const [showCreditAlert, setShowCreditAlert] = useState(false);
 
   // Nullifier
   const [showNullifierSection, setShowNullifierSection] = useState(false);
@@ -411,9 +401,6 @@ export default function RelayDemoPage() {
 
   // Refs for current proof state (avoid stale closures)
   const currentProofRef = useRef<ProofData | null>(null);
-  const jwtTokenRef = useRef('');
-  const authTokenRef = useRef<AuthToken | null>(null);
-  const tierRef = useRef('');
 
   // Env vars
   const dashboardUrl = process.env.NEXT_PUBLIC_DASHBOARD_URL || process.env.DASHBOARD_URL || 'http://localhost:3000';
@@ -484,75 +471,43 @@ export default function RelayDemoPage() {
   // ---------------------------------------------------------------------------
   // Auth
   // ---------------------------------------------------------------------------
-  const handleAuthenticate = useCallback(async () => {
-    if (!clientIdInput.trim() || !apiKeyInput.trim()) {
-      setAuthStatus('Both Client ID and API Key are required');
-      setAuthStatusColor(T.red);
-      return;
-    }
-
+  const handleGenerateWallet = useCallback(async () => {
     try {
-      setAuthenticating(true);
-      setAuthStatus('Authenticating...');
+      setGenerating(true);
+      setAuthStatus('Generating wallet...');
       setAuthStatusColor(T.gray400);
 
+      const wallet = ethers.Wallet.createRandom();
       const sdk = getSDK();
-      const sdkEnv = sdkEnvRef.current;
+      sdk.setSigner(wallet);
 
-      console.log('[Auth] Authenticating via SDK:', sdkEnv, 'clientId:', clientIdInput.trim());
-      logEvent('AUTH', `Authenticating clientId=${clientIdInput.trim()} via SDK (env=${sdkEnv})`);
-      logApi('POST', '/api/v1/auth/token', { client_id: clientIdInput.trim(), api_key: '***' });
-
-      const auth = await sdk.login({ clientId: clientIdInput.trim(), apiKey: apiKeyInput.trim() });
-
-      console.log('[Auth] Authentication successful:', JSON.stringify(auth));
-
-      const authObj = auth as AuthToken;
-      setJwtToken(authObj.token);
-      jwtTokenRef.current = authObj.token;
-      setAuthToken(authObj);
-      authTokenRef.current = authObj;
-      setTier(authObj.tier);
-      tierRef.current = authObj.tier;
-
-      setShowAuthBadge(true);
-      setAuthStatus('Authenticated successfully');
-      setAuthStatusColor(T.green);
-      setShowTokenInfo(true);
-      setShowClearAuth(true);
+      setWalletAddress(wallet.address);
+      setSignerReady(true);
       setProofBtnDisabled(false);
-      setShowScopeNote(authObj.tier === 'free');
+      setAuthStatus('Demo wallet ready');
+      setAuthStatusColor(T.green);
 
-      logEvent('AUTH_SUCCESS', `Authenticated as ${authObj.clientId} (tier=${authObj.tier}, dapp=${authObj.dappId})`);
-      logApi('RESPONSE', '/api/auth/token', { token: authObj.token, client_id: authObj.clientId, dapp_id: authObj.dappId, tier: authObj.tier, expires_in: authObj.expiresIn }, 200);
+      console.log('[Auth] Demo wallet generated:', wallet.address);
+      logEvent('WALLET', `Demo wallet generated: ${wallet.address}`);
     } catch (err) {
       const msg = (err as Error).message;
-      console.error('[Auth] Authentication failed:', msg);
-      setAuthStatus(`Auth failed: ${msg}`);
+      console.error('[Auth] Wallet generation failed:', msg);
+      setAuthStatus(`Failed: ${msg}`);
       setAuthStatusColor(T.red);
-      logEvent('AUTH_FAILED', msg);
-      logApi('ERROR', '/api/auth/token', { error: msg }, 401);
+      logEvent('WALLET_FAILED', msg);
     } finally {
-      setAuthenticating(false);
+      setGenerating(false);
     }
-  }, [clientIdInput, apiKeyInput, getSDK, logApi, logEvent]);
+  }, [getSDK, logEvent]);
 
-  const handleClearAuth = useCallback(() => {
-    setJwtToken('');
-    jwtTokenRef.current = '';
-    setAuthToken(null);
-    authTokenRef.current = null;
-    setTier('');
-    tierRef.current = '';
-    setShowAuthBadge(false);
-    setShowTokenInfo(false);
+  const handleDisconnect = useCallback(() => {
+    setSignerReady(false);
+    setWalletAddress('');
     setAuthStatus('');
-    setShowClearAuth(false);
-    setClientIdInput('');
-    setApiKeyInput('');
     setProofBtnDisabled(true);
+    sdkRef.current = null;
 
-    logEvent('AUTH_CLEARED', 'JWT auth cleared, re-authenticate to make requests');
+    logEvent('WALLET_CLEARED', 'Demo wallet disconnected');
   }, [logEvent]);
 
   // ---------------------------------------------------------------------------
@@ -595,10 +550,6 @@ export default function RelayDemoPage() {
 
     setShowProofResult(true);
     setShowNullifierSection(true);
-
-    if (tierRef.current === 'credit') {
-      setShowCreditAlert(true);
-    }
 
     if (data.onChainStatus) {
       showOnChainInfo({
@@ -648,16 +599,9 @@ export default function RelayDemoPage() {
   }, [getSDK, logApi, logEvent, showProofResultFn]);
 
   const handleRequestProof = useCallback(async () => {
-    if (!jwtTokenRef.current) {
-      logEvent('ERROR', 'Not authenticated. Please enter Client ID and API Key first.');
-      alert('Please authenticate first (enter Client ID and API Key above)');
-      return;
-    }
-
-    if (authTokenRef.current && !ProofportSDK.isTokenValid(authTokenRef.current)) {
-      logEvent('TOKEN_EXPIRED', 'JWT token expired, clearing auth');
-      handleClearAuth();
-      alert('Your authentication token has expired. Please re-authenticate.');
+    if (!signerReady) {
+      logEvent('ERROR', 'No wallet connected. Generate a demo wallet first.');
+      alert('Please generate a demo wallet first');
       return;
     }
 
@@ -745,7 +689,7 @@ export default function RelayDemoPage() {
       console.error('[requestProof] FAILED:', err);
       alert('Proof request failed: ' + (err as Error).message);
     }
-  }, [circuit, scope, countryListInput, isIncluded, getSDK, handleClearAuth, logApi, logEvent, startPolling]);
+  }, [circuit, scope, countryListInput, isIncluded, signerReady, getSDK, logApi, logEvent, startPolling]);
 
   // ---------------------------------------------------------------------------
   // Nullifier management
@@ -874,8 +818,8 @@ export default function RelayDemoPage() {
                 ZKProofport
               </a>
 
-              {showAuthBadge && (
-                <span style={{ ...badgeStyle('plan1') }}>Authenticated</span>
+              {signerReady && (
+                <span style={{ ...badgeStyle('connected') }}>Connected</span>
               )}
 
               <nav style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -949,78 +893,47 @@ export default function RelayDemoPage() {
                 )}
               </div>
 
-              {/* Tier badge */}
-              <div style={{ marginTop: 16 }}>
-                <label style={styles.label}>
-                  Current Tier <span style={badgeStyle(tier || 'free')}>{tier || 'free'}</span>
-                </label>
-              </div>
-
-              {/* Auth section */}
+              {/* Wallet section */}
               <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                  <div style={{ fontSize: 16, fontWeight: 600 }}>API Key Authentication (Required)</div>
-                  {showAuthBadge && <span style={badgeStyle('plan1')}>Authenticated</span>}
+                  <div style={{ fontSize: 16, fontWeight: 600 }}>Demo Wallet</div>
+                  {signerReady && <span style={badgeStyle('connected')}>Connected</span>}
                 </div>
                 <p style={{ color: T.gray400, fontSize: 13, marginBottom: 16 }}>
-                  Enter your API credentials to authenticate via JWT token. Authentication is required to use the relay.
+                  Generate an ephemeral demo wallet to sign relay requests. No real assets are used.
                 </p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div>
-                    <label style={styles.label}>Client ID</label>
-                    <input
-                      type="text"
-                      value={clientIdInput}
-                      onChange={e => setClientIdInput(e.target.value)}
-                      placeholder="Your client_id from dashboard"
-                      style={styles.input}
-                    />
+
+                {signerReady && walletAddress && (
+                  <div style={{
+                    marginBottom: 12, padding: 12,
+                    background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 8,
+                  }}>
+                    <div style={{ fontSize: 11, color: T.gray400, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Wallet Address</div>
+                    <div style={{ fontFamily: MONO_FONT, fontSize: 11, color: T.green, wordBreak: 'break-all', marginTop: 4 }}>
+                      {walletAddress}
+                    </div>
                   </div>
-                  <div>
-                    <label style={styles.label}>API Key</label>
-                    <input
-                      type="password"
-                      value={apiKeyInput}
-                      onChange={e => setApiKeyInput(e.target.value)}
-                      placeholder="Your api_key (shown once at creation)"
-                      style={styles.input}
-                    />
-                  </div>
-                </div>
-                <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <button
-                    style={{ ...styles.btnSecondary, ...styles.btnSmall, ...(authenticating ? styles.btnDisabled : {}) }}
-                    disabled={authenticating}
-                    onClick={handleAuthenticate}
-                  >
-                    {authenticating ? <><Spinner /> Authenticating...</> : 'Authenticate'}
-                  </button>
-                  {showClearAuth && (
+                )}
+
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  {!signerReady ? (
+                    <button
+                      style={{ ...styles.btnPrimary, ...styles.btnSmall, ...(generating ? styles.btnDisabled : {}) }}
+                      disabled={generating}
+                      onClick={handleGenerateWallet}
+                    >
+                      {generating ? <><Spinner /> Generating...</> : 'Generate Demo Wallet'}
+                    </button>
+                  ) : (
                     <button
                       style={{ ...styles.btnSecondary, ...styles.btnSmall }}
-                      onClick={handleClearAuth}
+                      onClick={handleDisconnect}
                     >
-                      Clear Auth
+                      Disconnect
                     </button>
                   )}
                   <span style={{ fontSize: 13, color: authStatusColor }}>{authStatus}</span>
                 </div>
-
-                {/* JWT token info */}
-                {showTokenInfo && authToken && (
-                  <div style={{
-                    marginTop: 12, padding: 12,
-                    background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 8,
-                  }}>
-                    <div style={{ fontSize: 11, color: T.gray400, textTransform: 'uppercase', letterSpacing: '0.05em' }}>JWT Token</div>
-                    <div style={{ fontFamily: 'monospace', fontSize: 11, color: T.green, wordBreak: 'break-all', marginTop: 4 }}>
-                      {authToken.token}
-                    </div>
-                    <div style={{ fontSize: 12, color: T.gray400, marginTop: 8 }}>
-                      Tier: <span>{authToken.tier}</span> | Expires: <span>{new Date(authToken.expiresAt).toLocaleTimeString()}</span> | dApp: <span>{authToken.dappId}</span>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -1060,9 +973,6 @@ export default function RelayDemoPage() {
                   placeholder="proofport:demo:relay"
                   style={styles.input}
                 />
-                {showScopeNote && (
-                  <p style={styles.note}>Note: Free tier will replace scope with noop</p>
-                )}
               </div>
 
               {/* Country inputs (conditional) */}
@@ -1198,16 +1108,6 @@ export default function RelayDemoPage() {
                   </div>
                 </div>
 
-                {/* Credit alert */}
-                {showCreditAlert && (
-                  <div style={{
-                    padding: '12px 16px', borderRadius: 8, marginTop: 12,
-                    fontSize: 13, fontWeight: 500,
-                    background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.3)', color: T.cyan,
-                  }}>
-                    1 credit deducted
-                  </div>
-                )}
               </div>
             </div>
           </section>

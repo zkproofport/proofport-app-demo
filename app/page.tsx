@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createSDK } from '@/lib/sdk';
-import type { ProofportSDK as ProofportSDKType, AuthToken, RelayProofResult, ProofResponse } from '@zkproofport-app/sdk';
+import type { ProofportSDK as ProofportSDKType, RelayProofResult, ProofResponse } from '@zkproofport-app/sdk';
+import { ethers } from 'ethers';
 
 /* ─── Color tokens (matching portal-web design system) ─── */
 const C = {
@@ -139,13 +140,8 @@ export default function LandingPage() {
   /* ── Auth state ── */
   const [authStatus, setAuthStatus] = useState('');
   const [authStatusColor, setAuthStatusColor] = useState('');
-  const [showManualAuth, setShowManualAuth] = useState(false);
-  const [authClientId, setAuthClientId] = useState('');
-  const [authApiKey, setAuthApiKey] = useState('');
-  const [authenticating, setAuthenticating] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
-  const [planBadge, setPlanBadge] = useState<{ tier: string; visible: boolean }>({ tier: '', visible: false });
-  const credentialsRef = useRef<{ clientId: string; apiKey: string } | null>(null);
+  const [signerReady, setSignerReady] = useState(false);
+  const [walletAddress, setWalletAddress] = useState('');
 
   /* ── Country form ── */
   const [countryList, setCountryList] = useState('US,KR,JP');
@@ -239,88 +235,44 @@ export default function LandingPage() {
   /* ── Hover states for buttons ── */
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
 
-  /* ── Auto-login on mount ── */
+  /* ── Auto-generate demo wallet on mount ── */
   useEffect(() => {
-    const demoClientId = process.env.DEMO_CLIENT_ID || '';
-    const demoApiKey = process.env.DEMO_API_KEY || '';
-    const hasAutoCreds = demoClientId && demoApiKey && !demoClientId.startsWith('__');
-
-    if (hasAutoCreds) {
+    try {
+      const wallet = ethers.Wallet.createRandom();
       const sdk = getSDK();
-      credentialsRef.current = { clientId: demoClientId, apiKey: demoApiKey };
-      sdk.login({ clientId: demoClientId, apiKey: demoApiKey })
-        .then((auth: AuthToken) => {
-          console.log(`[Auto-login] ${auth.clientId} (${auth.tier})`);
-          setAuthStatus('');
-          setAuthenticated(true);
-          setPlanBadge({ tier: auth.tier, visible: true });
-        })
-        .catch((err: Error) => {
-          console.error(`[Auto-login] Failed: ${err.message}`);
-          setAuthStatus(`Auto-login failed: ${err.message}`);
-          setAuthStatusColor('#ef4444');
-          setShowManualAuth(true);
-        });
-    } else {
-      setShowManualAuth(true);
+      sdk.setSigner(wallet);
+      setWalletAddress(wallet.address);
+      setSignerReady(true);
+      console.log(`[Auto-wallet] Demo wallet: ${wallet.address}`);
+    } catch (err) {
+      console.error(`[Auto-wallet] Failed: ${(err as Error).message}`);
+      setAuthStatus(`Wallet generation failed: ${(err as Error).message}`);
+      setAuthStatusColor('#ef4444');
     }
   }, [getSDK]);
 
-  /* ── Auth handlers ── */
-  const handleAuthenticate = useCallback(async () => {
-    if (!authClientId || !authApiKey) {
-      setAuthStatus('Both fields required');
-      setAuthStatusColor('#ef4444');
-      return;
-    }
+  /* ── Wallet handlers ── */
+  const handleGenerateWallet = useCallback(() => {
     try {
-      setAuthenticating(true);
-      setAuthStatus('Authenticating...');
-      setAuthStatusColor(C.muted);
+      const wallet = ethers.Wallet.createRandom();
       const sdk = getSDK();
-      credentialsRef.current = { clientId: authClientId, apiKey: authApiKey };
-      const auth = await sdk.login({ clientId: authClientId, apiKey: authApiKey }) as AuthToken;
-      setAuthenticated(true);
-      setShowManualAuth(false);
-      setAuthStatus(`Authenticated as ${auth.clientId} (${auth.tier})`);
-      setAuthStatusColor('#22c55e');
-      setPlanBadge({ tier: auth.tier, visible: true });
+      sdk.setSigner(wallet);
+      setWalletAddress(wallet.address);
+      setSignerReady(true);
+      setAuthStatus('');
+      console.log(`[Wallet] Demo wallet: ${wallet.address}`);
     } catch (err) {
       setAuthStatus((err as Error).message);
       setAuthStatusColor('#ef4444');
-    } finally {
-      setAuthenticating(false);
-    }
-  }, [authClientId, authApiKey, getSDK]);
-
-  const handleClearAuth = useCallback(() => {
-    setAuthClientId('');
-    setAuthApiKey('');
-    setAuthenticated(false);
-    setShowManualAuth(true);
-    setAuthStatus('');
-    setPlanBadge({ tier: '', visible: false });
-    credentialsRef.current = null;
-    const sdk = sdkRef.current;
-    if (sdk) sdk.logout();
-  }, []);
-
-  /* ── Silent re-auth helper ── */
-  const ensureAuth = useCallback(async (): Promise<boolean> => {
-    const creds = credentialsRef.current;
-    if (!creds) return false;
-    try {
-      const sdk = getSDK();
-      const auth = await sdk.login(creds) as AuthToken;
-      console.log(`[Re-auth] ${auth.clientId} (${auth.tier})`);
-      setAuthenticated(true);
-      setPlanBadge({ tier: auth.tier, visible: true });
-      return true;
-    } catch (err) {
-      console.error('[Re-auth] Failed:', err);
-      return false;
     }
   }, [getSDK]);
+
+  const handleDisconnect = useCallback(() => {
+    setSignerReady(false);
+    setWalletAddress('');
+    setAuthStatus('');
+    sdkRef.current = null;
+  }, []);
 
   /* ── Confetti launcher ── */
   const launchConfetti = useCallback(() => {
@@ -420,11 +372,10 @@ export default function LandingPage() {
 
   /* ── KYC request ── */
   const requestKycProof = useCallback(async () => {
-    console.log('[requestKycProof] called, authenticated=', authenticated);
-    if (!authenticated) {
-      const reauthed = await ensureAuth();
-      if (!reauthed) return;
-      // Fall through after re-auth (don't recurse — state closure is stale)
+    console.log('[requestKycProof] called, signerReady=', signerReady);
+    if (!signerReady) {
+      handleGenerateWallet();
+      return;
     }
     setProofModalPrefix('kyc');
     setProofModalOpen(true);
@@ -473,21 +424,18 @@ export default function LandingPage() {
       if (!proofModalOpenRef.current) return; // user closed modal, suppress
       if ((err as Error).message.includes('timeout')) {
         showProofTimeout('kyc');
-      } else if ((err as Error).message.includes('Not authenticated')) {
-        setShowManualAuth(true); setAuthenticated(false);
       } else {
         console.error('Failed to create proof request:', (err as Error).message);
       }
     }
-  }, [authenticated, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, ensureAuth]);
+  }, [signerReady, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, handleGenerateWallet]);
 
   /* ── Country request ── */
   const requestCountryProof = useCallback(async () => {
-    console.log('[requestCountryProof] called, authenticated=', authenticated);
-    if (!authenticated) {
-      const reauthed = await ensureAuth();
-      if (!reauthed) return;
-      // Fall through after re-auth (don't recurse — state closure is stale)
+    console.log('[requestCountryProof] called, signerReady=', signerReady);
+    if (!signerReady) {
+      handleGenerateWallet();
+      return;
     }
     const countries = countryList.split(',').map(c => c.trim().toUpperCase()).filter(c => c);
 
@@ -538,13 +486,11 @@ export default function LandingPage() {
       if (!proofModalOpenRef.current) return; // user closed modal, suppress
       if ((err as Error).message.includes('timeout')) {
         showProofTimeout('country');
-      } else if ((err as Error).message.includes('Not authenticated')) {
-        setShowManualAuth(true); setAuthenticated(false);
       } else {
         console.error('Failed to create proof request:', (err as Error).message);
       }
     }
-  }, [authenticated, countryList, isIncluded, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, ensureAuth]);
+  }, [signerReady, countryList, isIncluded, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, handleGenerateWallet]);
 
   /* ── Copy proof ── */
   const handleCopyProof = useCallback((prefix: 'kyc' | 'country') => {
@@ -895,22 +841,6 @@ export default function LandingPage() {
   };
 
   /* ── Plan badge color ── */
-  const planBadgeStyle = (tier: string): React.CSSProperties => {
-    const map: Record<string, React.CSSProperties> = {
-      free: { background: 'rgba(52,211,153,0.15)', color: '#34d399' },
-      credit: { background: 'rgba(214,177,92,0.15)', color: C.gold },
-      plan1: { background: 'rgba(240,212,136,0.15)', color: C.gold2 },
-      plan2: { background: 'rgba(214,177,92,0.15)', color: C.gold },
-    };
-    return {
-      fontSize: 11,
-      padding: '3px 8px',
-      borderRadius: 6,
-      fontWeight: 600,
-      ...(map[tier] || map.free),
-    };
-  };
-
   /* ── Nav link style ── */
   const navLinkStyle = (hovered: boolean): React.CSSProperties => ({
     display: 'inline-flex',
@@ -1033,82 +963,52 @@ export default function LandingPage() {
 
           {/* Auth section */}
           <div className="header-auth" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'flex-end' }}>
-            {showManualAuth && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                {authenticated ? null : (
-                  <>
-                    <input
-                      type="text"
-                      value={authClientId}
-                      onChange={(e) => setAuthClientId(e.target.value)}
-                      placeholder="Client ID"
-                      style={{
-                        width: 120,
-                        padding: '4px 8px',
-                        fontSize: 12,
-                        background: '#1e1e2e',
-                        border: '1px solid #444',
-                        borderRadius: 4,
-                        color: '#eee',
-                      }}
-                    />
-                    <input
-                      type="password"
-                      value={authApiKey}
-                      onChange={(e) => setAuthApiKey(e.target.value)}
-                      placeholder="API Key"
-                      style={{
-                        width: 120,
-                        padding: '4px 8px',
-                        fontSize: 12,
-                        background: '#1e1e2e',
-                        border: '1px solid #444',
-                        borderRadius: 4,
-                        color: '#eee',
-                      }}
-                    />
-                    <button
-                      onClick={handleAuthenticate}
-                      disabled={authenticating}
-                      style={{
-                        padding: '4px 12px',
-                        fontSize: 12,
-                        background: C.gold,
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: 4,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Login
-                    </button>
-                  </>
-                )}
-                {authenticated && (
-                  <button
-                    onClick={handleClearAuth}
-                    style={{
-                      padding: '4px 12px',
-                      fontSize: 12,
-                      background: '#444',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: 4,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Logout
-                  </button>
-                )}
+            {signerReady && walletAddress && (
+              <span style={{
+                fontSize: 11,
+                padding: '3px 8px',
+                borderRadius: 6,
+                fontWeight: 600,
+                fontFamily: FONT.mono,
+                background: 'rgba(52,211,153,0.15)',
+                color: '#34d399',
+              }}>
+                {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
               </span>
+            )}
+            {signerReady ? (
+              <button
+                onClick={handleDisconnect}
+                style={{
+                  padding: '4px 12px',
+                  fontSize: 12,
+                  background: '#444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                }}
+              >
+                Disconnect
+              </button>
+            ) : (
+              <button
+                onClick={handleGenerateWallet}
+                style={{
+                  padding: '4px 12px',
+                  fontSize: 12,
+                  background: C.gold,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                }}
+              >
+                Generate Wallet
+              </button>
             )}
             {authStatus && (
               <span style={{ fontSize: 12, color: authStatusColor }}>{authStatus}</span>
-            )}
-            {planBadge.visible && (
-              <span style={planBadgeStyle(planBadge.tier)}>
-                {planBadge.tier.toUpperCase()}
-              </span>
             )}
           </div>
         </div>
@@ -1498,8 +1398,8 @@ export default function LandingPage() {
               <span style={{ color: '#6a9955' }}>{'// Initialize SDK'}</span>{'\n'}
               <span style={{ color: '#569cd6' }}>const</span>{' '}sdk = ProofportSDK.<span style={{ color: '#dcdcaa' }}>create</span>();{'\n'}
               {'\n'}
-              <span style={{ color: '#6a9955' }}>{'// Authenticate with your API credentials'}</span>{'\n'}
-              <span style={{ color: '#c586c0' }}>await</span>{' '}sdk.<span style={{ color: '#dcdcaa' }}>login</span>{'({ clientId: '}<span style={{ color: '#ce9178' }}>{`'your-client-id'`}</span>{', apiKey: '}<span style={{ color: '#ce9178' }}>{`'your-api-key'`}</span>{' });'}{'\n'}
+              <span style={{ color: '#6a9955' }}>{'// Set a wallet signer for challenge-signature auth'}</span>{'\n'}
+              sdk.<span style={{ color: '#dcdcaa' }}>setSigner</span>{'(yourWalletSigner);'}{'\n'}
               {'\n'}
               <span style={{ color: '#6a9955' }}>{'// Create a proof request via relay'}</span>{'\n'}
               <span style={{ color: '#569cd6' }}>const</span>{' '}relay = <span style={{ color: '#c586c0' }}>await</span>{' '}sdk.<span style={{ color: '#dcdcaa' }}>createRelayRequest</span>(<span style={{ color: '#ce9178' }}>{`'coinbase_attestation'`}</span>{', {'}{'\n'}

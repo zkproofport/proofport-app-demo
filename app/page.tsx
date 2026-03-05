@@ -390,7 +390,7 @@ export default function LandingPage() {
 
     try {
       const sdk = getSDK();
-      const result = await sdk.createRelayRequest('coinbase_attestation', {}, {
+      const result = await sdk.createRelayRequest('coinbase_attestation', { scope: 'zkproofport:demo' }, {
         dappName: 'ZKProofport Demo',
       });
       console.log('[requestKycProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);

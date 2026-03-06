@@ -39,7 +39,6 @@ export default function DemoPage() {
   const [statusText, setStatusText] = useState('Waiting for proof...');
   const [statusColor, setStatusColor] = useState('#f59e0b');
   const [proofReceived, setProofReceived] = useState(false);
-  const [resultNullifier, setResultNullifier] = useState('');
   const [resultPublicInputs, setResultPublicInputs] = useState('');
   const [resultProof, setResultProof] = useState('');
 
@@ -121,8 +120,6 @@ export default function DemoPage() {
       setStatusText('Proof completed!');
       setStatusColor('#22c55e');
 
-      const nullifier = result.nullifier || (result.publicInputs && result.publicInputs[0]) || 'N/A';
-      setResultNullifier(nullifier);
       setResultPublicInputs(result.publicInputs ? String(result.publicInputs.length) : '0');
       setResultProof(result.proof || 'N/A');
       setProofReceived(true);
@@ -401,10 +398,6 @@ export default function DemoPage() {
               {proofReceived && (
                 <div style={{ marginTop: 20, padding: 16, background: '#ecfdf5', border: '1px solid #10b981', borderRadius: 6 }}>
                   <h4 style={{ marginBottom: 12, color: '#059669' }}>Proof Received</h4>
-                  <div style={{ marginBottom: 12 }}>
-                    <span style={{ fontWeight: 600, color: '#475569', display: 'inline-block', minWidth: 120 }}>Nullifier:</span>
-                    <span style={{ color: '#1e293b', wordBreak: 'break-all', fontFamily: 'monospace', fontSize: 13 }}>{resultNullifier}</span>
-                  </div>
                   <div style={{ marginBottom: 12 }}>
                     <span style={{ fontWeight: 600, color: '#475569', display: 'inline-block', minWidth: 120 }}>Public Inputs:</span>
                     <span style={{ color: '#1e293b', fontFamily: 'monospace', fontSize: 13 }}>{resultPublicInputs}</span>

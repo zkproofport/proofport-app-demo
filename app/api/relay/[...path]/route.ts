@@ -7,7 +7,6 @@ async function proxyToRelay(request: NextRequest, params: Promise<{ path: string
   const subPath = path.join('/');
 
   // Map relay paths: /api/relay/proof/... -> RELAY_URL/api/v1/proof/...
-  //                   /api/relay/nullifier/... -> RELAY_URL/api/v1/nullifier/...
   const targetUrl = new URL(`/api/v1/${subPath}`, RELAY_URL);
 
   const { searchParams } = new URL(request.url);

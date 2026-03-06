@@ -43,30 +43,11 @@ type LogEntry = {
   message?: string;
 };
 
-type NullifierEntry = {
-  hash: string;
-  timestamp: number;
-  scope: string;
-};
-
-type OnChainData = {
-  onChainStatus: string;
-  txHash?: string;
-  registeredAt?: number;
-  scope?: string;
-  circuitId?: string;
-};
-
 type ProofData = {
   status: string;
   proof: string;
   publicInputs?: string[];
-  nullifier?: string;
   scope?: string;
-  onChainStatus?: string;
-  txHash?: string;
-  registeredAt?: number;
-  circuitId?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -386,18 +367,10 @@ export default function RelayDemoPage() {
   const [showProofResult, setShowProofResult] = useState(false);
   const [proofData, setProofData] = useState<ProofData | null>(null);
 
-  // Nullifier
-  const [showNullifierSection, setShowNullifierSection] = useState(false);
-  const [localNullifiers, setLocalNullifiers] = useState<NullifierEntry[]>([]);
-  const [duplicateResult, setDuplicateResult] = useState('');
-  const [onChainData, setOnChainData] = useState<OnChainData | null>(null);
-  const [onChainPlaceholder, setOnChainPlaceholder] = useState('On-chain verification data will appear here after proof submission');
-
   // Log state
-  const [activeLogTab, setActiveLogTab] = useState<'api' | 'events' | 'nullifier'>('api');
+  const [activeLogTab, setActiveLogTab] = useState<'api' | 'events'>('api');
   const [apiLogs, setApiLogs] = useState<LogEntry[]>([]);
   const [eventLogs, setEventLogs] = useState<LogEntry[]>([]);
-  const [nullifierLogs, setNullifierLogs] = useState<LogEntry[]>([]);
 
   // Refs for current proof state (avoid stale closures)
   const currentProofRef = useRef<ProofData | null>(null);
@@ -414,20 +387,6 @@ export default function RelayDemoPage() {
       sdkRef.current = createSDK();
     }
     return sdkRef.current;
-  }, []);
-
-  // ---------------------------------------------------------------------------
-  // Load nullifiers from localStorage on mount
-  // ---------------------------------------------------------------------------
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('relay_nullifiers');
-      if (stored) {
-        setLocalNullifiers(JSON.parse(stored));
-      }
-    } catch {
-      // ignore
-    }
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -455,17 +414,6 @@ export default function RelayDemoPage() {
     };
     setEventLogs(prev => [entry, ...prev]);
     console.log(`[EVENT ${type}]`, message);
-  }, []);
-
-  const logNullifier = useCallback((operation: string, details: string) => {
-    const entry: LogEntry = {
-      id: nextLogId(),
-      time: now(),
-      type: operation,
-      message: details,
-    };
-    setNullifierLogs(prev => [entry, ...prev]);
-    console.log(`[NULLIFIER ${operation}]`, details);
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -531,12 +479,6 @@ export default function RelayDemoPage() {
   // ---------------------------------------------------------------------------
   // Proof request
   // ---------------------------------------------------------------------------
-  const showOnChainInfo = useCallback((data: OnChainData) => {
-    setOnChainPlaceholder('');
-    setOnChainData(data);
-    logNullifier('ON_CHAIN', `Status: ${data.onChainStatus}, Tx: ${data.txHash}`);
-  }, [logNullifier]);
-
   const showProofResultFn = useCallback((data: ProofData) => {
     console.log('[showProofResult] Full data:', JSON.stringify(data, null, 2));
 
@@ -545,28 +487,10 @@ export default function RelayDemoPage() {
 
     currentProofRef.current = data;
     setProofData(data);
-
-    const nullifierHash = data.nullifier || (data.publicInputs && data.publicInputs.length > 0 ? data.publicInputs[0] : 'N/A');
-
     setShowProofResult(true);
-    setShowNullifierSection(true);
-
-    if (data.onChainStatus) {
-      showOnChainInfo({
-        onChainStatus: data.onChainStatus,
-        txHash: data.txHash,
-        registeredAt: data.registeredAt,
-        scope: data.scope,
-        circuitId: data.circuitId,
-      });
-    } else {
-      setOnChainPlaceholder('On-chain verification data will appear here after proof submission');
-      setOnChainData(null);
-    }
 
     logEvent('PROOF_COMPLETED', 'Proof received');
-    logNullifier('EXTRACTED', `Nullifier: ${nullifierHash}`);
-  }, [logEvent, logNullifier, showOnChainInfo]);
+  }, [logEvent]);
 
   const startPolling = useCallback(async (reqId: string) => {
     console.log('[startPolling] Using SDK waitForProof (Socket.IO primary, polling fallback)');
@@ -692,95 +616,6 @@ export default function RelayDemoPage() {
   }, [circuit, scope, countryListInput, isIncluded, signerReady, getSDK, logApi, logEvent, startPolling]);
 
   // ---------------------------------------------------------------------------
-  // Nullifier management
-  // ---------------------------------------------------------------------------
-  const handleSaveToLocalStorage = useCallback(() => {
-    if (!currentProofRef.current || !proofData) return;
-
-    const nullifierHash = proofData.nullifier || (proofData.publicInputs && proofData.publicInputs.length > 0 ? proofData.publicInputs[0] : 'N/A');
-    const entry: NullifierEntry = {
-      hash: nullifierHash,
-      timestamp: Date.now(),
-      scope: currentProofRef.current.scope || '',
-    };
-
-    const updated = [...localNullifiers, entry];
-    setLocalNullifiers(updated);
-    localStorage.setItem('relay_nullifiers', JSON.stringify(updated));
-    logNullifier('SAVED', `Saved to localStorage: ${nullifierHash}`);
-  }, [localNullifiers, proofData, logNullifier]);
-
-  const handleCheckDuplicate = useCallback(() => {
-    if (!proofData) return;
-
-    const nullifierHash = proofData.nullifier || (proofData.publicInputs && proofData.publicInputs.length > 0 ? proofData.publicInputs[0] : 'N/A');
-    const exists = localNullifiers.some(n => n.hash === nullifierHash);
-
-    if (exists) {
-      setDuplicateResult('duplicate');
-      logNullifier('DUPLICATE', `Nullifier already exists: ${nullifierHash}`);
-    } else {
-      setDuplicateResult('unique');
-      logNullifier('CHECK', `Nullifier is unique: ${nullifierHash}`);
-    }
-  }, [localNullifiers, proofData, logNullifier]);
-
-  const handleCheckOnChain = useCallback(async () => {
-    if (!proofData) return;
-
-    try {
-      const nullifierHash = proofData.nullifier || (proofData.publicInputs && proofData.publicInputs.length > 0 ? proofData.publicInputs[0] : 'N/A');
-
-      console.log('[checkOnChain] Checking nullifier on relay:', nullifierHash);
-      logApi('GET', `/api/v1/nullifier/${nullifierHash}`);
-
-      const sdkEnv = sdkEnvRef.current;
-      const RELAY_URLS: Record<string, string> = {
-        production: 'https://relay.zkproofport.app',
-        staging: 'https://stg-relay.zkproofport.app',
-        local: 'http://localhost:4001',
-      };
-      const localRelayUrl = typeof window !== 'undefined'
-        ? `${window.location.protocol}//${window.location.hostname}:4001`
-        : 'http://localhost:4001';
-      const relayBase = sdkEnv === 'local' ? localRelayUrl : RELAY_URLS[sdkEnv];
-
-      const response = await fetch(`${relayBase}/api/v1/nullifier/${nullifierHash}`);
-      if (!response.ok) throw new Error(`Nullifier query failed: HTTP ${response.status}`);
-      const data = await response.json();
-
-      console.log('[checkOnChain] Response:', JSON.stringify(data, null, 2));
-      logApi('RESPONSE', `/api/v1/nullifier/${nullifierHash}`, data, 200);
-
-      if (data.registered) {
-        showOnChainInfo({
-          onChainStatus: 'verified_and_registered',
-          txHash: data.txHash,
-          registeredAt: data.registeredAt,
-          scope: data.scope,
-          circuitId: data.circuitId,
-        });
-        logNullifier('ON_CHAIN_CHECK', `Found: ${nullifierHash}`);
-      } else {
-        setOnChainPlaceholder('Nullifier not found on-chain');
-        setOnChainData(null);
-        logNullifier('ON_CHAIN_CHECK', `Not found: ${nullifierHash}`);
-      }
-    } catch (err) {
-      console.error('[checkOnChain] Error:', err);
-      logApi('ERROR', '/api/relay/nullifier', { error: (err as Error).message }, 0);
-      alert('On-chain check failed: ' + (err as Error).message);
-    }
-  }, [proofData, logApi, logNullifier, showOnChainInfo]);
-
-  // ---------------------------------------------------------------------------
-  // Derived values
-  // ---------------------------------------------------------------------------
-  const nullifierHash = proofData
-    ? (proofData.nullifier || (proofData.publicInputs && proofData.publicInputs.length > 0 ? proofData.publicInputs[0] : 'N/A'))
-    : '-';
-
-  // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
   return (
@@ -852,7 +687,7 @@ export default function RelayDemoPage() {
               Relay Demo
             </h1>
             <p style={{ fontSize: 18, color: T.gray400, maxWidth: 800, margin: '0 auto' }}>
-              Test relay-based proof requests with verification and nullifier management
+              Test relay-based proof requests with verification
             </p>
           </div>
         </section>
@@ -1080,13 +915,6 @@ export default function RelayDemoPage() {
                       <div style={{ fontSize: 14, color: T.white, fontWeight: 600 }}>{proofData.publicInputs ? proofData.publicInputs.length : 0}</div>
                     </div>
                     <div style={{ padding: 10, background: 'rgba(0,0,0,0.2)', borderRadius: 8 }}>
-                      <div style={{ fontSize: 11, color: T.gray400, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Nullifier Hash</div>
-                      <div style={{ fontSize: 11, color: T.white, fontWeight: 600, wordBreak: 'break-all' }}>
-                        {nullifierHash}
-                        <CopyInlineBtn text={nullifierHash} />
-                      </div>
-                    </div>
-                    <div style={{ padding: 10, background: 'rgba(0,0,0,0.2)', borderRadius: 8 }}>
                       <div style={{ fontSize: 11, color: T.gray400, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Scope</div>
                       <div style={{ fontSize: 11, color: T.white, fontWeight: 600, wordBreak: 'break-all' }}>
                         {proofData.scope || 'N/A'}
@@ -1114,188 +942,6 @@ export default function RelayDemoPage() {
         )}
 
         {/* ============================================================ */}
-        {/* Nullifier Management */}
-        {/* ============================================================ */}
-        {showNullifierSection && (
-          <section style={{ padding: '40px 0' }}>
-            <div style={styles.container}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-                <span style={{ fontSize: 32, filter: 'drop-shadow(0 4px 12px rgba(37,99,235,0.4))' }}>&#128273;</span>
-                <h2 style={{ fontSize: 28, fontWeight: 700 }}>Nullifier Management</h2>
-              </div>
-
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))',
-                gap: 24,
-              }}>
-                {/* Plan 1 — Off-Chain */}
-                <div style={{
-                  padding: 24, background: 'rgba(255,255,255,0.03)', borderRadius: 16,
-                  border: '2px solid rgba(37,99,235,0.4)',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
-                    <div>
-                      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Plan 1 — dApp Manages (Off-Chain)</div>
-                      <div style={{ fontSize: 13, color: T.gray400, lineHeight: 1.5 }}>
-                        Your dApp receives the nullifier hash. Store it in your database and check duplicates yourself.
-                      </div>
-                    </div>
-                    <span style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'rgba(37,99,235,0.2)', color: T.blue }}>
-                      No gas fees
-                    </span>
-                  </div>
-
-                  {/* Nullifier display */}
-                  <div style={{ position: 'relative' }}>
-                    <div style={{
-                      margin: '16px 0', padding: 12,
-                      background: 'rgba(0,0,0,0.3)', borderRadius: 8,
-                      fontFamily: MONO_FONT, fontSize: 12, wordBreak: 'break-all', color: T.gray300,
-                    }}>
-                      {nullifierHash}
-                    </div>
-                    <CopyOverlayBtn text={nullifierHash} />
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      style={{ ...styles.btnSecondary, ...styles.btnSmall }}
-                      onClick={handleSaveToLocalStorage}
-                    >
-                      Save to Local Storage
-                    </button>
-                    <button
-                      style={{ ...styles.btnSecondary, ...styles.btnSmall }}
-                      onClick={handleCheckDuplicate}
-                    >
-                      Check Duplicate
-                    </button>
-                  </div>
-
-                  {/* Duplicate result */}
-                  {duplicateResult && (
-                    <div style={{ marginTop: 12 }}>
-                      {duplicateResult === 'duplicate' && (
-                        <div style={statusBoxStyle('error')}>Duplicate detected!</div>
-                      )}
-                      {duplicateResult === 'unique' && (
-                        <div style={statusBoxStyle('success')}>No duplicate found</div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Nullifier list */}
-                  <div style={{ maxHeight: 200, overflowY: 'auto', marginTop: 12 }}>
-                    {localNullifiers.length === 0 ? (
-                      <div style={{ color: T.gray600, textAlign: 'center', padding: 20 }}>No nullifiers saved yet</div>
-                    ) : (
-                      localNullifiers.map((n, i) => (
-                        <div key={i} style={{ padding: 10, background: 'rgba(0,0,0,0.2)', borderRadius: 8, marginBottom: 8, fontSize: 12 }}>
-                          <div style={{ fontFamily: MONO_FONT, color: T.cyan, wordBreak: 'break-all', marginBottom: 4 }}>{n.hash}</div>
-                          <div style={{ color: T.gray400, fontSize: 11 }}>
-                            {new Date(n.timestamp).toLocaleString()} &bull; {n.scope || 'N/A'}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                    <span style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: 'rgba(37,99,235,0.2)', color: T.blue }}>
-                      Your responsibility
-                    </span>
-                  </div>
-                </div>
-
-                {/* Plan 2 — On-Chain */}
-                <div style={{
-                  padding: 24, background: 'rgba(255,255,255,0.03)', borderRadius: 16,
-                  border: '2px solid rgba(34,197,94,0.4)',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
-                    <div>
-                      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Plan 2 — ZKProofport Manages (On-Chain)</div>
-                      <div style={{ fontSize: 13, color: T.gray400, lineHeight: 1.5 }}>
-                        ZKProofport automatically verifies and registers nullifiers on-chain. Relay pays gas.
-                      </div>
-                    </div>
-                    <span style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: 'rgba(34,197,94,0.2)', color: T.green }}>
-                      Relay pays gas
-                    </span>
-                  </div>
-
-                  {/* On-chain info */}
-                  {onChainData ? (
-                    <div style={{
-                      padding: 12, background: 'rgba(34,197,94,0.1)',
-                      border: '1px solid rgba(34,197,94,0.3)', borderRadius: 8, marginTop: 12,
-                    }}>
-                      <div style={{ fontSize: 11, color: T.gray400, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Status</div>
-                      <div style={{ fontSize: 13, color: T.gray300, marginBottom: 8 }}>
-                        <span style={badgeStyle('plan2')}>{onChainData.onChainStatus}</span>
-                      </div>
-
-                      <div style={{ fontSize: 11, color: T.gray400, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Transaction</div>
-                      <div style={{ fontSize: 13, color: T.gray300, marginBottom: 8 }}>
-                        {onChainData.txHash ? (
-                          <>
-                            <a
-                              href={`https://sepolia.basescan.org/tx/${onChainData.txHash}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ color: T.green, textDecoration: 'none', fontWeight: 600 }}
-                            >
-                              View on BaseScan
-                            </a>
-                            <CopyInlineBtn text={onChainData.txHash} label="Copy Hash" />
-                          </>
-                        ) : (
-                          '-'
-                        )}
-                      </div>
-
-                      <div style={{ fontSize: 11, color: T.gray400, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Registered At</div>
-                      <div style={{ fontSize: 13, color: T.gray300, marginBottom: 8 }}>
-                        {onChainData.registeredAt ? new Date(onChainData.registeredAt * 1000).toLocaleString() : '-'}
-                      </div>
-
-                      <div style={{ fontSize: 11, color: T.gray400, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Scope</div>
-                      <div style={{ fontSize: 13, color: T.gray300, marginBottom: 8, wordBreak: 'break-all' }}>
-                        {onChainData.scope || 'N/A'}
-                        <CopyInlineBtn text={onChainData.scope || ''} />
-                      </div>
-
-                      <div style={{ fontSize: 11, color: T.gray400, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Circuit ID</div>
-                      <div style={{ fontSize: 13, color: T.gray300 }}>
-                        {onChainData.circuitId || 'N/A'}
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ padding: 20, textAlign: 'center', color: T.gray400, fontSize: 14 }}>
-                      {onChainPlaceholder}
-                    </div>
-                  )}
-
-                  <button
-                    style={{ ...styles.btnSecondary, ...styles.btnSmall, marginTop: 16 }}
-                    onClick={handleCheckOnChain}
-                  >
-                    Check On-Chain
-                  </button>
-
-                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                    <span style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: 'rgba(34,197,94,0.2)', color: T.green }}>
-                      On-chain verification
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* ============================================================ */}
         {/* Developer Log */}
         {/* ============================================================ */}
         <section style={{ padding: '40px 0' }}>
@@ -1308,7 +954,7 @@ export default function RelayDemoPage() {
             <div style={styles.card}>
               {/* Log tabs */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                {(['api', 'events', 'nullifier'] as const).map(tab => (
+                {(['api', 'events'] as const).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveLogTab(tab)}
@@ -1320,7 +966,7 @@ export default function RelayDemoPage() {
                       cursor: 'pointer', transition: 'all 0.2s',
                     }}
                   >
-                    {tab === 'api' ? 'API Calls' : tab === 'events' ? 'Events' : 'Nullifier'}
+                    {tab === 'api' ? 'API Calls' : 'Events'}
                   </button>
                 ))}
               </div>
@@ -1377,24 +1023,6 @@ export default function RelayDemoPage() {
                 </div>
               )}
 
-              {/* Nullifier log */}
-              {activeLogTab === 'nullifier' && (
-                <div style={styles.logViewer}>
-                  {nullifierLogs.length === 0 ? (
-                    <div style={{ color: T.gray600, textAlign: 'center' }}>No nullifier operations yet</div>
-                  ) : (
-                    nullifierLogs.map(entry => (
-                      <div key={entry.id} style={styles.logEntry}>
-                        <div>
-                          <span style={{ color: T.gray600, marginRight: 8 }}>{entry.time}</span>
-                          <span style={{ color: T.yellow, fontWeight: 600, marginRight: 8 }}>{entry.type}</span>
-                          <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{entry.message}</span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
             </div>
           </div>
         </section>

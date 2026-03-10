@@ -392,6 +392,8 @@ export default function LandingPage() {
       const sdk = getSDK();
       const result = await sdk.createRelayRequest('coinbase_attestation', { scope: 'zkproofport:demo' }, {
         dappName: 'ZKProofport Demo',
+        dappIcon: 'https://demo.zkproofport.app/icon.png',
+        message: 'Prove your Coinbase KYC identity verification',
       });
       console.log('[requestKycProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 
@@ -454,6 +456,8 @@ export default function LandingPage() {
       const sdk = getSDK();
       const result = await sdk.createRelayRequest('coinbase_country_attestation', { countryList: countries, isIncluded }, {
         dappName: 'ZKProofport Demo',
+        dappIcon: 'https://demo.zkproofport.app/icon.png',
+        message: 'Prove your Coinbase country of residence',
       });
       console.log('[requestCountryProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 

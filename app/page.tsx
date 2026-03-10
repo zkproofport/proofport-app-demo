@@ -582,7 +582,7 @@ export default function LandingPage() {
     setBetaError('');
 
     try {
-      const res = await fetch('/api/proxy/inquiries', {
+      const res = await fetch('/api/beta-signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -519,7 +519,16 @@ export default function LandingPage() {
 
     try {
       const sdk = getSDK();
-      const result = await sdk.verifyResponseOnChain(proof as unknown as ProofResponse);
+      const proofResponse: ProofResponse = {
+        requestId: proof.requestId,
+        circuit: proof.circuit as ProofResponse['circuit'],
+        status: proof.status === 'completed' ? 'completed' : 'error',
+        proof: proof.proof,
+        publicInputs: proof.publicInputs,
+        verifierAddress: proof.verifierAddress,
+        chainId: proof.chainId,
+      };
+      const result = await sdk.verifyResponseOnChain(proofResponse);
       if (result.valid) {
         setDemoState(prefix, (prev) => ({
           ...prev,

@@ -81,7 +81,7 @@ export default function DemoPage() {
       setStatusColor('#3b82f6');
 
       try {
-        const verification = await sdk.verifyResponseOnChain(result);
+        const verification = await sdk.verifyResponseOnChain(result as any);
         console.log('[waitForProof] On-chain verification:', verification);
 
         if (verification.valid) {

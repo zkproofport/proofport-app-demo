@@ -1,21 +1,24 @@
 import { ProofportSDK } from '@zkproofport-app/sdk';
-import type { SDKEnvironment } from '@zkproofport-app/sdk';
-
-export function detectSDKEnv(): SDKEnvironment {
-  if (typeof window === 'undefined') return 'local';
-  const host = window.location.hostname;
-  if (host === 'localhost' || host === '127.0.0.1' || /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) return 'local';
-  if (host.startsWith('stg-') || host.includes('staging')) return 'staging';
-  return 'production';
-}
+import { ethers } from 'ethers';
 
 export function createSDK(): ProofportSDK {
-  const env = detectSDKEnv();
-  if (env === 'local') {
-    const localRelayUrl = `${window.location.protocol}//${window.location.hostname}:4001`;
-    return new ProofportSDK({ relayUrl: localRelayUrl });
+  let sdk: ProofportSDK;
+
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) {
+      const localRelayUrl = `${window.location.protocol}//${window.location.hostname}:4001`;
+      sdk = new ProofportSDK({ relayUrl: localRelayUrl });
+    } else {
+      sdk = ProofportSDK.create();
+    }
+  } else {
+    sdk = ProofportSDK.create();
   }
-  return ProofportSDK.create(env);
+
+  // Ephemeral random wallet — only used for relay nonce replay prevention
+  sdk.setSigner(ethers.Wallet.createRandom());
+  return sdk;
 }
 
 export { ProofportSDK };

@@ -3,7 +3,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { createSDK } from '@/lib/sdk';
 import type { ProofportSDK as ProofportSDKType } from '@zkproofport-app/sdk';
-import { ethers } from 'ethers';
 
 type RelayRequest = {
   requestId: string;
@@ -16,19 +15,10 @@ type RelayRequest = {
 export default function DemoPage() {
   const sdkRef = useRef<ProofportSDKType | null>(null);
   const [activeTab, setActiveTab] = useState<'kyc' | 'country'>('kyc');
-  const [signerReady, setSignerReady] = useState(false);
-  const [walletAddress, setWalletAddress] = useState('');
-  const [authStatus, setAuthStatus] = useState('');
-  const [authStatusColor, setAuthStatusColor] = useState('#666');
-  const [generating, setGenerating] = useState(false);
 
   // Form fields
-  const [kycDappName, setKycDappName] = useState('');
-  const [kycMessage, setKycMessage] = useState('');
   const [countryList, setCountryList] = useState('US,KR,JP');
   const [isIncluded, setIsIncluded] = useState(true);
-  const [countryDappName, setCountryDappName] = useState('');
-  const [countryMessage, setCountryMessage] = useState('');
 
   // Result state
   const [showResult, setShowResult] = useState(false);
@@ -50,36 +40,6 @@ export default function DemoPage() {
     }
     return sdkRef.current;
   }, []);
-
-  const handleGenerateWallet = async () => {
-    try {
-      setGenerating(true);
-      setAuthStatus('Generating wallet...');
-      setAuthStatusColor('#f59e0b');
-
-      const wallet = ethers.Wallet.createRandom();
-      const sdk = getSDK();
-      sdk.setSigner(wallet);
-      setWalletAddress(wallet.address);
-      setSignerReady(true);
-      setAuthStatus('Demo wallet ready');
-      setAuthStatusColor('#22c55e');
-      console.log('Demo wallet generated:', wallet.address);
-    } catch (err) {
-      setAuthStatus('Failed: ' + (err as Error).message);
-      setAuthStatusColor('#ef4444');
-      console.error('Wallet generation failed:', err);
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const handleDisconnect = () => {
-    setSignerReady(false);
-    setWalletAddress('');
-    setAuthStatus('');
-    sdkRef.current = null;
-  };
 
   const displayResult = async (relayRequest: RelayRequest) => {
     setResultRequestId(relayRequest.requestId);
@@ -117,8 +77,25 @@ export default function DemoPage() {
 
       console.log('[waitForProof] Proof received:', result);
 
-      setStatusText('Proof completed!');
-      setStatusColor('#22c55e');
+      setStatusText('Verifying on-chain...');
+      setStatusColor('#3b82f6');
+
+      try {
+        const verification = await sdk.verifyResponseOnChain(result);
+        console.log('[waitForProof] On-chain verification:', verification);
+
+        if (verification.valid) {
+          setStatusText('Proof verified on-chain!');
+          setStatusColor('#22c55e');
+        } else {
+          setStatusText('On-chain verification failed: ' + (verification.error || 'unknown'));
+          setStatusColor('#ef4444');
+        }
+      } catch (verifyErr) {
+        console.warn('[waitForProof] On-chain verification skipped:', verifyErr);
+        setStatusText('Proof completed! (on-chain verification skipped)');
+        setStatusColor('#22c55e');
+      }
 
       setResultPublicInputs(result.publicInputs ? String(result.publicInputs.length) : '0');
       setResultProof(result.proof || 'N/A');
@@ -132,17 +109,13 @@ export default function DemoPage() {
 
   const handleKycSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!signerReady) {
-      setAuthStatus('Generate a demo wallet first');
-      setAuthStatusColor('#ef4444');
-      return;
-    }
-
     try {
       const sdk = getSDK();
-      const options: Record<string, string> = {};
-      if (kycDappName) options.dappName = kycDappName;
-      if (kycMessage) options.message = kycMessage;
+      const options = {
+        dappName: 'ZKProofport Demo',
+        dappIcon: 'https://demo.zkproofport.app/icon.png',
+        message: 'Prove your Coinbase KYC identity verification',
+      };
 
       const relay = await sdk.createRelayRequest('coinbase_attestation', { scope: 'zkproofport:demo' }, options);
       currentRelayRef.current = relay;
@@ -154,17 +127,14 @@ export default function DemoPage() {
   };
 
   const handleKycOpen = async () => {
-    if (!signerReady) {
-      setAuthStatus('Generate a demo wallet first');
-      setAuthStatusColor('#ef4444');
-      return;
-    }
     try {
       if (!currentRelayRef.current) {
         const sdk = getSDK();
-        const options: Record<string, string> = {};
-        if (kycDappName) options.dappName = kycDappName;
-        if (kycMessage) options.message = kycMessage;
+        const options = {
+          dappName: 'ZKProofport Demo',
+          dappIcon: 'https://demo.zkproofport.app/icon.png',
+          message: 'Prove your Coinbase KYC identity verification',
+        };
         currentRelayRef.current = await sdk.createRelayRequest('coinbase_attestation', { scope: 'zkproofport:demo' }, options);
       }
       window.location.href = currentRelayRef.current.deepLink;
@@ -175,21 +145,17 @@ export default function DemoPage() {
 
   const handleCountrySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!signerReady) {
-      setAuthStatus('Generate a demo wallet first');
-      setAuthStatusColor('#ef4444');
-      return;
-    }
-
     try {
       const countries = countryList.split(',').map(c => c.trim().toUpperCase()).filter(c => c);
       if (countries.length === 0) { console.error('Country list is required'); return; }
 
       const sdk = getSDK();
       const inputs = { countryList: countries, isIncluded, scope: 'zkproofport:demo' };
-      const options: Record<string, string> = {};
-      if (countryDappName) options.dappName = countryDappName;
-      if (countryMessage) options.message = countryMessage;
+      const options = {
+        dappName: 'ZKProofport Demo',
+        dappIcon: 'https://demo.zkproofport.app/icon.png',
+        message: 'Prove your Coinbase country of residence',
+      };
 
       const relay = await sdk.createRelayRequest('coinbase_country_attestation', inputs, options);
       currentRelayRef.current = relay;
@@ -201,20 +167,17 @@ export default function DemoPage() {
   };
 
   const handleCountryOpen = async () => {
-    if (!signerReady) {
-      setAuthStatus('Generate a demo wallet first');
-      setAuthStatusColor('#ef4444');
-      return;
-    }
     try {
       if (!currentRelayRef.current) {
         const countries = countryList.split(',').map(c => c.trim().toUpperCase()).filter(c => c);
         if (countries.length === 0) { console.error('Country list is required'); return; }
         const sdk = getSDK();
         const inputs = { countryList: countries, isIncluded, scope: 'zkproofport:demo' };
-        const options: Record<string, string> = {};
-        if (countryDappName) options.dappName = countryDappName;
-        if (countryMessage) options.message = countryMessage;
+        const options = {
+          dappName: 'ZKProofport Demo',
+          dappIcon: 'https://demo.zkproofport.app/icon.png',
+          message: 'Prove your Coinbase country of residence',
+        };
         currentRelayRef.current = await sdk.createRelayRequest('coinbase_country_attestation', inputs, options);
       }
       window.location.href = currentRelayRef.current.deepLink;
@@ -228,48 +191,6 @@ export default function DemoPage() {
       <div style={{ maxWidth: 800, margin: '0 auto' }}>
         <h1 style={{ color: '#111', marginBottom: 10, fontSize: '2em' }}>ZKProofport SDK Demo</h1>
         <p style={{ color: '#666', marginBottom: 30 }}>Generate ZK proof requests using the ZKProofport SDK</p>
-
-        {/* Auth Card */}
-        <div style={{ background: 'white', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', padding: 30, marginBottom: 20 }}>
-          <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 16 }}>Demo Wallet</span>
-            {signerReady && (
-              <span style={{ background: 'rgba(34, 197, 94, 0.2)', color: '#22c55e', padding: '2px 8px', borderRadius: 4, fontSize: 12, fontWeight: 600 }}>
-                Connected
-              </span>
-            )}
-          </div>
-          <p style={{ color: '#666', fontSize: 13, marginBottom: 16 }}>
-            Generate an ephemeral demo wallet to sign relay requests. No real assets are used.
-          </p>
-          {signerReady && walletAddress && (
-            <div style={{ marginBottom: 12, padding: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6 }}>
-              <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>Wallet Address</div>
-              <div style={{ fontFamily: 'monospace', fontSize: 13, color: '#1e293b', wordBreak: 'break-all' }}>
-                {walletAddress}
-              </div>
-            </div>
-          )}
-          <div style={{ marginBottom: 24, display: 'flex', gap: 12, alignItems: 'center' }}>
-            {!signerReady ? (
-              <button
-                onClick={handleGenerateWallet}
-                disabled={generating}
-                style={{ padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: 'pointer', background: '#2563eb', color: 'white' }}
-              >
-                {generating ? 'Generating...' : 'Generate Demo Wallet'}
-              </button>
-            ) : (
-              <button
-                onClick={handleDisconnect}
-                style={{ padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: 'pointer', background: '#f3f4f6', color: '#374151' }}
-              >
-                Disconnect
-              </button>
-            )}
-            <span style={{ fontSize: 13, color: authStatusColor }}>{authStatus}</span>
-          </div>
-        </div>
 
         {/* Circuit Card */}
         <div style={{ background: 'white', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', padding: 30, marginBottom: 20 }}>
@@ -294,23 +215,13 @@ export default function DemoPage() {
           {/* KYC Tab */}
           {activeTab === 'kyc' && (
             <form onSubmit={handleKycSubmit}>
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', marginBottom: 8, color: '#333', fontWeight: 500 }}>Dapp Name (optional)</label>
-                <input type="text" value={kycDappName} onChange={e => setKycDappName(e.target.value)} placeholder="My Dapp"
-                  style={{ width: '100%', padding: 12, border: '1px solid #ddd', borderRadius: 6, fontSize: 14 }} />
-              </div>
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', marginBottom: 8, color: '#333', fontWeight: 500 }}>Message (optional)</label>
-                <input type="text" value={kycMessage} onChange={e => setKycMessage(e.target.value)} placeholder="Please verify your Coinbase KYC"
-                  style={{ width: '100%', padding: 12, border: '1px solid #ddd', borderRadius: 6, fontSize: 14 }} />
-              </div>
               <div style={{ display: 'flex', gap: 10, marginTop: 30 }}>
-                <button type="submit" disabled={!signerReady}
-                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: signerReady ? 'pointer' : 'not-allowed', background: '#2563eb', color: 'white', opacity: signerReady ? 1 : 0.5 }}>
+                <button type="submit"
+                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: 'pointer', background: '#2563eb', color: 'white', opacity: 1 }}>
                   Generate QR Code
                 </button>
-                <button type="button" onClick={handleKycOpen} disabled={!signerReady}
-                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: signerReady ? 'pointer' : 'not-allowed', background: '#f3f4f6', color: '#374151', opacity: signerReady ? 1 : 0.5 }}>
+                <button type="button" onClick={handleKycOpen}
+                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: 'pointer', background: '#f3f4f6', color: '#374151', opacity: 1 }}>
                   Open in ZKProofport
                 </button>
               </div>
@@ -347,23 +258,13 @@ export default function DemoPage() {
                 </div>
                 <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Whether to check if user is in or not in the country list</div>
               </div>
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', marginBottom: 8, color: '#333', fontWeight: 500 }}>Dapp Name (optional)</label>
-                <input type="text" value={countryDappName} onChange={e => setCountryDappName(e.target.value)} placeholder="My Dapp"
-                  style={{ width: '100%', padding: 12, border: '1px solid #ddd', borderRadius: 6, fontSize: 14 }} />
-              </div>
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', marginBottom: 8, color: '#333', fontWeight: 500 }}>Message (optional)</label>
-                <input type="text" value={countryMessage} onChange={e => setCountryMessage(e.target.value)} placeholder="Please verify your country"
-                  style={{ width: '100%', padding: 12, border: '1px solid #ddd', borderRadius: 6, fontSize: 14 }} />
-              </div>
               <div style={{ display: 'flex', gap: 10, marginTop: 30 }}>
-                <button type="submit" disabled={!signerReady}
-                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: signerReady ? 'pointer' : 'not-allowed', background: '#2563eb', color: 'white', opacity: signerReady ? 1 : 0.5 }}>
+                <button type="submit"
+                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: 'pointer', background: '#2563eb', color: 'white', opacity: 1 }}>
                   Generate QR Code
                 </button>
-                <button type="button" onClick={handleCountryOpen} disabled={!signerReady}
-                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: signerReady ? 'pointer' : 'not-allowed', background: '#f3f4f6', color: '#374151', opacity: signerReady ? 1 : 0.5 }}>
+                <button type="button" onClick={handleCountryOpen}
+                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: 'pointer', background: '#f3f4f6', color: '#374151', opacity: 1 }}>
                   Open in ZKProofport
                 </button>
               </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { createSDK, detectSDKEnv } from '@/lib/sdk';
+import { createSDK } from '@/lib/sdk';
 import type { ProofportSDK as ProofportSDKType, RelayProofResult } from '@zkproofport-app/sdk';
 import { ethers } from 'ethers';
 
@@ -333,7 +333,7 @@ function CopyOverlayBtn({ text }: { text: string }) {
 export default function RelayDemoPage() {
   // SDK ref
   const sdkRef = useRef<ProofportSDKType | null>(null);
-  const sdkEnvRef = useRef<string>('local');
+  // SDK environment detected automatically by createSDK()
 
   // Auth state
   const [signerReady, setSignerReady] = useState(false);
@@ -383,7 +383,6 @@ export default function RelayDemoPage() {
   // ---------------------------------------------------------------------------
   const getSDK = useCallback(() => {
     if (!sdkRef.current) {
-      sdkEnvRef.current = detectSDKEnv();
       sdkRef.current = createSDK();
     }
     return sdkRef.current;

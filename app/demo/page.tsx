@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { createSDK } from '@/lib/sdk';
-import type { ProofportSDK as ProofportSDKType } from '@zkproofport-app/sdk';
+import type { ProofportSDK as ProofportSDKType, ProofResponse } from '@zkproofport-app/sdk';
 
 type RelayRequest = {
   requestId: string;
@@ -81,7 +81,16 @@ export default function DemoPage() {
       setStatusColor('#3b82f6');
 
       try {
-        const verification = await sdk.verifyResponseOnChain(result as any);
+        const proofResponse: ProofResponse = {
+          requestId: result.requestId,
+          circuit: result.circuit as ProofResponse['circuit'],
+          status: result.status === 'completed' ? 'completed' : 'error',
+          proof: result.proof,
+          publicInputs: result.publicInputs,
+          verifierAddress: result.verifierAddress,
+          chainId: result.chainId,
+        };
+        const verification = await sdk.verifyResponseOnChain(proofResponse);
         console.log('[waitForProof] On-chain verification:', verification);
 
         if (verification.valid) {

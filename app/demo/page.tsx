@@ -14,11 +14,12 @@ type RelayRequest = {
 
 export default function DemoPage() {
   const sdkRef = useRef<ProofportSDKType | null>(null);
-  const [activeTab, setActiveTab] = useState<'kyc' | 'country'>('kyc');
+  const [activeTab, setActiveTab] = useState<'kyc' | 'country' | 'oidc'>('kyc');
 
   // Form fields
   const [countryList, setCountryList] = useState('US,KR,JP');
   const [isIncluded, setIsIncluded] = useState(true);
+  const [domain, setDomain] = useState('gmail.com');
 
   // Result state
   const [showResult, setShowResult] = useState(false);
@@ -195,6 +196,47 @@ export default function DemoPage() {
     }
   };
 
+  const handleOidcSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (!domain.trim()) { console.error('Domain is required'); return; }
+
+      const sdk = getSDK();
+      const inputs = { domain: domain.trim().toLowerCase(), scope: 'zkproofport:demo' };
+      const options = {
+        dappName: 'ZKProofport Demo',
+        dappIcon: 'https://demo.zkproofport.app/icon.png',
+        message: 'Prove your email domain affiliation',
+      };
+
+      const relay = await sdk.createRelayRequest('oidc_domain_attestation', inputs, options);
+      currentRelayRef.current = relay;
+      await displayResult(relay);
+      await waitForProof(relay.requestId);
+    } catch (err) {
+      console.error('OIDC request failed:', err);
+    }
+  };
+
+  const handleOidcOpen = async () => {
+    try {
+      if (!currentRelayRef.current) {
+        if (!domain.trim()) { console.error('Domain is required'); return; }
+        const sdk = getSDK();
+        const inputs = { domain: domain.trim().toLowerCase(), scope: 'zkproofport:demo' };
+        const options = {
+          dappName: 'ZKProofport Demo',
+          dappIcon: 'https://demo.zkproofport.app/icon.png',
+          message: 'Prove your email domain affiliation',
+        };
+        currentRelayRef.current = await sdk.createRelayRequest('oidc_domain_attestation', inputs, options);
+      }
+      window.location.href = currentRelayRef.current.deepLink;
+    } catch (err) {
+      console.error('OIDC open failed:', err);
+    }
+  };
+
   return (
     <div style={{ background: '#f5f5f5', padding: 20, minHeight: '100vh' }}>
       <div style={{ maxWidth: 800, margin: '0 auto' }}>
@@ -205,7 +247,7 @@ export default function DemoPage() {
         <div style={{ background: 'white', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', padding: 30, marginBottom: 20 }}>
           {/* Tabs */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 30, borderBottom: '2px solid #eee' }}>
-            {(['kyc', 'country'] as const).map(tab => (
+            {(['kyc', 'country', 'oidc'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => { setActiveTab(tab); setShowResult(false); currentRelayRef.current = null; }}
@@ -216,7 +258,7 @@ export default function DemoPage() {
                   marginBottom: -2, fontWeight: activeTab === tab ? 600 : 400, transition: 'all 0.2s',
                 }}
               >
-                {tab === 'kyc' ? 'Coinbase KYC' : 'Coinbase Country'}
+                {tab === 'kyc' ? 'Coinbase KYC' : tab === 'country' ? 'Coinbase Country' : 'OIDC Domain'}
               </button>
             ))}
           </div>
@@ -273,6 +315,28 @@ export default function DemoPage() {
                   Generate QR Code
                 </button>
                 <button type="button" onClick={handleCountryOpen}
+                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: 'pointer', background: '#f3f4f6', color: '#374151', opacity: 1 }}>
+                  Open in ZKProofport
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* OIDC Domain Tab */}
+          {activeTab === 'oidc' && (
+            <form onSubmit={handleOidcSubmit}>
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', marginBottom: 8, color: '#333', fontWeight: 500 }}>Email Domain *</label>
+                <input type="text" value={domain} onChange={e => setDomain(e.target.value)} placeholder="gmail.com" required
+                  style={{ width: '100%', padding: 12, border: '1px solid #ddd', borderRadius: 6, fontSize: 14 }} />
+                <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>The email domain to prove affiliation with (e.g., gmail.com, company.com)</div>
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 30 }}>
+                <button type="submit"
+                  style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: 'pointer', background: '#2563eb', color: 'white', opacity: 1 }}>
+                  Generate QR Code
+                </button>
+                <button type="button" onClick={handleOidcOpen}
                   style={{ flex: 1, padding: '14px 24px', border: 'none', borderRadius: 6, fontSize: 16, fontWeight: 600, cursor: 'pointer', background: '#f3f4f6', color: '#374151', opacity: 1 }}>
                   Open in ZKProofport
                 </button>

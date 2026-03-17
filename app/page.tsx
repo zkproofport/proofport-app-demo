@@ -192,9 +192,13 @@ export default function LandingPage() {
   const activeKycRequestIdRef = useRef<string | null>(null);
   const activeCountryRequestIdRef = useRef<string | null>(null);
 
+  const [emailState, setEmailState] = useState<DemoState>({ ...emptyDemoState });
+  const activeEmailRequestIdRef = useRef<string | null>(null);
+  const [emailDomain, setEmailDomain] = useState('gmail.com');
+
   /* ── Proof modal ── */
   const [proofModalOpen, setProofModalOpen] = useState(false);
-  const [proofModalPrefix, setProofModalPrefix] = useState<'kyc' | 'country' | null>(null);
+  const [proofModalPrefix, setProofModalPrefix] = useState<'kyc' | 'country' | 'email' | null>(null);
   const proofModalOpenRef = useRef(false);
 
   /* ── Beta modal ── */
@@ -297,12 +301,13 @@ export default function LandingPage() {
   }, []);
 
   /* ── Show proof helpers ── */
-  const setDemoState = useCallback((prefix: 'kyc' | 'country', updater: (prev: DemoState) => DemoState) => {
+  const setDemoState = useCallback((prefix: 'kyc' | 'country' | 'email', updater: (prev: DemoState) => DemoState) => {
     if (prefix === 'kyc') setKycState(updater);
-    else setCountryState(updater);
+    else if (prefix === 'country') setCountryState(updater);
+    else setEmailState(updater);
   }, []);
 
-  const showProofReceived = useCallback((prefix: 'kyc' | 'country', proof: ProofResultExt) => {
+  const showProofReceived = useCallback((prefix: 'kyc' | 'country' | 'email', proof: ProofResultExt) => {
     const isAlreadyRegistered = proof.onChainStatus === 'already_registered';
     setDemoState(prefix, (prev) => ({
       ...prev,
@@ -321,11 +326,12 @@ export default function LandingPage() {
       proofObject: proof,
     }));
     if (prefix === 'kyc') activeKycRequestIdRef.current = null;
-    else activeCountryRequestIdRef.current = null;
+    else if (prefix === 'country') activeCountryRequestIdRef.current = null;
+    else activeEmailRequestIdRef.current = null;
     if (proof.status === 'completed' && !isAlreadyRegistered) launchConfetti();
   }, [setDemoState, launchConfetti]);
 
-  const showProofTimeout = useCallback((prefix: 'kyc' | 'country') => {
+  const showProofTimeout = useCallback((prefix: 'kyc' | 'country' | 'email') => {
     setDemoState(prefix, (prev) => ({
       ...prev,
       showWaiting: false,
@@ -334,10 +340,11 @@ export default function LandingPage() {
       failedReason: 'The proof request timed out after 3 minutes. Please try again.',
     }));
     if (prefix === 'kyc') activeKycRequestIdRef.current = null;
-    else activeCountryRequestIdRef.current = null;
+    else if (prefix === 'country') activeCountryRequestIdRef.current = null;
+    else activeEmailRequestIdRef.current = null;
   }, [setDemoState]);
 
-  const showProofFailed = useCallback((prefix: 'kyc' | 'country', reason: string) => {
+  const showProofFailed = useCallback((prefix: 'kyc' | 'country' | 'email', reason: string) => {
     setDemoState(prefix, (prev) => ({
       ...prev,
       showWaiting: false,
@@ -346,10 +353,11 @@ export default function LandingPage() {
       failedReason: reason,
     }));
     if (prefix === 'kyc') activeKycRequestIdRef.current = null;
-    else activeCountryRequestIdRef.current = null;
+    else if (prefix === 'country') activeCountryRequestIdRef.current = null;
+    else activeEmailRequestIdRef.current = null;
   }, [setDemoState]);
 
-  const showProofResult = useCallback(async (deepLink: string, prefix: 'kyc' | 'country') => {
+  const showProofResult = useCallback(async (deepLink: string, prefix: 'kyc' | 'country' | 'email') => {
     console.log(`[showProofResult] prefix=${prefix}, deepLink=${deepLink}, isMobile=${isMobileDevice()}`);
     if (isMobileDevice()) {
       console.log('[showProofResult] Mobile: storing deepLink for Open App button');
@@ -496,9 +504,72 @@ export default function LandingPage() {
     }
   }, [signerReady, countryList, isIncluded, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, handleGenerateWallet]);
 
+  /* ── Email Domain request ── */
+  const requestEmailProof = useCallback(async () => {
+    console.log('[requestEmailProof] called, signerReady=', signerReady);
+    if (!signerReady) {
+      handleGenerateWallet();
+      return;
+    }
+
+    setProofModalPrefix('email');
+    setProofModalOpen(true);
+    proofModalOpenRef.current = true;
+    setEmailState((prev) => ({
+      ...prev,
+      showReceived: false,
+      showWaiting: false,
+      showFailed: false,
+      showVerifyResult: false,
+    }));
+
+    try {
+      const sdk = getSDK();
+      const result = await sdk.createRelayRequest('oidc_domain_attestation', { domain: emailDomain.trim().toLowerCase(), scope: 'zkproofport:demo' }, {
+        dappName: 'ZKProofport Demo',
+        dappIcon: 'https://demo.zkproofport.app/icon.png',
+        message: 'Prove your email domain affiliation',
+      });
+      console.log('[requestEmailProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
+
+      activeEmailRequestIdRef.current = result.requestId;
+
+      const deepLink = result.deepLink;
+      await showProofResult(deepLink, 'email');
+      setEmailState((prev) => ({ ...prev, showResult: true, showWaiting: true }));
+
+      let proofAlreadyReceived = false;
+      const finalResult = await sdk.waitForProof(result.requestId, {
+        timeoutMs: 180000,
+        onStatusChange: (status) => {
+          if (status.status === 'completed') {
+            proofAlreadyReceived = true;
+            showProofReceived('email', status as ProofResultExt);
+          } else if (status.status === 'failed') {
+            showProofFailed('email', ('error' in status && status.error) || 'Proof generation failed');
+          }
+        },
+      });
+
+      if (finalResult.status === 'completed') {
+        showProofReceived('email', finalResult as ProofResultExt);
+      } else if (finalResult.status === 'failed') {
+        showProofFailed('email', finalResult.error || 'Proof generation failed');
+      }
+    } catch (err) {
+      console.log('[requestEmailProof] error:', (err as Error).message, 'modalOpen=', proofModalOpenRef.current);
+      if (!proofModalOpenRef.current) return; // user closed modal, suppress
+      if ((err as Error).message.includes('timeout')) {
+        showProofTimeout('email');
+      } else {
+        console.error('Failed to create proof request:', (err as Error).message);
+      }
+    }
+  }, [signerReady, emailDomain, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, handleGenerateWallet]);
+
   /* ── Copy proof ── */
-  const handleCopyProof = useCallback((prefix: 'kyc' | 'country') => {
-    const data = prefix === 'kyc' ? kycState.proofData : countryState.proofData;
+  const handleCopyProof = useCallback((prefix: 'kyc' | 'country' | 'email') => {
+    const data = prefix === 'kyc' ? kycState.proofData : prefix === 'country' ? countryState.proofData : emailState.proofData;
     if (data) {
       copyToClipboard(data).then(() => {
         setDemoState(prefix, (prev) => ({ ...prev, copyLabel: 'Copied!', copyClass: 'copied' }));
@@ -507,11 +578,11 @@ export default function LandingPage() {
         }, 2000);
       });
     }
-  }, [kycState.proofData, countryState.proofData, setDemoState]);
+  }, [kycState.proofData, countryState.proofData, emailState.proofData, setDemoState]);
 
   /* ── Verify proof ── */
-  const handleVerifyProof = useCallback(async (prefix: 'kyc' | 'country', type: 'onchain' | 'offchain') => {
-    const proof = prefix === 'kyc' ? kycState.proofObject : countryState.proofObject;
+  const handleVerifyProof = useCallback(async (prefix: 'kyc' | 'country' | 'email', type: 'onchain' | 'offchain') => {
+    const proof = prefix === 'kyc' ? kycState.proofObject : prefix === 'country' ? countryState.proofObject : emailState.proofObject;
     if (!proof || proof.status !== 'completed') return;
 
     setDemoState(prefix, (prev) => ({
@@ -554,7 +625,7 @@ export default function LandingPage() {
         verifyResultContent: `Verification Error: ${(err as Error).message || err}`,
       }));
     }
-  }, [kycState.proofObject, countryState.proofObject, getSDK, setDemoState, launchConfetti]);
+  }, [kycState.proofObject, countryState.proofObject, emailState.proofObject, getSDK, setDemoState, launchConfetti]);
 
   /* ── Smooth scroll ── */
   const scrollTo = useCallback((id: string) => {
@@ -622,7 +693,7 @@ export default function LandingPage() {
 
   /* ── Render helpers for demo cards ── */
   const renderDemoCard = (
-    prefix: 'kyc' | 'country',
+    prefix: 'kyc' | 'country' | 'email',
     state: DemoState,
   ) => {
     const isMobile = typeof window !== 'undefined' && isMobileDevice();
@@ -1253,20 +1324,121 @@ export default function LandingPage() {
 
             </div>
 
-            {/* ── Coming-soon 3×2 grid beside live cards ── */}
+            {/* ── Email Domain Demo Card ── */}
+            <div
+              id="demo-email"
+              onMouseEnter={() => setHoveredDemoCard('email')}
+              onMouseLeave={() => setHoveredDemoCard(null)}
+              style={{
+                flex: '2 1 0',
+                background: hoveredDemoCard === 'email' ? C.bgCardHover : C.bgCard,
+                border: `1.5px solid ${C.goldLine}`,
+                borderRadius: 0,
+                padding: 36,
+                transition: 'all 0.3s',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ fontSize: 36, filter: 'drop-shadow(0 4px 12px rgba(214, 177, 92, 0.3))' }}>
+                  {'\uD83D\uDCE7'}
+                </div>
+                <span style={{
+                  fontFamily: FONT.mono, fontSize: '1rem', fontWeight: 700, letterSpacing: '0.08em',
+                  padding: '4px 10px', borderRadius: 4,
+                  background: 'rgba(52,211,153,0.15)', color: '#34d399',
+                }}>LIVE</span>
+              </div>
+              <h3 style={{ fontFamily: FONT.serif, fontSize: '2rem', fontWeight: 400, marginBottom: 10, color: C.cream }}>Email Domain</h3>
+              <p style={{ color: C.muted, marginBottom: 20, fontFamily: FONT.mono, fontSize: '1.2rem', lineHeight: 1.6, flex: 1 }}>
+                Prove your email belongs to a specific domain without revealing the full address.
+              </p>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: '1.1rem', fontFamily: FONT.mono }}>
+                <div style={{ flex: 1 }}>
+                  <strong style={{ color: C.gold2, display: 'block', marginBottom: 4, fontSize: '1rem', letterSpacing: '0.05em' }}>PROVE</strong>
+                  <span style={{ color: C.muted }}>Domain affiliation</span>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <strong style={{ color: C.gold2, display: 'block', marginBottom: 4, fontSize: '1rem', letterSpacing: '0.05em' }}>HIDE</strong>
+                  <span style={{ color: C.muted }}>Email address</span>
+                </div>
+              </div>
+
+              {/* Email domain input */}
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: '1.1rem', fontWeight: 500, fontFamily: FONT.mono, color: C.ink }}>
+                  Email Domain
+                </label>
+                <input
+                  type="text"
+                  value={emailDomain}
+                  onChange={(e) => setEmailDomain(e.target.value)}
+                  placeholder="gmail.com"
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: 8,
+                    color: C.white,
+                    fontSize: '1.2rem',
+                    fontFamily: FONT.mono,
+                    transition: 'all 0.2s',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = C.gold;
+                    e.target.style.background = 'rgba(255, 255, 255, 0.08)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                    e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                  }}
+                />
+              </div>
+
+              <button
+                onClick={requestEmailProof}
+                onMouseEnter={() => setHoveredBtn('email-request')}
+                onMouseLeave={() => setHoveredBtn(null)}
+                style={{
+                  width: '100%',
+                  padding: '12px 20px',
+                  fontSize: '1.2rem',
+                  fontWeight: 700,
+                  fontFamily: FONT.mono,
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  transition: 'all 0.25s',
+                  background: `linear-gradient(180deg, ${C.gold}, ${C.gold2})`,
+                  color: '#1a222c',
+                  boxShadow: hoveredBtn === 'email-request'
+                    ? '0 10px 28px rgba(214, 177, 92, 0.5), inset 0 1px 0 rgba(255,255,255,.8)'
+                    : '0 6px 18px rgba(214, 177, 92, 0.3), inset 0 1px 0 rgba(255,255,255,.6)',
+                  transform: hoveredBtn === 'email-request' ? 'translateY(-1px)' : 'none',
+                }}
+              >
+                Request Proof
+              </button>
+
+            </div>
+
+            {/* ── Coming-soon grid beside live cards ── */}
             <div className="coming-soon-grid" style={{
               flex: '1 1 520px',
               minWidth: 280,
               display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gridTemplateRows: 'repeat(2, 1fr)',
+              gridTemplateColumns: 'repeat(5, 1fr)',
+              gridTemplateRows: '1fr',
               gap: 14,
             }}>
               {[
                 { icon: '💰', title: 'DeFi Assets', desc: 'Prove holdings privately' },
                 { icon: '🏢', title: 'RWA', desc: 'Prove asset ownership' },
                 { icon: '🤖', title: 'Agent', desc: 'Prove agent identity' },
-                { icon: '📧', title: 'Email Corp', desc: 'Prove company affiliation' },
                 { icon: '𝕏', title: 'X Follow', desc: 'Prove social follows' },
                 { icon: '🎂', title: 'Age', desc: 'Prove age eligibility' },
               ].map((item, i) => (
@@ -1510,14 +1682,16 @@ export default function LandingPage() {
               color: C.cream,
               marginBottom: 8,
             }}>
-              {proofModalPrefix === 'kyc' ? '🛡️ KYC Verification' : '🌍 Country Attestation'}
+              {proofModalPrefix === 'kyc' ? '🛡️ KYC Verification' : proofModalPrefix === 'country' ? '🌍 Country Attestation' : '📧 Email Domain'}
             </h3>
             <p style={{ fontFamily: FONT.mono, fontSize: '1rem', color: C.muted, marginBottom: 16 }}>
               {proofModalPrefix === 'kyc'
                 ? 'Scan the QR code with ZKProofport app to generate a proof.'
-                : 'Scan the QR code with ZKProofport app to prove country eligibility.'}
+                : proofModalPrefix === 'country'
+                  ? 'Scan the QR code with ZKProofport app to prove country eligibility.'
+                  : 'Scan the QR code with ZKProofport app to prove email domain affiliation.'}
             </p>
-            {renderDemoCard(proofModalPrefix, proofModalPrefix === 'kyc' ? kycState : countryState)}
+            {renderDemoCard(proofModalPrefix, proofModalPrefix === 'kyc' ? kycState : proofModalPrefix === 'country' ? countryState : emailState)}
           </div>
         </div>
       )}

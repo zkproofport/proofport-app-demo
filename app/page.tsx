@@ -195,6 +195,7 @@ export default function LandingPage() {
   const [emailState, setEmailState] = useState<DemoState>({ ...emptyDemoState });
   const activeEmailRequestIdRef = useRef<string | null>(null);
   const [emailDomain, setEmailDomain] = useState('gmail.com');
+  const [emailProvider, setEmailProvider] = useState<string | undefined>(undefined);
 
   /* ── Proof modal ── */
   const [proofModalOpen, setProofModalOpen] = useState(false);
@@ -525,10 +526,12 @@ export default function LandingPage() {
 
     try {
       const sdk = getSDK();
-      const result = await sdk.createRelayRequest('oidc_domain_attestation', { domain: emailDomain.trim().toLowerCase(), scope: 'zkproofport:demo' }, {
+      const inputs: Record<string, unknown> = { domain: emailDomain.trim().toLowerCase(), scope: 'zkproofport:demo' };
+      if (emailProvider) inputs.provider = emailProvider;
+      const result = await sdk.createRelayRequest('oidc_domain_attestation', inputs as any, {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
-        message: 'Prove your email domain affiliation',
+        message: emailProvider ? 'Prove your organization membership' : 'Prove your email domain affiliation',
       });
       console.log('[requestEmailProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 
@@ -565,7 +568,7 @@ export default function LandingPage() {
         console.error('Failed to create proof request:', (err as Error).message);
       }
     }
-  }, [signerReady, emailDomain, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, handleGenerateWallet]);
+  }, [signerReady, emailDomain, emailProvider, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, handleGenerateWallet]);
 
   /* ── Copy proof ── */
   const handleCopyProof = useCallback((prefix: 'kyc' | 'country' | 'email') => {
@@ -1397,6 +1400,49 @@ export default function LandingPage() {
                     e.target.style.background = 'rgba(255, 255, 255, 0.05)';
                   }}
                 />
+              </div>
+
+              {/* Verification mode toggle */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: '1.1rem', fontWeight: 500, fontFamily: FONT.mono, color: C.ink }}>
+                  Verification Mode
+                </label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => setEmailProvider(undefined)}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      background: !emailProvider ? C.gold : 'rgba(255, 255, 255, 0.05)',
+                      border: `1px solid ${!emailProvider ? C.gold : 'rgba(255, 255, 255, 0.1)'}`,
+                      borderRadius: 6,
+                      color: !emailProvider ? '#1a222c' : C.muted,
+                      fontSize: '1.1rem',
+                      fontFamily: FONT.mono,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    Any Email
+                  </button>
+                  <button
+                    onClick={() => setEmailProvider('google')}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      background: emailProvider === 'google' ? C.gold : 'rgba(255, 255, 255, 0.05)',
+                      border: `1px solid ${emailProvider === 'google' ? C.gold : 'rgba(255, 255, 255, 0.1)'}`,
+                      borderRadius: 6,
+                      color: emailProvider === 'google' ? '#1a222c' : C.muted,
+                      fontSize: '1.1rem',
+                      fontFamily: FONT.mono,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    Google Workspace
+                  </button>
+                </div>
               </div>
 
               <button

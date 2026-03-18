@@ -1442,6 +1442,23 @@ export default function LandingPage() {
                   >
                     Google Workspace
                   </button>
+                  <button
+                    onClick={() => setEmailProvider('microsoft')}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      background: emailProvider === 'microsoft' ? C.gold : 'rgba(255, 255, 255, 0.05)',
+                      border: `1px solid ${emailProvider === 'microsoft' ? C.gold : 'rgba(255, 255, 255, 0.1)'}`,
+                      borderRadius: 6,
+                      color: emailProvider === 'microsoft' ? '#1a222c' : C.muted,
+                      fontSize: '1.1rem',
+                      fontFamily: FONT.mono,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    Microsoft 365
+                  </button>
                 </div>
               </div>
 

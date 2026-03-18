@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@zkproofport-app/sdk": "^0.2.4",
+    "@zkproofport-app/sdk": "^0.2.5",
     "ethers": "^6.16.0",
     "next": "^15.3.2",
     "react": "^19.1.0",

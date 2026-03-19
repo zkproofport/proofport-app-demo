@@ -1110,7 +1110,8 @@ export default function LandingPage() {
 
           {/* All cards in one row: KYC + Country (large) + coming-soon grid (compact) */}
           <div className="demo-cards-row" style={{
-            display: 'flex',
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr 1fr 1.2fr',
             gap: 20,
             alignItems: 'stretch',
           }}>
@@ -1121,7 +1122,7 @@ export default function LandingPage() {
               onMouseEnter={() => setHoveredDemoCard('kyc')}
               onMouseLeave={() => setHoveredDemoCard(null)}
               style={{
-                flex: '2 1 0',
+                minWidth: 0,
                 background: hoveredDemoCard === 'kyc' ? C.bgCardHover : C.bgCard,
                 border: `1.5px solid ${C.goldLine}`,
                 borderRadius: 0,
@@ -1188,7 +1189,7 @@ export default function LandingPage() {
               onMouseEnter={() => setHoveredDemoCard('country')}
               onMouseLeave={() => setHoveredDemoCard(null)}
               style={{
-                flex: '2 1 0',
+                minWidth: 0,
                 background: hoveredDemoCard === 'country' ? C.bgCardHover : C.bgCard,
                 border: `1.5px solid ${C.goldLine}`,
                 borderRadius: 0,
@@ -1333,7 +1334,7 @@ export default function LandingPage() {
               onMouseEnter={() => setHoveredDemoCard('email')}
               onMouseLeave={() => setHoveredDemoCard(null)}
               style={{
-                flex: '2 1 0',
+                minWidth: 0,
                 background: hoveredDemoCard === 'email' ? C.bgCardHover : C.bgCard,
                 border: `1.5px solid ${C.goldLine}`,
                 borderRadius: 0,
@@ -1407,58 +1408,31 @@ export default function LandingPage() {
                 <label style={{ display: 'block', marginBottom: 6, fontSize: '1.1rem', fontWeight: 500, fontFamily: FONT.mono, color: C.ink }}>
                   Verification Mode
                 </label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    onClick={() => setEmailProvider(undefined)}
-                    style={{
-                      flex: 1,
-                      padding: '8px 12px',
-                      background: !emailProvider ? C.gold : 'rgba(255, 255, 255, 0.05)',
-                      border: `1px solid ${!emailProvider ? C.gold : 'rgba(255, 255, 255, 0.1)'}`,
-                      borderRadius: 6,
-                      color: !emailProvider ? '#1a222c' : C.muted,
-                      fontSize: '1.1rem',
-                      fontFamily: FONT.mono,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    Any Email
-                  </button>
-                  <button
-                    onClick={() => setEmailProvider('google')}
-                    style={{
-                      flex: 1,
-                      padding: '8px 12px',
-                      background: emailProvider === 'google' ? C.gold : 'rgba(255, 255, 255, 0.05)',
-                      border: `1px solid ${emailProvider === 'google' ? C.gold : 'rgba(255, 255, 255, 0.1)'}`,
-                      borderRadius: 6,
-                      color: emailProvider === 'google' ? '#1a222c' : C.muted,
-                      fontSize: '1.1rem',
-                      fontFamily: FONT.mono,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    Google Workspace
-                  </button>
-                  <button
-                    onClick={() => setEmailProvider('microsoft')}
-                    style={{
-                      flex: 1,
-                      padding: '8px 12px',
-                      background: emailProvider === 'microsoft' ? C.gold : 'rgba(255, 255, 255, 0.05)',
-                      border: `1px solid ${emailProvider === 'microsoft' ? C.gold : 'rgba(255, 255, 255, 0.1)'}`,
-                      borderRadius: 6,
-                      color: emailProvider === 'microsoft' ? '#1a222c' : C.muted,
-                      fontSize: '1.1rem',
-                      fontFamily: FONT.mono,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    Microsoft 365
-                  </button>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                  {([
+                    { key: undefined, label: 'Any' },
+                    { key: 'google', label: 'Google' },
+                    { key: 'microsoft', label: 'MS 365' },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.label}
+                      onClick={() => setEmailProvider(opt.key as 'google' | 'microsoft' | undefined)}
+                      style={{
+                        padding: '6px 4px',
+                        background: emailProvider === opt.key ? C.gold : 'rgba(255, 255, 255, 0.05)',
+                        border: `1px solid ${emailProvider === opt.key ? C.gold : 'rgba(255, 255, 255, 0.1)'}`,
+                        borderRadius: 6,
+                        color: emailProvider === opt.key ? '#1a222c' : C.muted,
+                        fontSize: '0.85rem',
+                        fontFamily: FONT.mono,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -1491,12 +1465,12 @@ export default function LandingPage() {
 
             {/* ── Coming-soon grid beside live cards ── */}
             <div className="coming-soon-grid" style={{
-              flex: '1 1 520px',
-              minWidth: 280,
+              minWidth: 0,
               display: 'grid',
-              gridTemplateColumns: 'repeat(5, 1fr)',
-              gridTemplateRows: '1fr',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gridAutoRows: '1fr',
               gap: 14,
+              alignSelf: 'stretch',
             }}>
               {[
                 { icon: '💰', title: 'DeFi Assets', desc: 'Prove holdings privately' },

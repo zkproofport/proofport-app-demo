@@ -88,7 +88,8 @@ body {
     flex: 1 1 100% !important;
     width: 100% !important;
     min-width: 0 !important;
-    grid-template-columns: repeat(5, 1fr) !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    grid-template-rows: repeat(2, 1fr) !important;
   }
 }
 
@@ -131,5 +132,6 @@ body {
   }
   .coming-soon-grid {
     grid-template-columns: repeat(2, 1fr) !important;
+    grid-template-rows: repeat(3, 1fr) !important;
   }
 }

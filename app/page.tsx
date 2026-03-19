@@ -1110,8 +1110,7 @@ export default function LandingPage() {
 
           {/* All cards in one row: KYC + Country (large) + coming-soon grid (compact) */}
           <div className="demo-cards-row" style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr 1fr 1.2fr',
+            display: 'flex',
             gap: 20,
             alignItems: 'stretch',
           }}>
@@ -1122,7 +1121,7 @@ export default function LandingPage() {
               onMouseEnter={() => setHoveredDemoCard('kyc')}
               onMouseLeave={() => setHoveredDemoCard(null)}
               style={{
-                minWidth: 0,
+                flex: '2 1 0',
                 background: hoveredDemoCard === 'kyc' ? C.bgCardHover : C.bgCard,
                 border: `1.5px solid ${C.goldLine}`,
                 borderRadius: 0,
@@ -1189,7 +1188,7 @@ export default function LandingPage() {
               onMouseEnter={() => setHoveredDemoCard('country')}
               onMouseLeave={() => setHoveredDemoCard(null)}
               style={{
-                minWidth: 0,
+                flex: '2 1 0',
                 background: hoveredDemoCard === 'country' ? C.bgCardHover : C.bgCard,
                 border: `1.5px solid ${C.goldLine}`,
                 borderRadius: 0,
@@ -1334,7 +1333,7 @@ export default function LandingPage() {
               onMouseEnter={() => setHoveredDemoCard('email')}
               onMouseLeave={() => setHoveredDemoCard(null)}
               style={{
-                minWidth: 0,
+                flex: '2 1 0',
                 background: hoveredDemoCard === 'email' ? C.bgCardHover : C.bgCard,
                 border: `1.5px solid ${C.goldLine}`,
                 borderRadius: 0,
@@ -1408,7 +1407,7 @@ export default function LandingPage() {
                 <label style={{ display: 'block', marginBottom: 6, fontSize: '1.1rem', fontWeight: 500, fontFamily: FONT.mono, color: C.ink }}>
                   Verification Mode
                 </label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6 }}>
                   {([
                     { key: undefined, label: 'Any' },
                     { key: 'google', label: 'Google' },
@@ -1418,12 +1417,13 @@ export default function LandingPage() {
                       key={opt.label}
                       onClick={() => setEmailProvider(opt.key as 'google' | 'microsoft' | undefined)}
                       style={{
-                        padding: '6px 4px',
+                        flex: '1 1 0',
+                        padding: '6px 8px',
                         background: emailProvider === opt.key ? C.gold : 'rgba(255, 255, 255, 0.05)',
                         border: `1px solid ${emailProvider === opt.key ? C.gold : 'rgba(255, 255, 255, 0.1)'}`,
                         borderRadius: 6,
                         color: emailProvider === opt.key ? '#1a222c' : C.muted,
-                        fontSize: '0.85rem',
+                        fontSize: '0.9rem',
                         fontFamily: FONT.mono,
                         cursor: 'pointer',
                         transition: 'all 0.2s',
@@ -1465,12 +1465,12 @@ export default function LandingPage() {
 
             {/* ── Coming-soon grid beside live cards ── */}
             <div className="coming-soon-grid" style={{
-              minWidth: 0,
+              flex: '1 1 520px',
+              minWidth: 280,
               display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gridAutoRows: '1fr',
+              gridTemplateColumns: 'repeat(5, 1fr)',
+              gridTemplateRows: '1fr',
               gap: 14,
-              alignSelf: 'stretch',
             }}>
               {[
                 { icon: '💰', title: 'DeFi Assets', desc: 'Prove holdings privately' },

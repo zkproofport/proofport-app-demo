@@ -1463,51 +1463,6 @@ export default function LandingPage() {
 
             </div>
 
-            {/* ── Coming-soon grid beside live cards ── */}
-            <div className="coming-soon-grid" style={{
-              flex: '1 1 520px',
-              minWidth: 280,
-              display: 'grid',
-              gridTemplateColumns: 'repeat(5, 1fr)',
-              gridTemplateRows: '1fr',
-              gap: 14,
-            }}>
-              {[
-                { icon: '💰', title: 'DeFi Assets', desc: 'Prove holdings privately' },
-                { icon: '🏢', title: 'RWA', desc: 'Prove asset ownership' },
-                { icon: '🤖', title: 'Agent', desc: 'Prove agent identity' },
-                { icon: '𝕏', title: 'X Follow', desc: 'Prove social follows' },
-                { icon: '🎂', title: 'Age', desc: 'Prove age eligibility' },
-              ].map((item, i) => (
-                <div key={i} style={{
-                  background: C.bgCard,
-                  border: `1.5px dashed rgba(214,177,92,0.3)`,
-                  borderRadius: 0,
-                  padding: '20px 14px',
-                  textAlign: 'center',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}>
-                  {/* Subtle diagonal stripe overlay */}
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    opacity: 0.04,
-                    backgroundImage: 'repeating-linear-gradient(135deg, transparent, transparent 8px, rgba(214,177,92,0.5) 8px, rgba(214,177,92,0.5) 9px)',
-                    pointerEvents: 'none',
-                  }} />
-                  <div style={{ fontSize: 32, marginBottom: 8 }}>{item.icon}</div>
-                  <div style={{ fontFamily: FONT.mono, fontSize: '1rem', fontWeight: 700, letterSpacing: '0.08em', color: C.gold, marginBottom: 6, background: 'rgba(214,177,92,0.1)', padding: '2px 8px', borderRadius: 3 }}>SOON</div>
-                  <h4 style={{ fontFamily: FONT.serif, fontSize: '1.5rem', fontWeight: 400, margin: '0 0 6px', color: C.cream }}>{item.title}</h4>
-                  <p style={{ color: 'rgba(232,220,200,0.55)', fontFamily: FONT.mono, fontSize: '1.1rem', lineHeight: 1.4, margin: 0 }}>{item.desc}</p>
-                </div>
-              ))}
-            </div>
-
           </div>
 
         </div>

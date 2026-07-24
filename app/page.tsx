@@ -2,7 +2,15 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createSDK } from '@/lib/sdk';
-import type { ProofportSDK as ProofportSDKType, RelayProofResult, ProofResponse } from '@zkproofport-app/sdk';
+import type {
+  ProofportSDK as ProofportSDKType,
+  RelayProofResult,
+  ProofResponse,
+  CircuitType,
+  MdlKrOwnershipInputs,
+  MdlKrAgeInputs,
+  MdlKrRegionInputs,
+} from '@zkproofport-app/sdk';
 import { ethers } from 'ethers';
 
 /* ─── Color tokens (matching portal-web design system) ─── */
@@ -197,9 +205,16 @@ export default function LandingPage() {
   const [emailDomain, setEmailDomain] = useState('gmail.com');
   const [emailProvider, setEmailProvider] = useState<string | undefined>(undefined);
 
+  /* ── Korea Mobile ID (mDL) form ── */
+  const [mdlState, setMdlState] = useState<DemoState>({ ...emptyDemoState });
+  const activeMdlRequestIdRef = useRef<string | null>(null);
+  const [mdlVariant, setMdlVariant] = useState<'ownership' | 'age' | 'region'>('age');
+  const [mdlAgeThreshold, setMdlAgeThreshold] = useState('19');
+  const [mdlTargetRegion, setMdlTargetRegion] = useState('경기도');
+
   /* ── Proof modal ── */
   const [proofModalOpen, setProofModalOpen] = useState(false);
-  const [proofModalPrefix, setProofModalPrefix] = useState<'kyc' | 'country' | 'email' | null>(null);
+  const [proofModalPrefix, setProofModalPrefix] = useState<'kyc' | 'country' | 'email' | 'mdl' | null>(null);
   const proofModalOpenRef = useRef(false);
 
   /* ── Beta modal ── */
@@ -302,13 +317,14 @@ export default function LandingPage() {
   }, []);
 
   /* ── Show proof helpers ── */
-  const setDemoState = useCallback((prefix: 'kyc' | 'country' | 'email', updater: (prev: DemoState) => DemoState) => {
+  const setDemoState = useCallback((prefix: 'kyc' | 'country' | 'email' | 'mdl', updater: (prev: DemoState) => DemoState) => {
     if (prefix === 'kyc') setKycState(updater);
     else if (prefix === 'country') setCountryState(updater);
-    else setEmailState(updater);
+    else if (prefix === 'email') setEmailState(updater);
+    else setMdlState(updater);
   }, []);
 
-  const showProofReceived = useCallback((prefix: 'kyc' | 'country' | 'email', proof: ProofResultExt) => {
+  const showProofReceived = useCallback((prefix: 'kyc' | 'country' | 'email' | 'mdl', proof: ProofResultExt) => {
     const isAlreadyRegistered = proof.onChainStatus === 'already_registered';
     setDemoState(prefix, (prev) => ({
       ...prev,
@@ -328,11 +344,12 @@ export default function LandingPage() {
     }));
     if (prefix === 'kyc') activeKycRequestIdRef.current = null;
     else if (prefix === 'country') activeCountryRequestIdRef.current = null;
-    else activeEmailRequestIdRef.current = null;
+    else if (prefix === 'email') activeEmailRequestIdRef.current = null;
+    else activeMdlRequestIdRef.current = null;
     if (proof.status === 'completed' && !isAlreadyRegistered) launchConfetti();
   }, [setDemoState, launchConfetti]);
 
-  const showProofTimeout = useCallback((prefix: 'kyc' | 'country' | 'email') => {
+  const showProofTimeout = useCallback((prefix: 'kyc' | 'country' | 'email' | 'mdl') => {
     setDemoState(prefix, (prev) => ({
       ...prev,
       showWaiting: false,
@@ -342,10 +359,11 @@ export default function LandingPage() {
     }));
     if (prefix === 'kyc') activeKycRequestIdRef.current = null;
     else if (prefix === 'country') activeCountryRequestIdRef.current = null;
-    else activeEmailRequestIdRef.current = null;
+    else if (prefix === 'email') activeEmailRequestIdRef.current = null;
+    else activeMdlRequestIdRef.current = null;
   }, [setDemoState]);
 
-  const showProofFailed = useCallback((prefix: 'kyc' | 'country' | 'email', reason: string) => {
+  const showProofFailed = useCallback((prefix: 'kyc' | 'country' | 'email' | 'mdl', reason: string) => {
     setDemoState(prefix, (prev) => ({
       ...prev,
       showWaiting: false,
@@ -355,10 +373,11 @@ export default function LandingPage() {
     }));
     if (prefix === 'kyc') activeKycRequestIdRef.current = null;
     else if (prefix === 'country') activeCountryRequestIdRef.current = null;
-    else activeEmailRequestIdRef.current = null;
+    else if (prefix === 'email') activeEmailRequestIdRef.current = null;
+    else activeMdlRequestIdRef.current = null;
   }, [setDemoState]);
 
-  const showProofResult = useCallback(async (deepLink: string, prefix: 'kyc' | 'country' | 'email') => {
+  const showProofResult = useCallback(async (deepLink: string, prefix: 'kyc' | 'country' | 'email' | 'mdl') => {
     console.log(`[showProofResult] prefix=${prefix}, deepLink=${deepLink}, isMobile=${isMobileDevice()}`);
     if (isMobileDevice()) {
       console.log('[showProofResult] Mobile: storing deepLink for Open App button');
@@ -570,9 +589,106 @@ export default function LandingPage() {
     }
   }, [signerReady, emailDomain, emailProvider, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, handleGenerateWallet]);
 
+  /* ── Korea Mobile ID (mDL) request ── */
+  const requestMdlProof = useCallback(async () => {
+    console.log('[requestMdlProof] called, variant=', mdlVariant, 'signerReady=', signerReady);
+    if (!signerReady) {
+      handleGenerateWallet();
+      return;
+    }
+
+    const circuit: CircuitType =
+      mdlVariant === 'ownership' ? 'mdl_kr_ownership'
+      : mdlVariant === 'age' ? 'mdl_kr_age'
+      : 'mdl_kr_region';
+
+    let inputs: MdlKrOwnershipInputs | MdlKrAgeInputs | MdlKrRegionInputs;
+    let message: string;
+    if (mdlVariant === 'ownership') {
+      inputs = { scope: 'zkproofport:demo', discloseFlags: 0 }; // anonymous ownership proof
+      message = 'Prove Korean mobile ID ownership';
+    } else if (mdlVariant === 'age') {
+      const ageThreshold = Number(mdlAgeThreshold);
+      if (!Number.isInteger(ageThreshold) || ageThreshold < 1 || ageThreshold > 150) {
+        showProofFailed('mdl', 'Age threshold must be an integer between 1 and 150.');
+        setProofModalPrefix('mdl');
+        setProofModalOpen(true);
+        proofModalOpenRef.current = true;
+        setMdlState((prev) => ({ ...prev, showResult: true }));
+        return;
+      }
+      inputs = { scope: 'zkproofport:demo', ageThreshold };
+      message = `Prove you are ${ageThreshold}+ years old`;
+    } else {
+      const targetRegion = mdlTargetRegion.trim();
+      if (!targetRegion) {
+        showProofFailed('mdl', 'Target region is required (e.g., 경기도).');
+        setProofModalPrefix('mdl');
+        setProofModalOpen(true);
+        proofModalOpenRef.current = true;
+        setMdlState((prev) => ({ ...prev, showResult: true }));
+        return;
+      }
+      inputs = { scope: 'zkproofport:demo', targetRegion };
+      message = `Prove residency in ${targetRegion}`;
+    }
+
+    setProofModalPrefix('mdl');
+    setProofModalOpen(true);
+    proofModalOpenRef.current = true;
+    setMdlState((prev) => ({
+      ...prev,
+      showReceived: false,
+      showWaiting: false,
+      showFailed: false,
+      showVerifyResult: false,
+    }));
+
+    try {
+      const sdk = getSDK();
+      const result = await sdk.createRelayRequest(circuit, inputs, {
+        dappName: 'ZKProofport Demo',
+        dappIcon: 'https://demo.zkproofport.app/icon.png',
+        message,
+      });
+      console.log('[requestMdlProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
+
+      activeMdlRequestIdRef.current = result.requestId;
+
+      const deepLink = result.deepLink;
+      await showProofResult(deepLink, 'mdl');
+      setMdlState((prev) => ({ ...prev, showResult: true, showWaiting: true }));
+
+      const finalResult = await sdk.waitForProof(result.requestId, {
+        timeoutMs: 180000,
+        onStatusChange: (status) => {
+          if (status.status === 'completed') {
+            showProofReceived('mdl', status as ProofResultExt);
+          } else if (status.status === 'failed') {
+            showProofFailed('mdl', ('error' in status && status.error) || 'Proof generation failed');
+          }
+        },
+      });
+
+      if (finalResult.status === 'completed') {
+        showProofReceived('mdl', finalResult as ProofResultExt);
+      } else if (finalResult.status === 'failed') {
+        showProofFailed('mdl', finalResult.error || 'Proof generation failed');
+      }
+    } catch (err) {
+      console.log('[requestMdlProof] error:', (err as Error).message, 'modalOpen=', proofModalOpenRef.current);
+      if (!proofModalOpenRef.current) return; // user closed modal, suppress
+      if ((err as Error).message.includes('timeout')) {
+        showProofTimeout('mdl');
+      } else {
+        console.error('Failed to create proof request:', (err as Error).message);
+      }
+    }
+  }, [signerReady, mdlVariant, mdlAgeThreshold, mdlTargetRegion, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, handleGenerateWallet]);
+
   /* ── Copy proof ── */
-  const handleCopyProof = useCallback((prefix: 'kyc' | 'country' | 'email') => {
-    const data = prefix === 'kyc' ? kycState.proofData : prefix === 'country' ? countryState.proofData : emailState.proofData;
+  const handleCopyProof = useCallback((prefix: 'kyc' | 'country' | 'email' | 'mdl') => {
+    const data = prefix === 'kyc' ? kycState.proofData : prefix === 'country' ? countryState.proofData : prefix === 'email' ? emailState.proofData : mdlState.proofData;
     if (data) {
       copyToClipboard(data).then(() => {
         setDemoState(prefix, (prev) => ({ ...prev, copyLabel: 'Copied!', copyClass: 'copied' }));
@@ -581,11 +697,11 @@ export default function LandingPage() {
         }, 2000);
       });
     }
-  }, [kycState.proofData, countryState.proofData, emailState.proofData, setDemoState]);
+  }, [kycState.proofData, countryState.proofData, emailState.proofData, mdlState.proofData, setDemoState]);
 
   /* ── Verify proof ── */
-  const handleVerifyProof = useCallback(async (prefix: 'kyc' | 'country' | 'email', type: 'onchain' | 'offchain') => {
-    const proof = prefix === 'kyc' ? kycState.proofObject : prefix === 'country' ? countryState.proofObject : emailState.proofObject;
+  const handleVerifyProof = useCallback(async (prefix: 'kyc' | 'country' | 'email' | 'mdl', type: 'onchain' | 'offchain') => {
+    const proof = prefix === 'kyc' ? kycState.proofObject : prefix === 'country' ? countryState.proofObject : prefix === 'email' ? emailState.proofObject : mdlState.proofObject;
     if (!proof || proof.status !== 'completed') return;
 
     setDemoState(prefix, (prev) => ({
@@ -628,7 +744,7 @@ export default function LandingPage() {
         verifyResultContent: `Verification Error: ${(err as Error).message || err}`,
       }));
     }
-  }, [kycState.proofObject, countryState.proofObject, emailState.proofObject, getSDK, setDemoState, launchConfetti]);
+  }, [kycState.proofObject, countryState.proofObject, emailState.proofObject, mdlState.proofObject, getSDK, setDemoState, launchConfetti]);
 
   /* ── Smooth scroll ── */
   const scrollTo = useCallback((id: string) => {
@@ -696,7 +812,7 @@ export default function LandingPage() {
 
   /* ── Render helpers for demo cards ── */
   const renderDemoCard = (
-    prefix: 'kyc' | 'country' | 'email',
+    prefix: 'kyc' | 'country' | 'email' | 'mdl',
     state: DemoState,
   ) => {
     const isMobile = typeof window !== 'undefined' && isMobileDevice();
@@ -1463,6 +1579,189 @@ export default function LandingPage() {
 
             </div>
 
+            {/* ── Korea Mobile ID (mDL) Demo Card ── */}
+            <div
+              id="demo-mdl"
+              onMouseEnter={() => setHoveredDemoCard('mdl')}
+              onMouseLeave={() => setHoveredDemoCard(null)}
+              style={{
+                flex: '2 1 0',
+                background: hoveredDemoCard === 'mdl' ? C.bgCardHover : C.bgCard,
+                border: `1.5px solid ${C.goldLine}`,
+                borderRadius: 0,
+                padding: 36,
+                transition: 'all 0.3s',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ fontSize: 36, filter: 'drop-shadow(0 4px 12px rgba(214, 177, 92, 0.3))' }}>
+                  {'🇰🇷'}
+                </div>
+                <span style={{
+                  fontFamily: FONT.mono, fontSize: '1rem', fontWeight: 700, letterSpacing: '0.08em',
+                  padding: '4px 10px', borderRadius: 4,
+                  background: 'rgba(52,211,153,0.15)', color: '#34d399',
+                }}>LIVE</span>
+              </div>
+              <h3 style={{ fontFamily: FONT.serif, fontSize: '2rem', fontWeight: 400, marginBottom: 10, color: C.cream }}>Korea Mobile ID</h3>
+              <p style={{ color: C.muted, marginBottom: 20, fontFamily: FONT.mono, fontSize: '1.2rem', lineHeight: 1.6, flex: 1 }}>
+                Prove license ownership, age, or region from a Korean mobile ID — the license data never leaves the device.
+              </p>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: '1.1rem', fontFamily: FONT.mono }}>
+                <div style={{ flex: 1 }}>
+                  <strong style={{ color: C.gold2, display: 'block', marginBottom: 4, fontSize: '1rem', letterSpacing: '0.05em' }}>PROVE</strong>
+                  <span style={{ color: C.muted }}>
+                    {mdlVariant === 'ownership' ? 'Valid license' : mdlVariant === 'age' ? 'Minimum age' : 'Region residency'}
+                  </span>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <strong style={{ color: C.gold2, display: 'block', marginBottom: 4, fontSize: '1rem', letterSpacing: '0.05em' }}>HIDE</strong>
+                  <span style={{ color: C.muted }}>
+                    {mdlVariant === 'ownership' ? 'Identity details' : mdlVariant === 'age' ? 'Birth date' : 'Full address'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Predicate selector */}
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: '1.1rem', fontWeight: 500, fontFamily: FONT.mono, color: C.ink }}>
+                  Predicate
+                </label>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {([
+                    { key: 'ownership', label: 'Ownership' },
+                    { key: 'age', label: 'Age' },
+                    { key: 'region', label: 'Region' },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setMdlVariant(opt.key)}
+                      style={{
+                        flex: '1 1 0',
+                        padding: '6px 8px',
+                        background: mdlVariant === opt.key ? C.gold : 'rgba(255, 255, 255, 0.05)',
+                        border: `1px solid ${mdlVariant === opt.key ? C.gold : 'rgba(255, 255, 255, 0.1)'}`,
+                        borderRadius: 6,
+                        color: mdlVariant === opt.key ? '#1a222c' : C.muted,
+                        fontSize: '0.9rem',
+                        fontFamily: FONT.mono,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Per-predicate input */}
+              {mdlVariant === 'age' && (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: '1.1rem', fontWeight: 500, fontFamily: FONT.mono, color: C.ink }}>
+                    Minimum Age
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={150}
+                    value={mdlAgeThreshold}
+                    onChange={(e) => setMdlAgeThreshold(e.target.value)}
+                    placeholder="19"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: 8,
+                      color: C.white,
+                      fontSize: '1.2rem',
+                      fontFamily: FONT.mono,
+                      transition: 'all 0.2s',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = C.gold;
+                      e.target.style.background = 'rgba(255, 255, 255, 0.08)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                    }}
+                  />
+                </div>
+              )}
+              {mdlVariant === 'region' && (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: '1.1rem', fontWeight: 500, fontFamily: FONT.mono, color: C.ink }}>
+                    Target Region (si/do)
+                  </label>
+                  <input
+                    type="text"
+                    value={mdlTargetRegion}
+                    onChange={(e) => setMdlTargetRegion(e.target.value)}
+                    placeholder="경기도"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: 8,
+                      color: C.white,
+                      fontSize: '1.2rem',
+                      fontFamily: FONT.mono,
+                      transition: 'all 0.2s',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = C.gold;
+                      e.target.style.background = 'rgba(255, 255, 255, 0.08)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                    }}
+                  />
+                </div>
+              )}
+              {mdlVariant === 'ownership' && (
+                <div style={{ marginBottom: 16, fontFamily: FONT.mono, fontSize: '1rem', color: C.muted }}>
+                  Anonymous mode — proves a valid license without disclosing any attribute.
+                </div>
+              )}
+
+              <button
+                onClick={requestMdlProof}
+                onMouseEnter={() => setHoveredBtn('mdl-request')}
+                onMouseLeave={() => setHoveredBtn(null)}
+                style={{
+                  width: '100%',
+                  padding: '12px 20px',
+                  fontSize: '1.2rem',
+                  fontWeight: 700,
+                  fontFamily: FONT.mono,
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  transition: 'all 0.25s',
+                  background: `linear-gradient(180deg, ${C.gold}, ${C.gold2})`,
+                  color: '#1a222c',
+                  boxShadow: hoveredBtn === 'mdl-request'
+                    ? '0 10px 28px rgba(214, 177, 92, 0.5), inset 0 1px 0 rgba(255,255,255,.8)'
+                    : '0 6px 18px rgba(214, 177, 92, 0.3), inset 0 1px 0 rgba(255,255,255,.6)',
+                  transform: hoveredBtn === 'mdl-request' ? 'translateY(-1px)' : 'none',
+                }}
+              >
+                Request Proof
+              </button>
+
+            </div>
+
           </div>
 
         </div>
@@ -1674,16 +1973,24 @@ export default function LandingPage() {
               color: C.cream,
               marginBottom: 8,
             }}>
-              {proofModalPrefix === 'kyc' ? '🛡️ KYC Verification' : proofModalPrefix === 'country' ? '🌍 Country Attestation' : '📧 Email Domain'}
+              {proofModalPrefix === 'kyc'
+                ? '🛡️ KYC Verification'
+                : proofModalPrefix === 'country'
+                  ? '🌍 Country Attestation'
+                  : proofModalPrefix === 'email'
+                    ? '📧 Email Domain'
+                    : '🇰🇷 Korea Mobile ID'}
             </h3>
             <p style={{ fontFamily: FONT.mono, fontSize: '1rem', color: C.muted, marginBottom: 16 }}>
               {proofModalPrefix === 'kyc'
                 ? 'Scan the QR code with ZKProofport app to generate a proof.'
                 : proofModalPrefix === 'country'
                   ? 'Scan the QR code with ZKProofport app to prove country eligibility.'
-                  : 'Scan the QR code with ZKProofport app to prove email domain affiliation.'}
+                  : proofModalPrefix === 'email'
+                    ? 'Scan the QR code with ZKProofport app to prove email domain affiliation.'
+                    : 'Scan the QR code with ZKProofport app to prove your Korean mobile ID.'}
             </p>
-            {renderDemoCard(proofModalPrefix, proofModalPrefix === 'kyc' ? kycState : proofModalPrefix === 'country' ? countryState : emailState)}
+            {renderDemoCard(proofModalPrefix, proofModalPrefix === 'kyc' ? kycState : proofModalPrefix === 'country' ? countryState : proofModalPrefix === 'email' ? emailState : mdlState)}
           </div>
         </div>
       )}

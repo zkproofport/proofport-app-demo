@@ -6,10 +6,12 @@
     "dev": "next dev -p 3300",
     "build": "next build",
     "start": "next start -p 3300",
-    "lint": "next lint"
+    "lint": "next lint",
+    "sdk:local": "npm install --no-save ../proofport-app-sdk && node -e \"console.log('Using LOCAL SDK build (node_modules only; package.json untouched)')\"",
+    "sdk:npm": "npm ci && node -e \"console.log('Restored npm-published SDK from lockfile')\""
   },
   "dependencies": {
-    "@zkproofport-app/sdk": "^0.2.5",
+    "@zkproofport-app/sdk": "^0.2.8",
     "ethers": "^6.16.0",
     "next": "^15.3.2",
     "react": "^19.1.0",

@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start -p 3300",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "sdk:local": "npm install --no-save ../proofport-app-sdk && node -e \"console.log('Using LOCAL SDK build (node_modules only; package.json untouched)')\"",
     "sdk:npm": "npm ci && node -e \"console.log('Restored npm-published SDK from lockfile')\""
   },
@@ -23,6 +25,7 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.11"
   }
 }

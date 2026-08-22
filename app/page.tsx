@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createSDK } from '@/lib/sdk';
+import { isMobileDevice } from '@/lib/device';
+import { getReturnSchemeForRequest } from '@/lib/returnScheme';
 import type {
   ProofportSDK as ProofportSDKType,
   RelayProofResult,
@@ -67,11 +69,6 @@ type ProofResultExt = RelayProofResult & {
 };
 
 /* ─── Helpers ─── */
-function isMobileDevice(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-}
-
 function copyToClipboard(text: string): Promise<void> {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     return navigator.clipboard.writeText(text);
@@ -422,6 +419,11 @@ export default function LandingPage() {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message: 'Prove your Coinbase KYC identity verification',
+        // Conditional on purpose: only the mobile flow proves on this same
+        // device, so only it should be switched back to. On desktop the phone
+        // that scanned the QR would open this page on the wrong device.
+        // See lib/returnScheme.ts — do not make this unconditional.
+        returnScheme: getReturnSchemeForRequest(),
       });
       console.log('[requestKycProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 
@@ -486,6 +488,9 @@ export default function LandingPage() {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message: 'Prove your Coinbase country of residence',
+        // Mobile flow only — see the note on the KYC request above and
+        // lib/returnScheme.ts. Not an oversight when it resolves to undefined.
+        returnScheme: getReturnSchemeForRequest(),
       });
       console.log('[requestCountryProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 
@@ -551,6 +556,9 @@ export default function LandingPage() {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message: emailProvider ? 'Prove your organization membership' : 'Prove your email domain affiliation',
+        // Mobile flow only — see the note on the KYC request above and
+        // lib/returnScheme.ts. Not an oversight when it resolves to undefined.
+        returnScheme: getReturnSchemeForRequest(),
       });
       console.log('[requestEmailProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 
@@ -650,6 +658,9 @@ export default function LandingPage() {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message,
+        // Mobile flow only — see the note on the KYC request above and
+        // lib/returnScheme.ts. Not an oversight when it resolves to undefined.
+        returnScheme: getReturnSchemeForRequest(),
       });
       console.log('[requestMdlProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 

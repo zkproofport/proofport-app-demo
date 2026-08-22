@@ -1,19 +1,33 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
 /** vitest runs with the package root as cwd. */
 const PAGE_PATH = join(process.cwd(), 'app', 'page.tsx');
 
 /**
- * Contract-invocation guard.
+ * Contract-invocation guard, inverted.
  *
- * `returnScheme` is invisible end to end if a single request forgets to ask for
- * it, and nothing else in the suite would notice: the SDK, the relay and the
- * app all treat an absent field as a legitimate "no app switch". So this test
- * reads the page source and asserts every relay request routes the decision
- * through `getReturnSchemeForRequest()` — a fifth proof card added later
- * without it fails here.
+ * This file used to assert that every relay request passed a `returnScheme`.
+ * It now asserts the opposite, and the reason matters enough to write down
+ * where the next person will hit it.
+ *
+ * `returnScheme` names an APP for ZKProofport to bring back to the foreground.
+ * This demo is a web page; it has no app, so it has nothing valid to send. It
+ * used to send `window.location.origin`, which on a real device made
+ * ZKProofport open `https://demo.zkproofport.app` — and iOS handed that to the
+ * browser, which opened a NEW TAB on a freshly loaded page. The tab the user
+ * started in, and the live relay socket waiting for the proof, were abandoned.
+ * The https-origin form is now rejected by the relay, the SDK and the app.
+ *
+ * With nothing sent, the SDK fills in `googlechrome://` when the page is
+ * running in Chrome for iOS (the one browser with a scheme that foregrounds
+ * without navigating), Android backgrounds the ZKProofport app so the browser
+ * resumes untouched, and everywhere else the user is told the proof was
+ * delivered and to switch back themselves.
+ *
+ * So these assertions exist to stop an origin being reintroduced by someone who
+ * reads its absence as an oversight.
  */
 
 const PAGE = readFileSync(PAGE_PATH, 'utf-8');
@@ -33,32 +47,49 @@ function callSites(source: string): string[] {
   }
 }
 
-describe('app/page.tsx — every relay request decides on returnScheme', () => {
+describe('app/page.tsx — no relay request names a return target', () => {
   const sites = callSites(PAGE);
 
   it('still has the four proof requests this demo ships', () => {
-    // Not an upper bound: a fifth card is fine, it just has to pass the next
-    // assertion too.
+    // Not an upper bound: a fifth card is fine, it just has to pass the rest.
     expect(sites.length).toBeGreaterThanOrEqual(4);
   });
 
   it.each(sites.map((site, i) => [i, site] as const))(
-    'call site %i passes returnScheme',
+    'call site %i passes no returnScheme option',
     (_i, site) => {
-      expect(site).toContain('returnScheme: getReturnSchemeForRequest()');
+      // Comments mentioning the field are fine and in fact required; an actual
+      // `returnScheme:` property is not.
+      const withoutComments = site.replace(/\/\/[^\n]*/g, '');
+      expect(withoutComments).not.toMatch(/returnScheme\s*:/);
     },
   );
 
-  it('imports the helper rather than inlining a literal', () => {
-    expect(PAGE).toContain(
-      "import { getReturnSchemeForRequest } from '@/lib/returnScheme'",
-    );
+  it('hardcodes no origin as a return target anywhere on the page', () => {
+    const withoutComments = PAGE.replace(/\/\/[^\n]*/g, '');
+    expect(withoutComments).not.toMatch(/returnScheme\s*:/);
+    expect(withoutComments).not.toContain('demo.zkproofport.app');
   });
 
-  it('hardcodes no environment origin as a return target', () => {
-    for (const site of sites) {
-      expect(site).not.toMatch(/returnScheme:\s*['"`]/);
-    }
+  it('no longer imports a return-target helper', () => {
+    expect(PAGE).not.toContain('getReturnSchemeForRequest');
+    expect(PAGE).not.toContain("from '@/lib/returnScheme'");
+  });
+
+  it('keeps the explanation of why nothing is sent', () => {
+    // The module that used to hold this reasoning is deleted. If the comment
+    // goes too, the next person reads the absence as a bug and "fixes" it.
+    expect(PAGE).toContain('DELIBERATE');
+    expect(PAGE).toContain('googlechrome://');
+    expect(PAGE).toContain('moveTaskToBack');
+  });
+});
+
+describe('lib/returnScheme.ts — deleted, and staying deleted', () => {
+  it('does not exist', () => {
+    // It derived an https origin, which is exactly the form that is now
+    // rejected end to end. Reviving it would revive the new-tab bug.
+    expect(existsSync(join(process.cwd(), 'lib', 'returnScheme.ts'))).toBe(false);
   });
 });
 

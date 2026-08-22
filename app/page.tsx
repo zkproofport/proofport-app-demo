@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createSDK } from '@/lib/sdk';
 import { isMobileDevice } from '@/lib/device';
-import { getReturnSchemeForRequest } from '@/lib/returnScheme';
 import type {
   ProofportSDK as ProofportSDKType,
   RelayProofResult,
@@ -419,11 +418,41 @@ export default function LandingPage() {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message: 'Prove your Coinbase KYC identity verification',
-        // Conditional on purpose: only the mobile flow proves on this same
-        // device, so only it should be switched back to. On desktop the phone
-        // that scanned the QR would open this page on the wrong device.
-        // See lib/returnScheme.ts — do not make this unconditional.
-        returnScheme: getReturnSchemeForRequest(),
+        // NO `returnScheme` HERE, AND THAT IS DELIBERATE — please read before
+        // "fixing" it.
+        //
+        // `returnScheme` names an APP for ZKProofport to bring forward when it
+        // is done. This demo is a web page. It has no app, so there is nothing
+        // it can honestly put here.
+        //
+        // It used to send `window.location.origin` (there was a whole
+        // `lib/returnScheme.ts` deriving it). That was wrong on a real device:
+        // ZKProofport called `openURL('https://demo.zkproofport.app')`, iOS
+        // handed the URL to the browser, and the browser opened a NEW TAB on a
+        // freshly loaded page — abandoning the tab the user started in along
+        // with all of its JavaScript state, including the live relay socket
+        // waiting for this very proof. The round trip the field exists to
+        // complete was exactly what it destroyed. The https-origin form is now
+        // rejected by the relay, the SDK and the app alike.
+        //
+        // What happens instead, with nothing sent:
+        //   - Chrome for iOS: the SDK notices `CriOS` in the user agent and
+        //     fills in `googlechrome://` by itself. Opening that scheme BARE
+        //     foregrounds Chrome without navigating, so the user lands back on
+        //     this exact tab, no reload. Firefox for iOS (`FxiOS`) gets
+        //     `firefox://` the same way.
+        //   - Android: ZKProofport calls `moveTaskToBack`, and the browser
+        //     resumes exactly as it was. Nothing needs to be sent.
+        //   - Safari / Brave / Arc / Edge / Opera / in-app webviews: nothing is sent and
+        //     ZKProofport tells the user the proof was delivered and to switch
+        //     back themselves. Brave and Arc are indistinguishable from Safari
+        //     on iOS, so guessing a browser scheme would eject people into a
+        //     browser they were not using — worse than doing nothing.
+        //   - Desktop: this is the QR flow, the proof runs on a different
+        //     device entirely, and this page updates over the relay socket.
+        //
+        // So: a native app integrator passes its own scheme; a web page passes
+        // nothing. Do not reintroduce an origin here.
       });
       console.log('[requestKycProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 
@@ -488,9 +517,8 @@ export default function LandingPage() {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message: 'Prove your Coinbase country of residence',
-        // Mobile flow only — see the note on the KYC request above and
-        // lib/returnScheme.ts. Not an oversight when it resolves to undefined.
-        returnScheme: getReturnSchemeForRequest(),
+        // No `returnScheme` — see the note on the KYC request above. A web
+        // page has no app to hand control back to; the SDK decides.
       });
       console.log('[requestCountryProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 
@@ -556,9 +584,8 @@ export default function LandingPage() {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message: emailProvider ? 'Prove your organization membership' : 'Prove your email domain affiliation',
-        // Mobile flow only — see the note on the KYC request above and
-        // lib/returnScheme.ts. Not an oversight when it resolves to undefined.
-        returnScheme: getReturnSchemeForRequest(),
+        // No `returnScheme` — see the note on the KYC request above. A web
+        // page has no app to hand control back to; the SDK decides.
       });
       console.log('[requestEmailProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 
@@ -658,9 +685,8 @@ export default function LandingPage() {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message,
-        // Mobile flow only — see the note on the KYC request above and
-        // lib/returnScheme.ts. Not an oversight when it resolves to undefined.
-        returnScheme: getReturnSchemeForRequest(),
+        // No `returnScheme` — see the note on the KYC request above. A web
+        // page has no app to hand control back to; the SDK decides.
       });
       console.log('[requestMdlProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 

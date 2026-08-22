@@ -1,14 +1,17 @@
 /**
  * Single source of truth for "is this page running on a phone / tablet?".
  *
- * Two independent decisions hang off this answer and must never disagree:
- *   1. how the proof request is presented — mobile gets an "Open App" deep-link
- *      button, desktop gets a QR code (`showProofResult` in `app/page.tsx`);
- *   2. whether the request carries a `returnScheme` at all — see
- *      `lib/returnScheme.ts`.
+ * It decides how the proof request is presented: mobile gets an "Open App"
+ * deep-link button, desktop gets a QR code (`showProofResult` in
+ * `app/page.tsx`). Do not re-derive the device from `navigator.userAgent`
+ * anywhere else on the page.
  *
- * They stay consistent by both calling this one function. Do not re-derive the
- * device from `navigator.userAgent` anywhere else.
+ * It used to have a second consumer, `lib/returnScheme.ts`, which decided
+ * whether the request should carry a `returnScheme`. That module is gone: the
+ * only value a web page could produce was its own https origin, and opening one
+ * lands the user in a NEW browser tab rather than the tab they started in. The
+ * demo now sends no `returnScheme` at all and the SDK decides — see the long
+ * note at the first `createRelayRequest` call site in `app/page.tsx`.
  */
 const MOBILE_UA_RE = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
 

@@ -12,6 +12,9 @@ import type {
   MdlKrAgeInputs,
   MdlKrRegionInputs,
 } from '@zkproofport-app/sdk';
+// A value, not a type — the SDK's circuit-id constants. Keeping it out of
+// the `import type` block above matters: TypeScript erases that block.
+import { CIRCUIT_IDS } from '@zkproofport-app/sdk';
 import { ethers } from 'ethers';
 
 /* ─── Color tokens (matching portal-web design system) ─── */
@@ -414,7 +417,7 @@ export default function LandingPage() {
 
     try {
       const sdk = getSDK();
-      const result = await sdk.createRelayRequest('coinbase_attestation', { scope: 'zkproofport:demo' }, {
+      const result = await sdk.createRelayRequest(CIRCUIT_IDS.COINBASE_ATTESTATION, { scope: 'zkproofport:demo' }, {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message: 'Prove your Coinbase KYC identity verification',
@@ -513,7 +516,7 @@ export default function LandingPage() {
 
     try {
       const sdk = getSDK();
-      const result = await sdk.createRelayRequest('coinbase_country_attestation', { countryList: countries, isIncluded }, {
+      const result = await sdk.createRelayRequest(CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION, { countryList: countries, isIncluded }, {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message: 'Prove your Coinbase country of residence',
@@ -580,7 +583,7 @@ export default function LandingPage() {
       const sdk = getSDK();
       const inputs: Record<string, unknown> = { domain: emailDomain.trim().toLowerCase(), scope: 'zkproofport:demo' };
       if (emailProvider) inputs.provider = emailProvider;
-      const result = await sdk.createRelayRequest('oidc_domain_attestation', inputs as any, {
+      const result = await sdk.createRelayRequest(CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION, inputs as any, {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message: emailProvider ? 'Prove your organization membership' : 'Prove your email domain affiliation',
@@ -633,9 +636,9 @@ export default function LandingPage() {
     }
 
     const circuit: CircuitType =
-      mdlVariant === 'ownership' ? 'mdl_kr_ownership'
-      : mdlVariant === 'age' ? 'mdl_kr_age'
-      : 'mdl_kr_region';
+      mdlVariant === 'ownership' ? CIRCUIT_IDS.MDL_KR_OWNERSHIP
+      : mdlVariant === 'age' ? CIRCUIT_IDS.MDL_KR_AGE
+      : CIRCUIT_IDS.MDL_KR_REGION;
 
     let inputs: MdlKrOwnershipInputs | MdlKrAgeInputs | MdlKrRegionInputs;
     let message: string;

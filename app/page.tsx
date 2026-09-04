@@ -174,7 +174,16 @@ export default function LandingPage() {
     copyClass: string;
   };
 
-  const emptyDemoState: DemoState = {
+  /**
+ * Which demo card a proof belongs to.
+ *
+ * This union used to be typed out at every call site, and each dispatch on it
+ * ended in a bare `else` — so a prefix nobody had handled yet silently became
+ * the mDL card. Adding GIWA is what surfaced it.
+ */
+type DemoPrefix = 'kyc' | 'country' | 'email' | 'mdl' | 'giwa';
+
+const emptyDemoState: DemoState = {
     showResult: false,
     showWaiting: false,
     showFailed: false,
@@ -204,6 +213,10 @@ export default function LandingPage() {
   const [emailDomain, setEmailDomain] = useState('gmail.com');
   const [emailProvider, setEmailProvider] = useState<string | undefined>(undefined);
 
+  /* ── GIWA KYC form ── */
+  const [giwaState, setGiwaState] = useState<DemoState>({ ...emptyDemoState });
+  const activeGiwaRequestIdRef = useRef<string | null>(null);
+
   /* ── Korea Mobile ID (mDL) form ── */
   const [mdlState, setMdlState] = useState<DemoState>({ ...emptyDemoState });
   const activeMdlRequestIdRef = useRef<string | null>(null);
@@ -213,7 +226,7 @@ export default function LandingPage() {
 
   /* ── Proof modal ── */
   const [proofModalOpen, setProofModalOpen] = useState(false);
-  const [proofModalPrefix, setProofModalPrefix] = useState<'kyc' | 'country' | 'email' | 'mdl' | null>(null);
+  const [proofModalPrefix, setProofModalPrefix] = useState<DemoPrefix | null>(null);
   const proofModalOpenRef = useRef(false);
 
   /* ── Beta modal ── */
@@ -316,14 +329,32 @@ export default function LandingPage() {
   }, []);
 
   /* ── Show proof helpers ── */
-  const setDemoState = useCallback((prefix: 'kyc' | 'country' | 'email' | 'mdl', updater: (prev: DemoState) => DemoState) => {
-    if (prefix === 'kyc') setKycState(updater);
-    else if (prefix === 'country') setCountryState(updater);
-    else if (prefix === 'email') setEmailState(updater);
-    else setMdlState(updater);
+  /** Clears the in-flight request id for one card. Same table reason as above. */
+  const clearActiveRequestId = useCallback((prefix: DemoPrefix) => {
+    const refs: Record<DemoPrefix, React.MutableRefObject<string | null>> = {
+      kyc: activeKycRequestIdRef,
+      country: activeCountryRequestIdRef,
+      email: activeEmailRequestIdRef,
+      mdl: activeMdlRequestIdRef,
+      giwa: activeGiwaRequestIdRef,
+    };
+    refs[prefix].current = null;
   }, []);
 
-  const showProofReceived = useCallback((prefix: 'kyc' | 'country' | 'email' | 'mdl', proof: ProofResultExt) => {
+  const setDemoState = useCallback((prefix: DemoPrefix, updater: (prev: DemoState) => DemoState) => {
+    // A table, not an if/else ending in `else setMdlState`. Miss a prefix here
+    // and TypeScript says so; the old shape sent it to the mDL card instead.
+    const setters: Record<DemoPrefix, typeof setKycState> = {
+      kyc: setKycState,
+      country: setCountryState,
+      email: setEmailState,
+      mdl: setMdlState,
+      giwa: setGiwaState,
+    };
+    setters[prefix](updater);
+  }, []);
+
+  const showProofReceived = useCallback((prefix: DemoPrefix, proof: ProofResultExt) => {
     const isAlreadyRegistered = proof.onChainStatus === 'already_registered';
     setDemoState(prefix, (prev) => ({
       ...prev,
@@ -341,14 +372,11 @@ export default function LandingPage() {
       proofData: JSON.stringify(proof, null, 2),
       proofObject: proof,
     }));
-    if (prefix === 'kyc') activeKycRequestIdRef.current = null;
-    else if (prefix === 'country') activeCountryRequestIdRef.current = null;
-    else if (prefix === 'email') activeEmailRequestIdRef.current = null;
-    else activeMdlRequestIdRef.current = null;
+    clearActiveRequestId(prefix);
     if (proof.status === 'completed' && !isAlreadyRegistered) launchConfetti();
   }, [setDemoState, launchConfetti]);
 
-  const showProofTimeout = useCallback((prefix: 'kyc' | 'country' | 'email' | 'mdl') => {
+  const showProofTimeout = useCallback((prefix: DemoPrefix) => {
     setDemoState(prefix, (prev) => ({
       ...prev,
       showWaiting: false,
@@ -356,13 +384,10 @@ export default function LandingPage() {
       showFailed: true,
       failedReason: 'The proof request timed out after 3 minutes. Please try again.',
     }));
-    if (prefix === 'kyc') activeKycRequestIdRef.current = null;
-    else if (prefix === 'country') activeCountryRequestIdRef.current = null;
-    else if (prefix === 'email') activeEmailRequestIdRef.current = null;
-    else activeMdlRequestIdRef.current = null;
+    clearActiveRequestId(prefix);
   }, [setDemoState]);
 
-  const showProofFailed = useCallback((prefix: 'kyc' | 'country' | 'email' | 'mdl', reason: string) => {
+  const showProofFailed = useCallback((prefix: DemoPrefix, reason: string) => {
     setDemoState(prefix, (prev) => ({
       ...prev,
       showWaiting: false,
@@ -370,13 +395,10 @@ export default function LandingPage() {
       showFailed: true,
       failedReason: reason,
     }));
-    if (prefix === 'kyc') activeKycRequestIdRef.current = null;
-    else if (prefix === 'country') activeCountryRequestIdRef.current = null;
-    else if (prefix === 'email') activeEmailRequestIdRef.current = null;
-    else activeMdlRequestIdRef.current = null;
+    clearActiveRequestId(prefix);
   }, [setDemoState]);
 
-  const showProofResult = useCallback(async (deepLink: string, prefix: 'kyc' | 'country' | 'email' | 'mdl') => {
+  const showProofResult = useCallback(async (deepLink: string, prefix: DemoPrefix) => {
     console.log(`[showProofResult] prefix=${prefix}, deepLink=${deepLink}, isMobile=${isMobileDevice()}`);
     if (isMobileDevice()) {
       console.log('[showProofResult] Mobile: storing deepLink for Open App button');
@@ -726,9 +748,73 @@ export default function LandingPage() {
     }
   }, [signerReady, mdlVariant, mdlAgeThreshold, mdlTargetRegion, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, handleGenerateWallet]);
 
+  /**
+   * The state object behind one card. Was three separate ternary chains, each
+   * ending in `: mdlState` — so a prefix nobody had wired read the mDL card's
+   * proof. Exhaustive by type now.
+   */
+  const stateOf = useCallback((prefix: DemoPrefix): DemoState => {
+    const states: Record<DemoPrefix, DemoState> = {
+      kyc: kycState, country: countryState, email: emailState,
+      mdl: mdlState, giwa: giwaState,
+    };
+    return states[prefix];
+  }, [kycState, countryState, emailState, mdlState, giwaState]);
+
+  /* ── GIWA KYC request ── */
+  /**
+   * Same input shape as Coinbase KYC — a scope, and the app connects the wallet.
+   * The app's deep-link validation treats giwa_attestation exactly like
+   * coinbase_attestation (see proofport-app/src/utils/deeplink.ts).
+   *
+   * GIWA is `planned` in the SDK's support table, so this card is labelled
+   * EXPERIMENTAL. It also always talks to GIWA Sepolia regardless of the build
+   * environment, because the app pins that chain per-circuit.
+   */
+  const requestGiwaProof = useCallback(async () => {
+    setProofModalPrefix('giwa');
+    setProofModalOpen(true);
+    proofModalOpenRef.current = true;
+    setGiwaState((prev) => ({
+      ...prev,
+      showReceived: false,
+      showWaiting: false,
+      showFailed: false,
+      showVerifyResult: false,
+    }));
+
+    try {
+      const sdk = getSDK();
+      const result = await sdk.createRelayRequest(CIRCUIT_IDS.GIWA_ATTESTATION, { scope: 'zkproofport:demo' }, {
+        dappName: 'ZKProofport Demo',
+        dappIcon: 'https://demo.zkproofport.app/icon.png',
+        message: 'Prove your GIWA account verification',
+        // No returnScheme — see the long note on the KYC request above.
+      });
+      activeGiwaRequestIdRef.current = result.requestId;
+
+      const deepLink = result.deepLink;
+      await showProofResult(deepLink, 'giwa');
+      setGiwaState((prev) => ({ ...prev, showResult: true, showWaiting: true }));
+
+      const finalResult = await sdk.waitForProof(result.requestId, { timeoutMs: 180000 });
+      if (finalResult.status === 'completed') {
+        showProofReceived('giwa', finalResult as ProofResultExt);
+      } else {
+        showProofFailed('giwa', finalResult.error || 'Proof generation failed');
+      }
+    } catch (err) {
+      if ((err as Error).message?.includes('timeout')) {
+        showProofTimeout('giwa');
+      } else {
+        showProofFailed('giwa', (err as Error).message);
+      }
+    }
+  }, [getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout]);
+
   /* ── Copy proof ── */
-  const handleCopyProof = useCallback((prefix: 'kyc' | 'country' | 'email' | 'mdl') => {
-    const data = prefix === 'kyc' ? kycState.proofData : prefix === 'country' ? countryState.proofData : prefix === 'email' ? emailState.proofData : mdlState.proofData;
+  const handleCopyProof = useCallback((prefix: DemoPrefix) => {
+    const data = stateOf(prefix).proofData;
     if (data) {
       copyToClipboard(data).then(() => {
         setDemoState(prefix, (prev) => ({ ...prev, copyLabel: 'Copied!', copyClass: 'copied' }));
@@ -740,8 +826,8 @@ export default function LandingPage() {
   }, [kycState.proofData, countryState.proofData, emailState.proofData, mdlState.proofData, setDemoState]);
 
   /* ── Verify proof ── */
-  const handleVerifyProof = useCallback(async (prefix: 'kyc' | 'country' | 'email' | 'mdl', type: 'onchain' | 'offchain') => {
-    const proof = prefix === 'kyc' ? kycState.proofObject : prefix === 'country' ? countryState.proofObject : prefix === 'email' ? emailState.proofObject : mdlState.proofObject;
+  const handleVerifyProof = useCallback(async (prefix: DemoPrefix, type: 'onchain' | 'offchain') => {
+    const proof = stateOf(prefix).proofObject;
     if (!proof || proof.status !== 'completed') return;
 
     setDemoState(prefix, (prev) => ({
@@ -852,7 +938,7 @@ export default function LandingPage() {
 
   /* ── Render helpers for demo cards ── */
   const renderDemoCard = (
-    prefix: 'kyc' | 'country' | 'email' | 'mdl',
+    prefix: DemoPrefix,
     state: DemoState,
   ) => {
     const isMobile = typeof window !== 'undefined' && isMobileDevice();
@@ -1639,11 +1725,16 @@ export default function LandingPage() {
                 <div style={{ fontSize: 36, filter: 'drop-shadow(0 4px 12px rgba(214, 177, 92, 0.3))' }}>
                   {'🇰🇷'}
                 </div>
+                {/* The Korea Mobile ID circuits are `planned` in the SDK's own
+                    support table, not `supported`: their input shape and
+                    public-input layout can still change without a major
+                    version. Saying LIVE here promised a stability the circuits
+                    do not have yet. */}
                 <span style={{
                   fontFamily: FONT.mono, fontSize: '1rem', fontWeight: 700, letterSpacing: '0.08em',
                   padding: '4px 10px', borderRadius: 4,
-                  background: 'rgba(52,211,153,0.15)', color: '#34d399',
-                }}>LIVE</span>
+                  background: 'rgba(251,191,36,0.15)', color: '#fbbf24',
+                }}>EXPERIMENTAL</span>
               </div>
               <h3 style={{ fontFamily: FONT.serif, fontSize: '2rem', fontWeight: 400, marginBottom: 10, color: C.cream }}>Korea Mobile ID</h3>
               <p style={{ color: C.muted, marginBottom: 20, fontFamily: FONT.mono, fontSize: '1.2rem', lineHeight: 1.6, flex: 1 }}>
@@ -1801,6 +1892,75 @@ export default function LandingPage() {
               </button>
 
             </div>
+
+            {/* ── GIWA KYC Demo Card ── */}
+            {/* GIWA is `planned` in the SDK's support table, and it always talks
+                to GIWA Sepolia whatever the build environment — the app pins the
+                chain per circuit. Hence EXPERIMENTAL, not LIVE. */}
+            <div
+              id="demo-giwa"
+              onMouseEnter={() => setHoveredDemoCard('giwa')}
+              onMouseLeave={() => setHoveredDemoCard(null)}
+              style={{
+                flex: '2 1 0',
+                background: hoveredDemoCard === 'giwa' ? C.bgCardHover : C.bgCard,
+                border: `1.5px solid ${C.goldLine}`,
+                borderRadius: 0,
+                padding: 36,
+                transition: 'all 0.3s',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                {/* GIWA's own mark (two roof tiles — 기와). It ships black on
+                    white, and this card is dark, so it is inverted rather than
+                    re-drawn. The first version of this card used the Japanese
+                    castle emoji, which is the wrong country for a Korean chain. */}
+                <img
+                  src="/giwa-logo.jpg"
+                  alt="GIWA"
+                  width={38}
+                  height={38}
+                  style={{ filter: 'invert(1)', display: 'block' }}
+                />
+                <span style={{
+                  fontFamily: FONT.mono, fontSize: '1rem', fontWeight: 700, letterSpacing: '0.08em',
+                  padding: '4px 10px', borderRadius: 4,
+                  background: 'rgba(251,191,36,0.15)', color: '#fbbf24',
+                }}>EXPERIMENTAL</span>
+              </div>
+              <h3 style={{ fontFamily: FONT.serif, fontSize: '2rem', fontWeight: 400, marginBottom: 10, color: C.cream }}>GIWA Account</h3>
+              <p style={{ color: C.muted, marginBottom: 20, fontFamily: FONT.mono, fontSize: '1.2rem', lineHeight: 1.6, flex: 1 }}>
+                Prove a verified account on GIWA, Dunamu&apos;s Ethereum L2 — without revealing the wallet. Runs against GIWA Sepolia.
+              </p>
+              <button
+                onClick={requestGiwaProof}
+                onMouseEnter={() => setHoveredBtn('giwa-request')}
+                onMouseLeave={() => setHoveredBtn(null)}
+                style={{
+                  width: '100%',
+                  padding: '12px 20px',
+                  fontSize: '1.2rem',
+                  fontWeight: 700,
+                  fontFamily: FONT.mono,
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  transition: 'all 0.25s',
+                  background: `linear-gradient(180deg, ${C.gold}, ${C.gold2})`,
+                  color: '#1a222c',
+                  boxShadow: hoveredBtn === 'giwa-request'
+                    ? '0 10px 28px rgba(214, 177, 92, 0.5), inset 0 1px 0 rgba(255,255,255,.8)'
+                    : '0 6px 18px rgba(214, 177, 92, 0.3), inset 0 1px 0 rgba(255,255,255,.6)',
+                  transform: hoveredBtn === 'giwa-request' ? 'translateY(-1px)' : 'none',
+                }}
+              >
+                Request Proof
+              </button>
+
+            </div>
+
 
           </div>
 
@@ -2030,7 +2190,7 @@ export default function LandingPage() {
                     ? 'Scan the QR code with ZKProofport app to prove email domain affiliation.'
                     : 'Scan the QR code with ZKProofport app to prove your Korean mobile ID.'}
             </p>
-            {renderDemoCard(proofModalPrefix, proofModalPrefix === 'kyc' ? kycState : proofModalPrefix === 'country' ? countryState : proofModalPrefix === 'email' ? emailState : mdlState)}
+            {renderDemoCard(proofModalPrefix, stateOf(proofModalPrefix))}
           </div>
         </div>
       )}

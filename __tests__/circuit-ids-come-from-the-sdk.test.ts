@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { ALL_CIRCUIT_IDS, CIRCUIT_IDS } from '@zkproofport-app/sdk';
+import { ALL_CIRCUIT_IDS, CIRCUIT_IDS, CIRCUIT_SUPPORT_STATUS } from '@zkproofport-app/sdk';
+
+/** `mdl_kr_age` -> `MDL_KR_AGE`, the key the page writes. */
+const idConstantName = (id: string) => id.toUpperCase();
 
 /** vitest runs with the package root as cwd. */
 const PAGE_PATH = join(process.cwd(), 'app', 'page.tsx');
@@ -48,6 +51,30 @@ describe('circuit ids in the demo come from the SDK', () => {
       // (the mDL variant ternary does that).
       expect(call).toMatch(/CIRCUIT_IDS\.|createRelayRequest\(\s*circuit\s*,/);
     }
+  });
+
+  it('a planned circuit is not advertised as LIVE', () => {
+    // The demo puts a badge on each circuit card. Saying LIVE for a circuit the
+    // SDK still calls `planned` promises a stability it does not have — the
+    // input shape and public-input layout can change without a major version.
+    // The Korea Mobile ID card said LIVE until 2026-09-04.
+    //
+    // Counts, not positions: the badge markup is far from the id in the file,
+    // so this pins how many of each there are and leaves the pairing to review.
+    const live = (page.match(/>LIVE<\/span>/g) || []).length;
+    const experimental = (page.match(/>EXPERIMENTAL<\/span>/g) || []).length;
+
+    const plannedInUse = ALL_CIRCUIT_IDS.filter(
+      id => CIRCUIT_SUPPORT_STATUS[id] === 'planned' && page.includes(idConstantName(id)),
+    );
+    const supportedInUse = ALL_CIRCUIT_IDS.filter(
+      id => CIRCUIT_SUPPORT_STATUS[id] === 'supported' && page.includes(idConstantName(id)),
+    );
+
+    // The three mDL variants share one card, so cards are counted by family.
+    const plannedFamilies = new Set(plannedInUse.map(id => id.replace(/_(ownership|age|region)$/, '')));
+    expect(experimental).toBe(plannedFamilies.size);
+    expect(live).toBe(supportedInUse.length);
   });
 
   it('the constants it names actually exist in the SDK', () => {

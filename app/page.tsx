@@ -183,6 +183,61 @@ export default function LandingPage() {
  */
 type DemoPrefix = 'kyc' | 'country' | 'email' | 'mdl' | 'giwa';
 
+/**
+ * What the proof-request window says, per circuit.
+ *
+ * A TABLE, NOT A CHAIN OF `?:`. The chain this replaced ended in a bare else
+ * holding the Korea Mobile ID wording, so asking for a GIWA proof opened a
+ * window titled "🇰🇷 Korea Mobile ID" telling the person to prove their Korean
+ * mobile ID. Nothing failed; it just said the wrong thing, and it kept saying
+ * it until someone read the screen.
+ *
+ * `Record<DemoPrefix, …>` is the point: adding a circuit to DemoPrefix without
+ * adding its wording here does not build. The failure moves from "a person
+ * eventually notices the window is lying" to "npm run build says which circuit
+ * is missing", which is the whole difference between a silent default and a
+ * detected one.
+ */
+const MODAL_COPY: Record<DemoPrefix, {title: string; instruction: string}> = {
+  kyc: {
+    title: '🛡️ KYC Verification',
+    instruction: 'Scan the QR code with ZKProofport app to generate a proof.',
+  },
+  country: {
+    title: '🌍 Country Attestation',
+    instruction: 'Scan the QR code with ZKProofport app to prove country eligibility.',
+  },
+  email: {
+    title: '📧 Email Domain',
+    instruction: 'Scan the QR code with ZKProofport app to prove email domain affiliation.',
+  },
+  mdl: {
+    title: '🇰🇷 Korea Mobile ID',
+    instruction: 'Scan the QR code with ZKProofport app to prove your Korean mobile ID.',
+  },
+  giwa: {
+    title: 'GIWA Account',
+    instruction: 'Scan the QR code with ZKProofport app to prove a verified GIWA account.',
+  },
+};
+
+/**
+ * Throws rather than falling back. A missing row can only happen if something
+ * cast its way past DemoPrefix, and showing one circuit's name over another
+ * circuit's proof is worse than a visible crash: the person has no way to tell
+ * they are looking at the wrong thing.
+ */
+function modalCopy(prefix: DemoPrefix): {title: string; instruction: string} {
+  const copy = MODAL_COPY[prefix];
+  if (!copy) {
+    throw new Error(
+      `No proof-request window wording for circuit "${prefix}". ` +
+        `Add a row to MODAL_COPY — never let it borrow another circuit's name.`,
+    );
+  }
+  return copy;
+}
+
 const emptyDemoState: DemoState = {
     showResult: false,
     showWaiting: false,
@@ -848,7 +903,15 @@ const emptyDemoState: DemoState = {
         verifierAddress: proof.verifierAddress,
         chainId: proof.chainId,
       };
-      const result = await sdk.verifyResponseOnChain(proofResponse);
+      // Two buttons, two different checks. Until 2026-09-04 both called
+      // verifyResponseOnChain and only the label changed, so "Off-Chain
+      // Verification Passed!" was printed by an on-chain verification — true
+      // answer, wrong claim, and identical timings that made the two look the
+      // same to anyone watching. It was that way from this page's first commit.
+      const result =
+        type === 'onchain'
+          ? await sdk.verifyResponseOnChain(proofResponse)
+          : await sdk.verifyResponseOffChain(proofResponse);
       if (result.valid) {
         setDemoState(prefix, (prev) => ({
           ...prev,
@@ -870,7 +933,11 @@ const emptyDemoState: DemoState = {
         verifyResultContent: `Verification Error: ${(err as Error).message || err}`,
       }));
     }
-  }, [kycState.proofObject, countryState.proofObject, emailState.proofObject, mdlState.proofObject, getSDK, setDemoState, launchConfetti]);
+    // Every circuit's proof, GIWA included. It was left out when GIWA was
+    // added, so verifying a GIWA proof could read whatever proof this callback
+    // was built with — and a stale proof verifies as someone else's answer
+    // rather than failing.
+  }, [kycState.proofObject, countryState.proofObject, emailState.proofObject, mdlState.proofObject, giwaState.proofObject, getSDK, setDemoState, launchConfetti]);
 
   /* ── Smooth scroll ── */
   const scrollTo = useCallback((id: string) => {
@@ -1913,10 +1980,13 @@ const emptyDemoState: DemoState = {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                {/* GIWA's own mark (two roof tiles — 기와). It ships black on
-                    white, and this card is dark, so it is inverted rather than
-                    re-drawn. The first version of this card used the Japanese
-                    castle emoji, which is the wrong country for a Korean chain. */}
+                {/* GIWA's own mark. It ships black on white, and this card is
+                    dark, so it is inverted rather than re-drawn.
+
+                    The mark, not a flag: GIWA is a chain and its attestations
+                    are open to anyone on it. The one card on this page that DOES
+                    carry 🇰🇷 is Korea Mobile ID, where the credential itself is
+                    issued by one country. */}
                 <img
                   src="/giwa-logo.jpg"
                   alt="GIWA"
@@ -2173,22 +2243,10 @@ const emptyDemoState: DemoState = {
               color: C.cream,
               marginBottom: 8,
             }}>
-              {proofModalPrefix === 'kyc'
-                ? '🛡️ KYC Verification'
-                : proofModalPrefix === 'country'
-                  ? '🌍 Country Attestation'
-                  : proofModalPrefix === 'email'
-                    ? '📧 Email Domain'
-                    : '🇰🇷 Korea Mobile ID'}
+              {modalCopy(proofModalPrefix).title}
             </h3>
             <p style={{ fontFamily: FONT.mono, fontSize: '1rem', color: C.muted, marginBottom: 16 }}>
-              {proofModalPrefix === 'kyc'
-                ? 'Scan the QR code with ZKProofport app to generate a proof.'
-                : proofModalPrefix === 'country'
-                  ? 'Scan the QR code with ZKProofport app to prove country eligibility.'
-                  : proofModalPrefix === 'email'
-                    ? 'Scan the QR code with ZKProofport app to prove email domain affiliation.'
-                    : 'Scan the QR code with ZKProofport app to prove your Korean mobile ID.'}
+              {modalCopy(proofModalPrefix).instruction}
             </p>
             {renderDemoCard(proofModalPrefix, stateOf(proofModalPrefix))}
           </div>

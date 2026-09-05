@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Madang: an open courtyard</title>
+  <path d="M8 52V25C8 14 21 10 32 21C43 10 56 14 56 25V52H45V28C45 24 42 24 38 28L32 34L26 28C22 24 19 24 19 28V52H8Z" fill="#385c38"/>
+  <circle cx="32" cy="47" r="6" fill="#385c38"/>
+</svg>

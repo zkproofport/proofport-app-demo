@@ -1,0 +1,42 @@
+'use client';
+
+import { useState, type ReactNode } from 'react';
+import { ArrowDown, ArrowUpRight, Check, Fingerprint, GlobeHemisphereWest, IdentificationCard, LockKey, ChatCircle, Prohibit } from '@phosphor-icons/react';
+import type { DemoDefinition, DemoId } from '@/lib/demo-catalog';
+import type { DemoOptions } from '@/lib/demo-policy';
+import MadangBenefits from './MadangBenefits';
+
+type Props = { demo: DemoDefinition; options: DemoOptions; panel: ReactNode; onSelect: (id: DemoId) => void; verified: boolean };
+
+export default function DemoExperience({ demo, options, panel, onSelect, verified }: Props) {
+  const [market, setMarket] = useState('Supply');
+  const [topic, setTopic] = useState('Engineering');
+  const header = <header className="experience-masthead"><div className="experience-wordmark">{demo.brand}{demo.id === 'email' && <span className="blind-period">.</span>}</div><span>{demo.category}</span><span className="experience-demo-label">{demo.experimental ? 'Experimental demo' : 'Example dApp'}</span></header>;
+
+  if (demo.id === 'giwa') return <MadangBenefits panel={panel} verified={verified} />;
+
+  if (demo.id === 'kyc') return <>
+    {header}
+    <section className="defi-opening"><div><h1>DeFi for<br /><span>verified people.</span></h1><p>Coinbase KYC gets you in.<br />Your identity stays with you.</p></div><div className="defi-access-state"><LockKey size={32} weight="light" /><span>Account access</span><strong>{verified ? 'Verified' : 'Not verified'}</strong><span>Private eligibility. No identity upload.</span></div></section>
+    <div className="defi-workspace"><section className="defi-markets"><div className="market-heading"><h2>Markets</h2><div className="scenario-switch" role="group" aria-label="Market action">{['Supply','Borrow'].map(label => <button key={label} aria-pressed={market === label} onClick={() => setMarket(label)}>{label}</button>)}</div></div><p className="market-description">{market === 'Supply' ? 'A lending market reserved for verified participants.' : 'Borrowing access starts with the same private eligibility check.'}</p><div className="market-table"><div className="market-table-head"><span>Asset</span><span>Market type</span><span>Access</span></div>{[{name:'USD Coin',symbol:'USDC',type:'Stablecoin'},{name:'Ether',symbol:'ETH',type:'Digital asset'},{name:'Coinbase Wrapped BTC',symbol:'cbBTC',type:'Wrapped asset'}].map(asset => <div className="market-row" key={asset.symbol}><div><span className="asset-symbol">{asset.symbol === 'USDC' ? '$' : asset.symbol === 'ETH' ? 'Ξ' : '₿'}</span><div><strong>{asset.symbol}</strong><span>{asset.name}</span></div></div><span>{asset.type}</span><span className="market-lock">{verified ? <Check size={18} /> : <LockKey size={18} />}{verified ? 'Eligible' : 'KYC required'}</span></div>)}</div><div className="market-disclaimer"><span>Interface preview</span><p>No live balances, rates, deposits or borrowing. Only the eligibility proof is real.</p></div></section><div className="defi-verification"><div className="defi-credential">Coinbase KYC<ArrowUpRight size={25} /></div>{panel}</div></div>
+  </>;
+
+  if (demo.id === 'country') return <>
+    {header}
+    <div className="country-layout"><section className="country-statement"><GlobeHemisphereWest size={56} weight="light" /><h1>Not on<br />the <span>blacklist.</span></h1><p>That’s all a service needs to know.<br />Your actual country stays private.</p><div className="country-rule"><span>The condition you prove</span><strong>My country <b>∉</b> this list.</strong></div><div className="country-blocklist"><div><Prohibit size={20} /><span>Example blocked countries</span></div><div className="country-code-list">{options.countries.split(',').filter(code => code.trim()).map((code, index) => <span key={index}>{code.trim().toUpperCase()}</span>)}</div><p>An editable demo policy, not a legal sanctions list.</p></div></section><div className="country-review"><div className="country-review-title"><span>Private eligibility check</span><span>{verified ? 'Passed' : 'Proof required'}</span></div>{panel}<div className="country-answer"><span>The service receives</span><strong>{verified ? 'Outside the blocklist.' : 'A yes-or-no answer.'}</strong><p>No country name. No passport. No original wallet.</p></div></div></div>
+  </>;
+
+  if (demo.id === 'email') return <>
+    {header}
+    <section className="blind-opening"><h1>Your company.<br /><span>Not your identity.</span></h1><p>Work email proves you belong.<br />Zero knowledge keeps you anonymous.</p></section>
+    <div className="blind-workspace"><aside className="blind-sidebar"><strong>Off the record</strong><p>Example discussions</p>{['Engineering','Work culture','Career'].map(label => <button key={label} aria-pressed={topic === label} onClick={() => setTopic(label)}><ChatCircle size={20} />{label}</button>)}<div className="blind-sidebar-note"><LockKey size={22} /><p>Verified coworkers.<br />No email addresses.</p></div></aside><section className="blind-feed" aria-label="Example anonymous discussion feed"><div className="blind-feed-head"><h2>{topic}</h2><span>Preview</span></div>{(topic === 'Engineering' ? ['What makes a code review actually useful?','How much time should we protect for deep work?'] : topic === 'Work culture' ? ['Can a team be honest without being harsh?','What would you change about the Monday meeting?'] : ['What did you wish you knew before becoming a lead?','How do you decide what to learn next?']).map((title,index) => <article key={title}><div className="anonymous-author"><span>{index === 0 ? 'A' : 'B'}</span><div><strong>Anonymous colleague</strong><small>Illustrative post</small></div></div><h3>{title}</h3><p>{index === 0 ? 'A space to ask the question you might not ask in the company chat.' : 'Keep the discussion about the work, without attaching your identity.'}</p><div className="blind-locked"><LockKey size={16} />{verified ? 'Domain verified. Example space unlocked.' : 'Verify your work domain to enter.'}</div></article>)}</section><div className="blind-signin">{panel}<p className="blind-promise">Your email ends at the proof.<br /><strong>Your voice starts here.</strong></p></div></div>
+  </>;
+
+  const variant = demo.id === 'age' ? 'Age check' : demo.id === 'region' ? 'Region' : 'Ownership';
+  return <>
+    {header}
+    <section className="identity-opening"><div><h1>Your Korean ID.<br /><span>Only the answer.</span></h1><p>Prove what matters, without handing over your identity.</p></div><div className="identity-seal"><Fingerprint size={80} weight="thin" /><span>Powered by<br /><strong>zero knowledge</strong></span></div></section>
+    <div className="identity-select" role="group" aria-label="Mobile ID proof type">{[{id:'ownership',label:'Ownership',desc:'Do you hold a mobile ID?'},{id:'age',label:'Age check',desc:'Do you meet the age requirement?'},{id:'region',label:'Region',desc:'Do you live in this region?'}].map(item => <button key={item.id} aria-pressed={demo.id === item.id} onClick={() => onSelect(item.id as DemoId)}><span>{item.label}</span><small>{item.desc}</small><ArrowUpRight size={24} /></button>)}</div>
+    <div className="identity-workspace"><section className="identity-explanation"><div className="identity-source"><IdentificationCard size={36} weight="light" /><div><span>The source</span><h2>Korean mobile ID</h2></div><span className="identity-private">Stays on your phone</span></div><div className="identity-redactions"><span>Name <b>Not shared</b></span><span>Date of birth <b>Not shared</b></span><span>Street address <b>Not shared</b></span></div><div className="identity-transform"><ArrowDown size={24} /><span>ZKProofport generates a private proof</span></div><div className="identity-answer"><span>{variant}: the service learns</span><h2>{demo.id === 'age' ? `Meets the ${options.age || '19'}+ condition.` : demo.id === 'region' ? 'Lives in the selected region.' : 'Holds a mobile ID.'}</h2><p>{demo.id === 'age' ? 'For example, an adult-purchase check at a convenience store. The birth date is never sent.' : demo.id === 'region' ? 'For example, access to a residents-only benefit. The full address is never sent.' : 'Confirm possession with personal field disclosure switched off.'}</p></div><p className="identity-experimental">Experimental predicate demo. Credential issuer authentication is not yet enforced by the circuit.{demo.id === 'age' && ' Age uses current year minus birth year.'}</p></section>{panel}</div>
+  </>;
+}

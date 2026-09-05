@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { JetBrains_Mono, DM_Serif_Display } from 'next/font/google';
+import { JetBrains_Mono, DM_Serif_Display, Geist } from 'next/font/google';
 import './globals.css';
 
 const jetbrains = JetBrains_Mono({
@@ -15,7 +15,10 @@ const dmSerif = DM_Serif_Display({
   display: 'swap',
 });
 
+const geist = Geist({ subsets: ['latin'], variable: '--font-demo-sans', display: 'swap' });
+
 export const metadata: Metadata = {
+  metadataBase: new URL('https://demo.zkproofport.app'),
   title: 'ZKProofport - Mobile App Live Demo',
   description: 'Zero-knowledge proof verification for dApps. Prove KYC, country, and age without revealing personal data.',
   icons: {
@@ -41,7 +44,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${jetbrains.variable} ${dmSerif.variable}`}>
+    <html lang="en" className={`${jetbrains.variable} ${dmSerif.variable} ${geist.variable}`}>
+      <head><link rel="preload" as="image" href="/demo-assets/madang-community.webp" /></head>
       <body style={{
         background: '#0a0e14',
         color: '#e8dcc8',

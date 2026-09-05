@@ -16,6 +16,7 @@ import type {
 // the `import type` block above matters: TypeScript erases that block.
 import { CIRCUIT_IDS } from '@zkproofport-app/sdk';
 import { ethers } from 'ethers';
+import DemoTabs from './components/DemoTabs';
 
 /* ─── Color tokens (matching portal-web design system) ─── */
 const C = {
@@ -1259,7 +1260,7 @@ const emptyDemoState: DemoState = {
 
   /* ═════════════════════ RENDER ═════════════════════ */
   return (
-    <>
+    <DemoTabs>
       {/* Inject keyframes */}
       <style dangerouslySetInnerHTML={{ __html: KEYFRAMES_CSS }} />
 
@@ -2457,6 +2458,6 @@ const emptyDemoState: DemoState = {
           </div>
         </div>
       )}
-    </>
+    </DemoTabs>
   );
 }

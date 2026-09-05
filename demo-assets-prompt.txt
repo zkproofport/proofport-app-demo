@@ -1,0 +1,18 @@
+Create a high-end editorial photographic atlas for seven privacy-preserving credential demo websites. Use an exact 4-column by 2-row grid of eight equally sized square photographic panels, without borders, margins, gutters, gaps, text, logos or watermarks. Every panel is a separate physical scene with cool natural neutral tones and restrained green accents, realistic materials, fine photographic detail and confident composition.
+
+Top row, left to right:
+1. A Korean courtyard with a tiled pavilion, pine trees and stone paths. A calm community venue, contemporary editorial architectural photography.
+2. Sculptural brushed silver entrance doors with circular handles. A private members exchange, tactile understated material detail.
+3. Blue coastal islands with low mist, an elevated natural view. Regional access and travel, no map labels.
+4. A contemporary shared workspace with a long wooden table, natural daylight and plants. An organization discussion space, no visible screen text.
+
+Bottom row, left to right:
+5. A quiet modern library reading room with bookshelves and individual reading seats.
+6. An intimate live music venue with warm stage lights and an adult audience, atmospheric editorial concert photography.
+7. A Seoul riverside green park and path with a modern skyline, local neighborhood benefits.
+8. A translucent green glass sculpture, abstract material study.
+
+The output is one landscape image with a 2:1 overall aspect ratio. Panels are precisely aligned to the 4 by 2 atlas for CSS cropping. These are fictional illustrative venues, not representations of customers or partners.
+
+Hallmark revision: Madang community, built-in imagegen.
+Use case: illustration-story. Asset type: full-width website hero artwork for Madang, a private GIWA community where Upbit-KYC-verified humans and AI agents coexist. Create one cinematic wide landscape editorial illustration with photorealistic architectural textures and sophisticated subtle speculative elements. A lively contemporary Korean hanok courtyard in warm late-afternoon light, an open timber pavilion, textured stone ground, green pines. Six to eight casually dressed adult people in small naturally interacting groups around communal tables, talking and collaborating. Among them two clearly recognizable but tasteful friendly embodied AI agents: compact pearl-white sculptural humanoid robots, seated at the same table as humans, not intimidating, no glowing hologram clutter. One human showing something to an agent, others chatting over tea. The place feels like a private creative builders community, welcoming, social, alive. Wide framing, people and agents visibly readable at website size; scene fills frame, no large empty sky, eye-level view. Palette soft ivory stone, deep forest green, warm terracotta timber. High-end editorial campaign illustration with believable lighting, not generic sci-fi. No words, no text, no logos, no user-interface elements, no watermark. 16:9 landscape composition.

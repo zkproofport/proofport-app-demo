@@ -193,6 +193,57 @@ DEMO_API_KEY=your-api-key
 
 ## Quick Start
 
+### Dedicated circuit demos
+
+Each circuit has an English proof flow. GIWA, KYC, country and work email use
+distinct example dApp layouts. The three Korean mobile ID predicates share
+one educational screen, with an Ownership / Age check / Region selector. GIWA opens by default. **All demos** retains the original explorer and its
+request code. Switching tabs keeps form values and ongoing requests in memory;
+refreshing the page clears in-memory proof sessions.
+
+| Tab | Example dApp | Direct URL | Circuit |
+| --- | --- | --- | --- |
+| GIWA | Madang: Upbit KYC community for people and agents | `/?tab=giwa` | `giwa_attestation` |
+| KYC | Common: Coinbase KYC DeFi interface | `/?tab=kyc` | `coinbase_attestation` |
+| Country | Borderless: country blocklist exclusion | `/?tab=country` | `coinbase_country_attestation` |
+| Work email | zk blind: anonymous workplace community | `/?tab=email` | `oidc_domain_attestation` |
+| Mobile ID | Korean ID: private ownership proof | `/?tab=ownership` | `mdl_kr_ownership` |
+| Age | Korean ID: age condition | `/?tab=age` | `mdl_kr_age` |
+| Region | Korean ID: region condition | `/?tab=region` | `mdl_kr_region` |
+| All demos | Original circuit explorer | `/?tab=all` | All circuits |
+
+The dedicated screens follow the local Hallmark redesign guidance recorded in
+`DESIGN.md`. They support system, light and dark themes, keyboard tab navigation,
+and mobile layouts. All demos keeps its existing dark design. Region labels are
+English; Korean region names remain the protocol values sent to the mobile app.
+
+For a local preview that uses the deployed relay, set this in `.env.local`:
+
+```dotenv
+NEXT_PUBLIC_RELAY_URL=https://relay.zkproofport.app
+```
+
+Restart the development server after changing the variable. It is a public URL,
+not a secret. Without the override, local development still uses port 4001.
+
+Each dedicated tab creates a real relay request and receives a mobile-generated
+proof. The dApp checks the request, fresh session scope, circuit, allowed verifier
+deployment and requested public conditions before offering cryptographic
+verification. Receiving a proof alone does not unlock content. Choose either a
+read-only contract check or in-browser verification through the SDK. Neither
+option sends a transaction. Access is an in-memory example, not server-enforced
+authorization. The sample venues and unlocked content are fictional.
+
+GIWA additionally pins the CIP-4 test issuer root and GIWA Sepolia verifier.
+Country proofs must match the entire inclusion/exclusion policy. Email proofs
+must match the domain and provider. Mobile ID proofs match anonymous disclosure
+settings, age threshold and year, or the selected region. Experimental circuit
+limitations remain available in each page's About section.
+
+Recording requires a ZKProofport mobile build with GIWA support and a wallet
+with a matching test attestation. This models the Upbit KYC → GIWA EAS flow using
+`MockGiwaAttester`; it does not integrate a production Dojang issuer.
+
 ### Standalone Development
 
 ```bash
@@ -220,6 +271,25 @@ This starts all services including the demo site on port 3300. The script automa
 - API Server: `http://<HOST_IP>:4000`
 - Relay Server: `http://<HOST_IP>:4001`
 - Dashboard: `http://<HOST_IP>:3000`
+
+### Deploy to demo.zkproofport.app
+
+Pushing this repository does **not** automatically deploy the site. The
+`zkproofport/proofport-app-dev` repository owns `.github/workflows/deploy.yml`
+and builds the exact commit pinned by its `proofport-app-demo` submodule.
+
+1. Commit and push this repository to `main`.
+2. Update only the `proofport-app-demo` submodule reference in
+   `proofport-app-dev`, then commit and push that reference.
+3. Run **Deploy to Cloud Run** in `proofport-app-dev` with
+   `environment=production`, `service=demo`, and `target_project=masselabs`.
+4. Wait for the workflow to succeed and confirm the new UI at
+   `https://demo.zkproofport.app/?tab=giwa`.
+
+This deploys `proofport-demo-production`. Selecting `demo` leaves the relay and
+community services untouched. CI on push validates builds; deployment is a
+separate manual workflow. The previous submodule commit can be redeployed for
+a rollback.
 
 ### Build and Production
 

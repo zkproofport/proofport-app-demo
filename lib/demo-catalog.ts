@@ -1,6 +1,6 @@
 import { CIRCUIT_IDS, type CircuitType } from '@zkproofport-app/sdk';
 
-export type DemoId = 'giwa' | 'kyc' | 'country' | 'email' | 'ownership' | 'age' | 'region';
+export type DemoId = 'giwa' | 'arc' | 'kyc' | 'country' | 'email' | 'ownership' | 'age' | 'region';
 export type DemoDefinition = {
   id: DemoId; circuit: CircuitType; tab: string; brand: string; category: string;
   headline: string; description: string; image: number; imageAlt: string;
@@ -37,6 +37,35 @@ export const DEMOS: readonly DemoDefinition[] = [
     }
   ],
   "note": "GIWA Sepolia PoC using a test attestation that models Upbit KYC → GIWA EAS. Production Dojang integration is pending. Agent participation is a community concept; this proof does not authenticate or authorize agents.",
+  "experimental": true
+},
+{
+  circuit: CIRCUIT_IDS.ARC_ELIGIBILITY,
+  "id": "arc",
+  "tab": "Arc",
+  "brand": "Ledger House",
+  "category": "Agent-operated treasury on Arc",
+  "headline": "Let an agent move money. On your terms.",
+  "description": "An agent runs the treasury. Every move it makes carries your signature on that exact instruction — and nothing about who you are.",
+  "image": 0,
+  "imageAlt": "A quiet ledger room where an agent works under standing instructions",
+  "actionTitle": "Authorize one action, prove you may",
+  "actionDescription": "Your wallet shows the deposit's fields and signs them. The proof carries that action's hash, so the contract checks WHICH instruction you approved — not merely that somebody eligible signed something.",
+  "credential": "Coinbase KYC → EIP-712 action on Arc",
+  "hides": "Your identity and KYC-linked wallet",
+  "outcomeTitle": "Instruction authorized.",
+  "outcomeDescription": "The action you signed passed verification. A proof made for this instruction verifies for no other.",
+  "outcomeItems": [
+    {
+      "title": "Verified condition",
+      "description": "Coinbase KYC, bound to one named action"
+    },
+    {
+      "title": "Private information",
+      "description": "Your identity and KYC-linked wallet stay private."
+    }
+  ],
+  "note": "Arc Testnet only: the verifier is deployed there and nowhere else, and Circle has published no mainnet chain id. Inputs and public-input layout can still change. The demo signs a sample Deposit against the zero address, so no contract is called.",
   "experimental": true
 },
 {

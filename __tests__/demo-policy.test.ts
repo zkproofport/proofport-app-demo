@@ -14,12 +14,18 @@ const ids: DemoId[] = ['kyc', 'country', 'email', 'ownership', 'age', 'region'];
 // contain no valid proof, and must still pass SDK cryptographic verification.
 function fixture(id: DemoId, options: DemoOptions = DEFAULT_OPTIONS) {
   const demo = demoById(id)!;
-  const count = { kyc: 128, country: 150, email: 148, ownership: 97, age: 66, region: 96, giwa: 128 }[id];
+  // Arc's 192 is six 32-byte public inputs: signal_hash, domain_separator,
+  // action_hash, signer_list_merkle_root, scope, nullifier.
+  const count = { kyc: 128, country: 150, email: 148, ownership: 97, age: 66, region: 96, giwa: 128, arc: 192 }[id];
   const publicInputs = Array.from({ length: count }, () => field(0));
   function put(start: number, bytes: Uint8Array) { bytes.forEach((value, index) => { publicInputs[start + index] = field(value); }); }
-  const start = id === 'kyc' ? 64 : id === 'country' ? 86 : id === 'email' ? 83 : 0;
+  // Where `scope` sits. Arc's is 64 fields further along than Coinbase's,
+  // because domain_separator and action_hash come between signal_hash and the
+  // Merkle root.
+  const start = id === 'kyc' ? 64 : id === 'country' ? 86 : id === 'email' ? 83 : id === 'arc' ? 128 : 0;
   put(start, getBytes(keccak256(toUtf8Bytes(scope))));
   if (id === 'kyc' || id === 'country') put(32, getBytes(COINBASE_SIGNER_ROOT));
+  if (id === 'arc') put(96, getBytes(COINBASE_SIGNER_ROOT));
   if (id === 'country') {
     const countries = options.countries.split(',').map(value => value.trim().toUpperCase());
     put(64, toUtf8Bytes(countries.join('')));

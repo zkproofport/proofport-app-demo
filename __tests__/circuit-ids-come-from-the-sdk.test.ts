@@ -64,16 +64,23 @@ describe('circuit ids in the demo come from the SDK', () => {
     const live = (page.match(/>LIVE<\/span>/g) || []).length;
     const experimental = (page.match(/>EXPERIMENTAL<\/span>/g) || []).length;
 
-    const plannedInUse = ALL_CIRCUIT_IDS.filter(
-      id => CIRCUIT_SUPPORT_STATUS[id] === 'planned' && page.includes(idConstantName(id)),
+    // `experimental` joined `planned` as a status the SDK reports in 0.3.0.
+    // Both mean "not something to build a product on", and the card carries
+    // the same badge for either -- so both are counted here. Arc is the first:
+    // its circuit compiles and its verifier is deployed, on a testnet only.
+    const notLiveInUse = ALL_CIRCUIT_IDS.filter(
+      id =>
+        (CIRCUIT_SUPPORT_STATUS[id] === 'planned' ||
+          CIRCUIT_SUPPORT_STATUS[id] === 'experimental') &&
+        page.includes(idConstantName(id)),
     );
     const supportedInUse = ALL_CIRCUIT_IDS.filter(
       id => CIRCUIT_SUPPORT_STATUS[id] === 'supported' && page.includes(idConstantName(id)),
     );
 
     // The three mDL variants share one card, so cards are counted by family.
-    const plannedFamilies = new Set(plannedInUse.map(id => id.replace(/_(ownership|age|region)$/, '')));
-    expect(experimental).toBe(plannedFamilies.size);
+    const notLiveFamilies = new Set(notLiveInUse.map(id => id.replace(/_(ownership|age|region)$/, '')));
+    expect(experimental).toBe(notLiveFamilies.size);
     expect(live).toBe(supportedInUse.length);
   });
 

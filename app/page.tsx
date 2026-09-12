@@ -182,7 +182,7 @@ export default function LandingPage() {
  * ended in a bare `else` — so a prefix nobody had handled yet silently became
  * the mDL card. Adding GIWA is what surfaced it.
  */
-type DemoPrefix = 'kyc' | 'country' | 'email' | 'mdl' | 'giwa';
+type DemoPrefix = 'kyc' | 'country' | 'email' | 'mdl' | 'giwa' | 'arc';
 
 /**
  * What the proof-request window says, per circuit.
@@ -219,6 +219,10 @@ const MODAL_COPY: Record<DemoPrefix, {title: string; instruction: string}> = {
   giwa: {
     title: 'GIWA Account',
     instruction: 'Scan the QR code with ZKProofport app to prove a verified GIWA account.',
+  },
+  arc: {
+    title: 'Arc Eligibility',
+    instruction: 'Scan the QR code with ZKProofport app. Your wallet will show the action before it signs.',
   },
 };
 
@@ -272,6 +276,8 @@ const emptyDemoState: DemoState = {
   /* ── GIWA KYC form ── */
   const [giwaState, setGiwaState] = useState<DemoState>({ ...emptyDemoState });
   const activeGiwaRequestIdRef = useRef<string | null>(null);
+  const [arcState, setArcState] = useState<DemoState>({ ...emptyDemoState });
+  const activeArcRequestIdRef = useRef<string | null>(null);
 
   /* ── Korea Mobile ID (mDL) form ── */
   const [mdlState, setMdlState] = useState<DemoState>({ ...emptyDemoState });
@@ -393,6 +399,7 @@ const emptyDemoState: DemoState = {
       email: activeEmailRequestIdRef,
       mdl: activeMdlRequestIdRef,
       giwa: activeGiwaRequestIdRef,
+      arc: activeArcRequestIdRef,
     };
     refs[prefix].current = null;
   }, []);
@@ -406,6 +413,7 @@ const emptyDemoState: DemoState = {
       email: setEmailState,
       mdl: setMdlState,
       giwa: setGiwaState,
+      arc: setArcState,
     };
     setters[prefix](updater);
   }, []);
@@ -812,10 +820,10 @@ const emptyDemoState: DemoState = {
   const stateOf = useCallback((prefix: DemoPrefix): DemoState => {
     const states: Record<DemoPrefix, DemoState> = {
       kyc: kycState, country: countryState, email: emailState,
-      mdl: mdlState, giwa: giwaState,
+      mdl: mdlState, giwa: giwaState, arc: arcState,
     };
     return states[prefix];
-  }, [kycState, countryState, emailState, mdlState, giwaState]);
+  }, [kycState, countryState, emailState, mdlState, giwaState, arcState]);
 
   /* ── GIWA KYC request ── */
   /**
@@ -864,6 +872,79 @@ const emptyDemoState: DemoState = {
         showProofTimeout('giwa');
       } else {
         showProofFailed('giwa', (err as Error).message);
+      }
+    }
+  }, [getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout]);
+
+  /**
+   * Arc eligibility — the same Coinbase attestation, bound to ONE EIP-712
+   * action the wallet signs.
+   *
+   * The action is what makes this different from the KYC card. `personal_sign`
+   * over a signal hash shows a person 32 opaque bytes; here the wallet renders
+   * the named fields, and the proof's public inputs carry the domain separator
+   * and struct hash so a verifier can check WHICH action was authorised.
+   *
+   * Experimental: the verifier is deployed on Arc Testnet and nowhere else.
+   */
+  const requestArcProof = useCallback(async () => {
+    setProofModalPrefix('arc');
+    setProofModalOpen(true);
+    proofModalOpenRef.current = true;
+    setArcState((prev) => ({
+      ...prev,
+      showReceived: false,
+      showWaiting: false,
+      showFailed: false,
+      showVerifyResult: false,
+    }));
+
+    try {
+      const sdk = getSDK();
+      const result = await sdk.createRelayRequest(CIRCUIT_IDS.ARC_ELIGIBILITY, {
+        scope: 'zkproofport:demo',
+        // A worked example of what a vault on Arc would ask for. The SDK
+        // refuses a malformed action here rather than letting it reach the
+        // phone -- the circuit hashes an action without reading it, so a
+        // missing field becomes a valid proof of the wrong thing.
+        action: {
+          domain: {
+            name: 'ZKProofport Demo Vault',
+            version: '1',
+            chainId: 5042002,
+            verifyingContract: '0x0000000000000000000000000000000000000000',
+          },
+          types: {
+            Deposit: [
+              { name: 'amount', type: 'uint256' },
+              { name: 'nonce', type: 'uint256' },
+            ],
+          },
+          primaryType: 'Deposit',
+          message: { amount: '1000000', nonce: '1' },
+        },
+      }, {
+        dappName: 'ZKProofport Demo',
+        dappIcon: 'https://demo.zkproofport.app/icon.png',
+        message: 'Authorize one action on Arc, and prove you are eligible for it',
+      });
+      activeArcRequestIdRef.current = result.requestId;
+
+      const deepLink = result.deepLink;
+      await showProofResult(deepLink, 'arc');
+      setArcState((prev) => ({ ...prev, showResult: true, showWaiting: true }));
+
+      const finalResult = await sdk.waitForProof(result.requestId, { timeoutMs: 180000 });
+      if (finalResult.status === 'completed') {
+        showProofReceived('arc', finalResult as ProofResultExt);
+      } else {
+        showProofFailed('arc', finalResult.error || 'Proof generation failed');
+      }
+    } catch (err) {
+      if ((err as Error).message?.includes('timeout')) {
+        showProofTimeout('arc');
+      } else {
+        showProofFailed('arc', (err as Error).message);
       }
     }
   }, [getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout]);
@@ -938,7 +1019,7 @@ const emptyDemoState: DemoState = {
     // added, so verifying a GIWA proof could read whatever proof this callback
     // was built with — and a stale proof verifies as someone else's answer
     // rather than failing.
-  }, [kycState.proofObject, countryState.proofObject, emailState.proofObject, mdlState.proofObject, giwaState.proofObject, getSDK, setDemoState, launchConfetti]);
+  }, [kycState.proofObject, countryState.proofObject, emailState.proofObject, mdlState.proofObject, giwaState.proofObject, arcState.proofObject, getSDK, setDemoState, launchConfetti]);
 
   /* ── Smooth scroll ── */
   const scrollTo = useCallback((id: string) => {
@@ -2025,6 +2106,67 @@ const emptyDemoState: DemoState = {
                     ? '0 10px 28px rgba(214, 177, 92, 0.5), inset 0 1px 0 rgba(255,255,255,.8)'
                     : '0 6px 18px rgba(214, 177, 92, 0.3), inset 0 1px 0 rgba(255,255,255,.6)',
                   transform: hoveredBtn === 'giwa-request' ? 'translateY(-1px)' : 'none',
+                }}
+              >
+                Request Proof
+              </button>
+
+            </div>
+
+            {/* ── Arc Eligibility Demo Card ── */}
+            {/* `experimental` in the SDK's support table: the circuit compiles,
+                the verifier is deployed and a proof verifies -- on Arc Testnet
+                only, with the public-input layout still open. The card next
+                door proves the same Coinbase attestation; what differs here is
+                that the wallet signs a NAMED ACTION rather than an opaque
+                32-byte hash, so the person reads what they approve. */}
+            <div
+              id="demo-arc"
+              onMouseEnter={() => setHoveredDemoCard('arc')}
+              onMouseLeave={() => setHoveredDemoCard(null)}
+              style={{
+                flex: '2 1 0',
+                background: hoveredDemoCard === 'arc' ? C.bgCardHover : C.bgCard,
+                border: `1.5px solid ${C.goldLine}`,
+                borderRadius: 0,
+                padding: 36,
+                transition: 'all 0.3s',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <span style={{ fontSize: 34, lineHeight: 1 }} role="img" aria-label="Arc">◎</span>
+                <span style={{
+                  fontFamily: FONT.mono, fontSize: '1rem', fontWeight: 700, letterSpacing: '0.08em',
+                  padding: '4px 10px', borderRadius: 4,
+                  background: 'rgba(251,191,36,0.15)', color: '#fbbf24',
+                }}>EXPERIMENTAL</span>
+              </div>
+              <h3 style={{ fontFamily: FONT.serif, fontSize: '2rem', fontWeight: 400, marginBottom: 10, color: C.cream }}>Arc Eligibility</h3>
+              <p style={{ color: C.muted, marginBottom: 20, fontFamily: FONT.mono, fontSize: '1.2rem', lineHeight: 1.6, flex: 1 }}>
+                Authorize one named action on Circle&apos;s Arc and prove you are eligible for it — without revealing the wallet. Your wallet shows the action&apos;s fields before it signs. Runs against Arc Testnet.
+              </p>
+              <button
+                onClick={requestArcProof}
+                onMouseEnter={() => setHoveredBtn('arc-request')}
+                onMouseLeave={() => setHoveredBtn(null)}
+                style={{
+                  width: '100%',
+                  padding: '12px 20px',
+                  fontSize: '1.2rem',
+                  fontWeight: 700,
+                  fontFamily: FONT.mono,
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  transition: 'all 0.25s',
+                  background: `linear-gradient(180deg, ${C.gold}, ${C.gold2})`,
+                  color: '#1a222c',
+                  boxShadow: hoveredBtn === 'arc-request'
+                    ? '0 10px 28px rgba(214, 177, 92, 0.5), inset 0 1px 0 rgba(255,255,255,.8)'
+                    : '0 6px 18px rgba(214, 177, 92, 0.3), inset 0 1px 0 rgba(255,255,255,.6)',
+                  transform: hoveredBtn === 'arc-request' ? 'translateY(-1px)' : 'none',
                 }}
               >
                 Request Proof

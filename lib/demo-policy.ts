@@ -20,6 +20,9 @@ export const DEMO_VERIFIERS: Record<CircuitType, Record<number, string>> = {
   [CIRCUIT_IDS.MDL_KR_OWNERSHIP]: { 84532: '0x7602d09d24e6e16eff5ab981646872886376763e' },
   [CIRCUIT_IDS.MDL_KR_AGE]: { 84532: '0xcff90ff8ceadc98f625300dc976ed85a3aa943ba' },
   [CIRCUIT_IDS.MDL_KR_REGION]: { 84532: '0x435f0448f02f5df9659d460181116bcaf37e518e' },
+  // Arc Testnet, and nowhere else. Circle has published no mainnet chain id,
+  // so there is no second row to add.
+  [CIRCUIT_IDS.ARC_ELIGIBILITY]: { 5042002: '0xcbc8e63ff92659e8b44cff117d33005bb669a018' },
 };
 
 const signerLeaves = [
@@ -64,6 +67,10 @@ const PUBLIC_COUNTS: Record<CircuitType, number> = {
   [CIRCUIT_IDS.GIWA_ATTESTATION]: 128, [CIRCUIT_IDS.COINBASE_ATTESTATION]: 128,
   [CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION]: 150, [CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION]: 148,
   [CIRCUIT_IDS.MDL_KR_OWNERSHIP]: 97, [CIRCUIT_IDS.MDL_KR_AGE]: 66, [CIRCUIT_IDS.MDL_KR_REGION]: 96,
+  // Six 32-byte public inputs: signal_hash, domain_separator, action_hash,
+  // signer_list_merkle_root, scope, nullifier. Read off the compiled ABI in
+  // arc-eligibility/target, not counted.
+  [CIRCUIT_IDS.ARC_ELIGIBILITY]: 192,
 };
 
 function bytes(inputs: string[], start: number, length = 32): Uint8Array {

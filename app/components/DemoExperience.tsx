@@ -8,6 +8,31 @@ import MadangBenefits from './MadangBenefits';
 
 type Props = { demo: DemoDefinition; options: DemoOptions; panel: ReactNode; onSelect: (id: DemoId) => void; verified: boolean };
 
+/**
+ * What the Korean mobile ID screen says, per demo.
+ *
+ * Keyed rather than chained, so a demo nobody wrote wording for is an error
+ * with its name in it. The chain this replaced ended on the ownership wording,
+ * which meant a new predicate silently described itself as "Holds a mobile ID."
+ */
+const KOREAN_ID_WORDING: Partial<Record<DemoId, { variant: string; learns: (options: DemoOptions) => string; example: string }>> = {
+  age: {
+    variant: 'Age check',
+    learns: options => `Meets the ${options.age || '19'}+ condition.`,
+    example: 'For example, an adult-purchase check at a convenience store. The birth date is never sent.',
+  },
+  region: {
+    variant: 'Region',
+    learns: () => 'Lives in the selected region.',
+    example: 'For example, access to a residents-only benefit. The full address is never sent.',
+  },
+  ownership: {
+    variant: 'Ownership',
+    learns: () => 'Holds a mobile ID.',
+    example: 'Confirm possession with personal field disclosure switched off.',
+  },
+};
+
 export default function DemoExperience({ demo, options, panel, onSelect, verified }: Props) {
   const [market, setMarket] = useState('Supply');
   const [topic, setTopic] = useState('Engineering');
@@ -32,11 +57,46 @@ export default function DemoExperience({ demo, options, panel, onSelect, verifie
     <div className="blind-workspace"><aside className="blind-sidebar"><strong>Off the record</strong><p>Example discussions</p>{['Engineering','Work culture','Career'].map(label => <button key={label} aria-pressed={topic === label} onClick={() => setTopic(label)}><ChatCircle size={20} />{label}</button>)}<div className="blind-sidebar-note"><LockKey size={22} /><p>Verified coworkers.<br />No email addresses.</p></div></aside><section className="blind-feed" aria-label="Example anonymous discussion feed"><div className="blind-feed-head"><h2>{topic}</h2><span>Preview</span></div>{(topic === 'Engineering' ? ['What makes a code review actually useful?','How much time should we protect for deep work?'] : topic === 'Work culture' ? ['Can a team be honest without being harsh?','What would you change about the Monday meeting?'] : ['What did you wish you knew before becoming a lead?','How do you decide what to learn next?']).map((title,index) => <article key={title}><div className="anonymous-author"><span>{index === 0 ? 'A' : 'B'}</span><div><strong>Anonymous colleague</strong><small>Illustrative post</small></div></div><h3>{title}</h3><p>{index === 0 ? 'A space to ask the question you might not ask in the company chat.' : 'Keep the discussion about the work, without attaching your identity.'}</p><div className="blind-locked"><LockKey size={16} />{verified ? 'Domain verified. Example space unlocked.' : 'Verify your work domain to enter.'}</div></article>)}</section><div className="blind-signin">{panel}<p className="blind-promise">Your email ends at the proof.<br /><strong>Your voice starts here.</strong></p></div></div>
   </>;
 
-  const variant = demo.id === 'age' ? 'Age check' : demo.id === 'region' ? 'Region' : 'Ownership';
+  /*
+   * Arc — an agent-run treasury where every move carries a signature on that
+   * exact instruction.
+   */
+  if (demo.id === 'arc') return <>
+    {header}
+    <section className="identity-opening"><div><h1>Let an agent move money.<br /><span>On your terms.</span></h1><p>Every instruction it carries out is one you signed. The proof binds your approval to those exact fields.</p></div><div className="identity-seal"><Fingerprint size={80} weight="thin" /><span>Powered by<br /><strong>zero knowledge</strong></span></div></section>
+    <div className="identity-workspace"><section className="identity-explanation">
+      <div className="identity-source"><IdentificationCard size={36} weight="light" /><div><span>The source</span><h2>Coinbase KYC</h2></div><span className="identity-private">Stays with your wallet</span></div>
+      <div className="identity-redactions"><span>KYC documents <b>Not included</b></span><span>Candidate wallet address <b>Can be checked</b></span><span>Everything else you could sign <b>Not authorized</b></span></div>
+      <div className="identity-transform"><ArrowDown size={24} /><span>ZKProofport generates an action-bound proof</span></div>
+      <div className="identity-answer"><span>The treasury learns</span><h2>This exact instruction was authorized.</h2><p>Your wallet renders the action&apos;s fields and signs those. The proof carries the action&apos;s hash, so a proof made for this instruction verifies for no other — not a different amount, not a different nonce, not a different contract.</p></div>
+      <p className="identity-experimental">Experimental. The public nullifier lets anyone test a candidate KYC wallet address; this is not address anonymity. The verifier is deployed on Arc Testnet and nowhere else, and the public-input layout can still change.</p>
+    </section>{panel}</div>
+  </>;
+
+  /*
+   * Korea Mobile ID — named, not a fallthrough.
+   *
+   * This `return` used to be unconditional, so any circuit that matched none of
+   * the branches above rendered the Korean mobile ID screen. Arc did exactly
+   * that on 2026-09-12: the Arc tab opened on "Your Korean ID. Only the
+   * answer." with name, date of birth and street address listed beside an Arc
+   * deposit form.
+   */
+  if (demo.id !== 'ownership' && demo.id !== 'age' && demo.id !== 'region') {
+    throw new Error(
+      `No demo screen for '${demo.id}'. Add a branch in DemoExperience -- the ` +
+        'Korea Mobile ID screen used to be the fallthrough and silently claimed ' +
+        'every circuit nobody had written a screen for.',
+    );
+  }
+
+  const wording = KOREAN_ID_WORDING[demo.id];
+  if (!wording) throw new Error(`No Korean mobile ID wording for '${demo.id}'. Known: ${Object.keys(KOREAN_ID_WORDING).join(', ')}.`);
+
   return <>
     {header}
     <section className="identity-opening"><div><h1>Your Korean ID.<br /><span>Only the answer.</span></h1><p>Prove what matters, without handing over your identity.</p></div><div className="identity-seal"><Fingerprint size={80} weight="thin" /><span>Powered by<br /><strong>zero knowledge</strong></span></div></section>
     <div className="identity-select" role="group" aria-label="Mobile ID proof type">{[{id:'ownership',label:'Ownership',desc:'Do you hold a mobile ID?'},{id:'age',label:'Age check',desc:'Do you meet the age requirement?'},{id:'region',label:'Region',desc:'Do you live in this region?'}].map(item => <button key={item.id} aria-pressed={demo.id === item.id} onClick={() => onSelect(item.id as DemoId)}><span>{item.label}</span><small>{item.desc}</small><ArrowUpRight size={24} /></button>)}</div>
-    <div className="identity-workspace"><section className="identity-explanation"><div className="identity-source"><IdentificationCard size={36} weight="light" /><div><span>The source</span><h2>Korean mobile ID</h2></div><span className="identity-private">Stays on your phone</span></div><div className="identity-redactions"><span>Name <b>Not shared</b></span><span>Date of birth <b>Not shared</b></span><span>Street address <b>Not shared</b></span></div><div className="identity-transform"><ArrowDown size={24} /><span>ZKProofport generates a private proof</span></div><div className="identity-answer"><span>{variant}: the service learns</span><h2>{demo.id === 'age' ? `Meets the ${options.age || '19'}+ condition.` : demo.id === 'region' ? 'Lives in the selected region.' : 'Holds a mobile ID.'}</h2><p>{demo.id === 'age' ? 'For example, an adult-purchase check at a convenience store. The birth date is never sent.' : demo.id === 'region' ? 'For example, access to a residents-only benefit. The full address is never sent.' : 'Confirm possession with personal field disclosure switched off.'}</p></div><p className="identity-experimental">Experimental predicate demo. Credential issuer authentication is not yet enforced by the circuit.{demo.id === 'age' && ' Age uses current year minus birth year.'}</p></section>{panel}</div>
+    <div className="identity-workspace"><section className="identity-explanation"><div className="identity-source"><IdentificationCard size={36} weight="light" /><div><span>The source</span><h2>Korean mobile ID</h2></div><span className="identity-private">Stays on your phone</span></div><div className="identity-redactions"><span>Name <b>Not shared</b></span><span>Date of birth <b>Not shared</b></span><span>Street address <b>Not shared</b></span></div><div className="identity-transform"><ArrowDown size={24} /><span>ZKProofport generates a private proof</span></div><div className="identity-answer"><span>{wording.variant}: the service learns</span><h2>{wording.learns(options)}</h2><p>{wording.example}</p></div><p className="identity-experimental">Experimental predicate demo. Credential issuer authentication is not yet enforced by the circuit.{demo.id === 'age' && ' Age uses current year minus birth year.'}</p></section>{panel}</div>
   </>;
 }

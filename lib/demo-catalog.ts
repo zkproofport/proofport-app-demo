@@ -46,13 +46,13 @@ export const DEMOS: readonly DemoDefinition[] = [
   "brand": "Ledger House",
   "category": "Agent-operated treasury on Arc",
   "headline": "Let an agent move money. On your terms.",
-  "description": "An agent runs the treasury. Every move it makes carries your signature on that exact instruction — and nothing about who you are.",
+  "description": "An agent runs the treasury. Every move it makes carries your signature on that exact instruction. The public proof can be checked against a candidate KYC wallet address.",
   "image": 0,
   "imageAlt": "A quiet ledger room where an agent works under standing instructions",
   "actionTitle": "Authorize one action, prove you may",
-  "actionDescription": "Your wallet shows the deposit's fields and signs them. The proof carries that action's hash, so the contract checks WHICH instruction you approved — not merely that somebody eligible signed something.",
+  "actionDescription": "Pick a deposit, a withdrawal, a transfer — or write your own instruction, field by field. Your wallet shows exactly those fields and signs them, and the proof carries that action's hash, so the contract checks WHICH instruction you approved — not merely that somebody eligible signed something.",
   "credential": "Coinbase KYC → EIP-712 action on Arc",
-  "hides": "Your identity and KYC-linked wallet",
+  "hides": "KYC documents; candidate wallet addresses can be checked",
   "outcomeTitle": "Instruction authorized.",
   "outcomeDescription": "The action you signed passed verification. A proof made for this instruction verifies for no other.",
   "outcomeItems": [
@@ -62,10 +62,10 @@ export const DEMOS: readonly DemoDefinition[] = [
     },
     {
       "title": "Private information",
-      "description": "Your identity and KYC-linked wallet stay private."
+      "description": "KYC documents are not included. The public nullifier lets anyone test a candidate KYC wallet address."
     }
   ],
-  "note": "Arc Testnet only: the verifier is deployed there and nowhere else, and Circle has published no mainnet chain id. Inputs and public-input layout can still change. The demo signs a sample Deposit against the zero address, so no contract is called.",
+  "note": "Arc Testnet only: the verifier is deployed there and nowhere else, and Circle has published no mainnet chain id. Inputs and public-input layout can still change. The chain and the verifier contract are fixed to that one deployment — only the action is yours to choose — and nothing is moved: the proof is checked against the verifier, no treasury contract is called.",
   "experimental": true
 },
 {

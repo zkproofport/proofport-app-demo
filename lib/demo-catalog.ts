@@ -36,7 +36,7 @@ export const DEMOS: readonly DemoDefinition[] = [
 {
   circuit: CIRCUIT_IDS.ARC_ELIGIBILITY,
   "id": "arc",
-  "tab": "Arc",
+  "tab": "Ledger House",
   "brand": "Ledger House",
   "category": "Agent-operated treasury on Arc",
   "headline": "Let an agent move money. On your terms.",
@@ -65,7 +65,7 @@ export const DEMOS: readonly DemoDefinition[] = [
 {
   circuit: CIRCUIT_IDS.COINBASE_ATTESTATION,
   "id": "kyc",
-  "tab": "KYC",
+  "tab": "Markets",
   "brand": "Common",
   "category": "Private DeFi access",
   "headline": "DeFi. For verified people.",
@@ -94,7 +94,7 @@ export const DEMOS: readonly DemoDefinition[] = [
 {
   circuit: CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION,
   "id": "country",
-  "tab": "Country",
+  "tab": "Borderless",
   "brand": "Borderless",
   "category": "Private eligibility",
   "headline": "Prove you’re not on the list.",
@@ -123,7 +123,7 @@ export const DEMOS: readonly DemoDefinition[] = [
 {
   circuit: CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION,
   "id": "email",
-  "tab": "Work email",
+  "tab": "zkBlind",
   "brand": "zk blind",
   "category": "Work is better off the record.",
   "headline": "Real colleagues. Real anonymity.",

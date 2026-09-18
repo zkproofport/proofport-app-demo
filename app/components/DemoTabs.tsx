@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode, type KeyboardEvent } from 'react';
 import { CircleHalf } from '@phosphor-icons/react';
 import { DEMOS, type DemoId } from '@/lib/demo-catalog';
 import CircuitDemo from './CircuitDemo';
+import GiwaDemo from './GiwaDemo';
 import './demos.css';
 
 type Tab = DemoId | 'all';
@@ -30,7 +31,16 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('popstate', sync);
   }, []);
   useEffect(() => {
-    document.title = tab === 'all' ? 'All demos | ZKProofport' : `${DEMOS.find(demo => demo.id === tab)?.brand} | ZKProofport demos`;
+    const title = tab === 'giwa' ? 'Gotgan — A KYC-gated vault on GIWA' : tab === 'all' ? 'All demos | ZKProofport' : `${DEMOS.find(demo => demo.id === tab)?.brand} | ZKProofport demos`;
+    const syncTitle = () => { if (document.title !== title) document.title = title; };
+    syncTitle();
+    const frame = requestAnimationFrame(syncTitle);
+    const icon = document.createElement('link');
+    icon.rel = 'icon'; icon.type = 'image/svg+xml'; icon.sizes.add('any');
+    icon.href = tab === 'giwa' ? '/brand/gotgan-app-icon.svg' : '/favicon.png';
+    if (tab !== 'giwa') icon.type = 'image/png';
+    document.head.appendChild(icon);
+    return () => { cancelAnimationFrame(frame); icon.remove(); };
   }, [tab]);
 
   const navTab = tab === 'age' || tab === 'region' ? 'ownership' : tab;
@@ -63,7 +73,7 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
       </div>
       <label className="theme-control"><CircleHalf size={18} /><span className="sr-only">Color theme</span><select aria-label="Color theme" value={theme} onChange={event => changeTheme(event.target.value as Theme)}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
     </nav>
-    {DEMOS.map(demo => <div key={demo.id} id={`demo-panel-${demo.id}`} role="tabpanel" aria-labelledby={`demo-tab-${['age', 'region'].includes(demo.id) ? 'ownership' : demo.id}`} hidden={tab !== demo.id}>{visited.has(demo.id) && <CircuitDemo demo={demo} onSelect={select} />}</div>)}
+    {DEMOS.map(demo => <div key={demo.id} id={`demo-panel-${demo.id}`} role="tabpanel" aria-labelledby={`demo-tab-${['age', 'region'].includes(demo.id) ? 'ownership' : demo.id}`} hidden={tab !== demo.id}>{visited.has(demo.id) && (demo.id === 'giwa' ? <GiwaDemo /> : <CircuitDemo demo={demo} onSelect={select} />)}</div>)}
     <div id="demo-panel-all" className="explorer-panel" role="tabpanel" aria-labelledby="demo-tab-all" tabIndex={-1} hidden={tab !== 'all'}>{children}</div>
   </div>;
 }

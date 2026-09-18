@@ -13,30 +13,24 @@ export const DEMOS: readonly DemoDefinition[] = [
 {
   circuit: CIRCUIT_IDS.GIWA_ATTESTATION,
   "id": "giwa",
-  "tab": "GIWA",
-  "brand": "Madang",
-  "category": "Private community on GIWA",
-  "headline": "More opens up when you belong.",
-  "description": "Private dinners, member-only drops and community access through an Upbit KYC proof.",
+  "tab": "Gotgan",
+  "brand": "Gotgan",
+  "category": "Institutional KRW treasury",
+  "headline": "Institutional KRW vault.",
+  "description": "Gotgan, a KYC-gated vault on GIWA for institutional KRW treasuries.",
   "image": 0,
-  "imageAlt": "People and AI agents sharing a contemporary Korean courtyard",
-  "actionTitle": "Enter the community privately",
-  "actionDescription": "Prove your Upbit KYC attestation on GIWA without sharing your KYC-linked wallet.",
-  "credential": "Upbit KYC → GIWA EAS",
-  "hides": "Your identity and KYC-linked wallet",
-  "outcomeTitle": "Welcome to Madang.",
-  "outcomeDescription": "Your GIWA account proof passed verification. The example community is open.",
+  "imageAlt": "",
+  "actionTitle": "Prove deposit eligibility",
+  "actionDescription": "Prove GIWA test-attestation eligibility for your operational wallet's dKRW deposit.",
+  "credential": "Upbit KYC · Test attestation",
+  "hides": "The underlying KYC account address",
+  "outcomeTitle": "Deposit eligibility verified.",
+  "outcomeDescription": "The Vault checks your proof before accepting the deposit.",
   "outcomeItems": [
-    {
-      "title": "Verified condition",
-      "description": "Upbit KYC → GIWA EAS"
-    },
-    {
-      "title": "Private information",
-      "description": "Your identity and KYC-linked wallet stay private."
-    }
+    { "title": "Verified condition", "description": "GIWA test-attestation eligibility" },
+    { "title": "Private information", "description": "The underlying KYC account address is not sent to the Vault." }
   ],
-  "note": "GIWA Sepolia PoC using a test attestation that models Upbit KYC → GIWA EAS. Production Dojang integration is pending. Agent participation is a community concept; this proof does not authenticate or authorize agents.",
+  "note": "GIWA Sepolia testnet vault. dKRW has no KRW backing or monetary value. Test attestation models Upbit KYC; production integration is pending. No yield is generated.",
   "experimental": true
 },
 {

@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import DemoExperience from '../app/components/DemoExperience';
 import DemoFields from '../app/components/DemoFields';
+import GiwaDemo from '../app/components/GiwaDemo';
+import DemoTabs from '../app/components/DemoTabs';
 import { DEFAULT_OPTIONS } from '../lib/demo-policy';
 import { DEMOS } from '../lib/demo-catalog';
 
@@ -30,10 +32,12 @@ describe('every tab renders its own screen', () => {
   for (const demo of DEMOS) {
     it(`${demo.tab} opens without throwing`, () => {
       const html = renderToStaticMarkup(
-        <DemoExperience demo={demo} options={DEFAULT_OPTIONS} panel={<p>panel</p>} onSelect={() => {}} verified={false} />,
+        demo.id === 'giwa'
+          ? <GiwaDemo />
+          : <DemoExperience demo={demo} options={DEFAULT_OPTIONS} panel={<p>panel</p>} onSelect={() => {}} verified={false} />,
       );
       expect(html).toContain(demo.brand);
-      expect(html).toContain('panel');
+      expect(html).toContain(demo.id === 'giwa' ? 'Manage vault deposits' : 'panel');
     });
 
     it(`${demo.tab} shows its own fields`, () => {
@@ -43,6 +47,14 @@ describe('every tab renders its own screen', () => {
       expect(html).toContain('</fieldset>');
     });
   }
+
+  it('routes the initial GIWA tab to Gotgan rather than the retired community screen', () => {
+    const html = renderToStaticMarkup(<DemoTabs><p>all demos</p></DemoTabs>);
+    expect(html).toContain('Gotgan home');
+    expect(html).toContain('Total vault deposits');
+    expect(html).toContain('Upbit KYC eligibility');
+    expect(html).not.toContain('Madang home');
+  });
 
   it('says which demo has no screen rather than showing another one', () => {
     const invented = { ...DEMOS[0], id: 'not-a-demo' as never, brand: 'Nobody' };

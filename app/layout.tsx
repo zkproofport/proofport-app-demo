@@ -17,10 +17,15 @@ const dmSerif = DM_Serif_Display({
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-demo-sans', display: 'swap' });
 
+const siteTitle = 'ZKProofport | Live Demos';
+const siteDescription = 'Explore live demos of private eligibility proofs for applications and AI agents.';
+// A versioned URL lets link-preview crawlers fetch the corrected brand asset.
+const socialImage = '/brand/zkproofport-social-20260919.png';
+
 export const metadata: Metadata = {
   metadataBase: new URL('https://demo.zkproofport.app'),
-  title: 'ZKProofport - Mobile App Live Demo',
-  description: 'Zero-knowledge proof verification for dApps. Prove KYC, country, and age without revealing personal data.',
+  title: siteTitle,
+  description: siteDescription,
   icons: {
     icon: [
       { url: '/favicon.png', type: 'image/png' },
@@ -29,23 +34,22 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: 'website',
-    title: 'ZKProofport - Mobile App Live Demo',
-    description: 'Zero-knowledge proof verification for dApps. Prove KYC, country, and age without revealing personal data.',
+    title: siteTitle,
+    description: siteDescription,
     siteName: 'ZKProofport',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, type: 'image/png' }],
+    images: [{ url: socialImage, width: 1200, height: 630, type: 'image/png', alt: 'ZKProofport — Private eligibility for humans and AI agents. Built by Masse Labs.' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'ZKProofport - Mobile App Live Demo',
-    description: 'Zero-knowledge proof verification for dApps. Prove KYC, country, and age without revealing personal data.',
-    images: ['/og-image.png'],
+    title: siteTitle,
+    description: siteDescription,
+    images: [{ url: socialImage, alt: 'ZKProofport — Private eligibility for humans and AI agents. Built by Masse Labs.' }],
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${jetbrains.variable} ${dmSerif.variable} ${geist.variable}`}>
-      <head><link rel="preload" as="image" href="/demo-assets/madang-community.webp" /></head>
       <body style={{
         background: '#0a0e14',
         color: '#e8dcc8',

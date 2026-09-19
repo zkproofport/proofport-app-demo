@@ -1,4 +1,19 @@
-# Madang demo brand assets
+# Demo brand assets
+
+## ZKProofport
+
+- The product name is **ZKProofport**: the `p` in `port` is lowercase.
+- `zkproofport-social-20260919.png` is the unmodified 1200 × 630 share image
+  from `https://zkproofport.com/og-image.png`, retrieved on 2026-09-19.
+  It uses the official navy/gold identity, shield logo and approved wordmark.
+- `public/og-image.png` retains the same corrected image for old direct links.
+  Open Graph and Twitter metadata use the dated URL to avoid reusing the old
+  purple image. Messaging apps may still cache previews of previously sent URLs.
+- `public/logo.png` was checked against the official site's logo and is identical.
+- Official site palette: midnight `#071827`, deep `#06131f`, gold `#cba65e`,
+  paper `#f2f3ee`, muted `#9bafc1`.
+
+## Madang (legacy demo assets)
 
 - `madang-mark.svg`: original vector mark created for this demo. Twin open
   entrances form an M around a shared courtyard; the central dot represents a

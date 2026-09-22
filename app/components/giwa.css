@@ -104,6 +104,7 @@
 .gv-success { background:var(--gv-success); border-color:#a8d0ba70; color:var(--gv-green); }
 .gv-success a { display:inline-flex; align-items:center; gap:5px; font-size:17px; margin-top:10px; text-decoration:underline; }
 .gv-proof-request { text-align:center; border:1px solid var(--gv-line); padding:18px 14px; border-radius:5px; margin-top:20px; background:var(--gv-soft); }
+.gv-proof-request .app-downloads { grid-column: 1 / -1; color: var(--gv-ink); border-color: var(--gv-line); }
 .gv-request-heading { display:flex; justify-content:center; align-items:center; gap:9px; font-size:21px; margin-bottom:14px; }
 .gv-request-heading strong { font-weight:550; }
 .gv-proof-request>img { display:block; width:220px; margin:0 auto 14px; border:8px solid #fff; box-sizing:border-box; max-width:100%; height:auto; border-radius:3px; }

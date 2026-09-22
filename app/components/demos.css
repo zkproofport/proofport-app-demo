@@ -54,6 +54,14 @@
 .demo-suite .theme-control option { background: var(--page); color: var(--ink); }
 .demo-suite .demo-skip { position: fixed; top: 8px; left: 12px; transform: translateY(-160%); z-index: 30; background: var(--accent); color: var(--on-accent); padding: 12px 20px; border-radius: 6px; }
 .demo-suite .demo-skip:focus { transform: none; }
+.app-downloads { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 16px max(24px, calc((100vw - 1320px) / 2)); border-bottom: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.app-downloads p { margin: 0; font-size: 13px; line-height: 1.6; }
+.app-store-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.app-store-links a { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; color: inherit; font-size: 13px; font-weight: 600; text-decoration: none; }
+.app-store-links a:hover { background: var(--soft); }
+.app-store-links a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.app-downloads-compact { display: block; margin-top: 16px; padding: 16px 0 0; border-bottom: 0; border-top: 1px solid var(--line); background: transparent; }
+.app-downloads-compact .app-store-links { margin-top: 10px; }
 .demo-switcher :focus-visible, .circuit-demo :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .demo-switcher [role='tab']:focus-visible { outline-offset: -6px; }
 .circuit-demo { max-width: 1320px; padding: 0 40px; margin: 0 auto; min-height: calc(100dvh - var(--nav-height)); outline: none; }

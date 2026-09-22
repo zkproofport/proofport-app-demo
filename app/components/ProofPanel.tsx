@@ -1,5 +1,7 @@
 'use client';
 
+import AppDownloads from './AppDownloads';
+
 import { useEffect, useState } from 'react';
 import { ArrowRight, ArrowUpRight, Check, Fingerprint, LockKey, X } from '@phosphor-icons/react';
 import { isMobileDevice } from '@/lib/device';
@@ -31,7 +33,7 @@ export default function ProofPanel({ demo, options, onOptions, flow }: Props) {
       {demo.id !== 'giwa' && <p className="panel-provider"><LockKey size={14} />Verified with ZKProofport</p>}
     </>}
     {flow.phase === 'requesting' && <div className="proof-processing" role="status"><h2>Creating your request.</h2><p className="panel-intro">Preparing a secure connection to your phone.</p><div className="qr-skeleton" aria-hidden="true"><span /><span /><span /><span /></div><p className="field-help">This may take a few seconds.</p></div>}
-    {flow.phase === 'waiting' && <div className="proof-waiting"><h2>Your phone. Your proof.</h2><p className="panel-intro">{mobile ? 'Open ZKProofport and approve the proof request.' : 'Scan with ZKProofport, then approve the request on your phone.'}</p>{mobile ? <a className="proof-primary" href={flow.deepLink}>Open app<ArrowUpRight size={19} /></a> : <img className="proof-qr" src={flow.qrCode} alt={`Scan with ZKProofport to generate a ${demo.tab} proof`} width={224} height={224} />}<p className="field-help">Keep this tab open. Your request expires after 3 minutes.</p><button className="proof-text-button" onClick={flow.reset}>Cancel request</button></div>}
+    {flow.phase === 'waiting' && <div className="proof-waiting"><h2>Your phone. Your proof.</h2><p className="panel-intro">{mobile ? 'Open ZKProofport and approve the proof request.' : 'Scan with ZKProofport, then approve the request on your phone.'}</p>{mobile ? <a className="proof-primary" href={flow.deepLink}>Open app<ArrowUpRight size={19} /></a> : <img className="proof-qr" src={flow.qrCode} alt={`Scan with ZKProofport to generate a ${demo.tab} proof`} width={224} height={224} />}<p className="field-help">Keep this tab open. Your request expires after 3 minutes.</p><button className="proof-text-button" onClick={flow.reset}>Cancel request</button><AppDownloads compact /></div>}
     {received && <>
       <h2>{flow.phase === 'verifying' ? 'Checking the proof.' : 'Ready for a private check.'}</h2><p className="panel-intro">{flow.phase === 'verifying' ? 'Access opens only after your proof passes verification.' : 'Your proof arrived. Choose how to verify it.'}</p>
       <div className="verification-choice" role="group" aria-label="Verification method">

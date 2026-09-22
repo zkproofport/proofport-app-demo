@@ -5,6 +5,7 @@ import { CircleHalf } from '@phosphor-icons/react';
 import { DEMOS, type DemoId } from '@/lib/demo-catalog';
 import CircuitDemo from './CircuitDemo';
 import GiwaDemo from './GiwaDemo';
+import AppDownloads from './AppDownloads';
 import './demos.css';
 
 type Tab = DemoId | 'all';
@@ -73,6 +74,7 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
       </div>
       <label className="theme-control"><CircleHalf size={18} /><span className="sr-only">Color theme</span><select aria-label="Color theme" value={theme} onChange={event => changeTheme(event.target.value as Theme)}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
     </nav>
+    {tab !== 'all' && <AppDownloads />}
     {DEMOS.map(demo => <div key={demo.id} id={`demo-panel-${demo.id}`} role="tabpanel" aria-labelledby={`demo-tab-${['age', 'region'].includes(demo.id) ? 'ownership' : demo.id}`} hidden={tab !== demo.id}>{visited.has(demo.id) && (demo.id === 'giwa' ? <GiwaDemo /> : <CircuitDemo demo={demo} onSelect={select} />)}</div>)}
     <div id="demo-panel-all" className="explorer-panel" role="tabpanel" aria-labelledby="demo-tab-all" tabIndex={-1} hidden={tab !== 'all'}>{children}</div>
   </div>;

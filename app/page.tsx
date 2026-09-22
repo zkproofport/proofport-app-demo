@@ -17,6 +17,7 @@ import type {
 import { CIRCUIT_IDS } from '@zkproofport-app/sdk';
 import { ethers } from 'ethers';
 import DemoTabs from './components/DemoTabs';
+import { APP_STORE_URL, GOOGLE_PLAY_URL } from '@/lib/app-stores';
 
 /* ─── Color tokens (matching portal-web design system) ─── */
 const C = {
@@ -53,11 +54,11 @@ const KEYFRAMES_CSS = `
   50% { opacity: 1; transform: rotate(720deg) scale(0.8); }
   100% { opacity: 0; top: 110vh; transform: rotate(1440deg) scale(0.3); }
 }
-@keyframes betaFadeIn {
+@keyframes proofFadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-@keyframes betaSlideUp {
+@keyframes proofSlideUp {
   from { opacity: 0; transform: translateY(20px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
@@ -284,15 +285,6 @@ const emptyDemoState: DemoState = {
   const [proofModalOpen, setProofModalOpen] = useState(false);
   const [proofModalPrefix, setProofModalPrefix] = useState<DemoPrefix | null>(null);
   const proofModalOpenRef = useRef(false);
-
-  /* ── Beta modal ── */
-  const [betaOpen, setBetaOpen] = useState(false);
-  const [betaPlatform, setBetaPlatformState] = useState<string | null>(null);
-  const [betaEmail, setBetaEmail] = useState('');
-  const [betaOrg, setBetaOrg] = useState('');
-  const [betaSubmitting, setBetaSubmitting] = useState(false);
-  const [betaSuccess, setBetaSuccess] = useState(false);
-  const [betaError, setBetaError] = useState('');
 
   /* ── Confetti ── */
   const [confettiPieces, setConfettiPieces] = useState<Array<{
@@ -946,62 +938,6 @@ const emptyDemoState: DemoState = {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
-  /* ── Beta modal ── */
-  const openBetaModal = useCallback((platform: string) => {
-    setBetaPlatformState(platform);
-    setBetaEmail('');
-    setBetaOrg('');
-    setBetaSuccess(false);
-    setBetaError('');
-    setBetaSubmitting(false);
-    setBetaOpen(true);
-  }, []);
-
-  const closeBetaModal = useCallback(() => {
-    setBetaOpen(false);
-  }, []);
-
-  const submitBetaRequest = useCallback(async () => {
-    if (!betaEmail.trim()) {
-      setBetaError('Please enter your email address.');
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(betaEmail.trim())) {
-      setBetaError('Please enter a valid email address.');
-      return;
-    }
-    if (!betaOrg.trim()) {
-      setBetaError('Please enter your organization.');
-      return;
-    }
-
-    setBetaSubmitting(true);
-    setBetaError('');
-
-    try {
-      const res = await fetch('/api/beta-signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: betaEmail.trim(),
-          name: betaOrg.trim(),
-          subject: `Beta Invite Request - ${betaPlatform || 'Unknown'}`,
-          body: `[Beta Invite Request]\n\n${betaEmail.trim()} (${betaOrg.trim()}) has signed up for the ZKProofport closed beta through the demo page.\n\n- Organization: ${betaOrg.trim()}\n- Platform: ${betaPlatform || 'Unknown'}\n- Requested via: Demo landing page (${betaPlatform || 'Unknown'} download button)\n\nPlease register this email as a tester on the corresponding platform (App Store Connect / Google Play Console) and send an invite.`,
-          category: 'beta_invite',
-          metadata: { platform: betaPlatform, organization: betaOrg.trim() },
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error((data as Record<string, string>).error || 'Failed to submit request');
-      }
-      setBetaSuccess(true);
-    } catch (err) {
-      setBetaError((err as Error).message);
-      setBetaSubmitting(false);
-    }
-  }, [betaEmail, betaOrg, betaPlatform]);
-
   const dashboardUrl = process.env.DASHBOARD_URL || '';
 
   /* ── Render helpers for demo cards ── */
@@ -1337,8 +1273,10 @@ const emptyDemoState: DemoState = {
           {/* Nav (iOS/Android) */}
           <nav className="header-nav" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
             <a
-              href="#"
-              onClick={(e) => { e.preventDefault(); openBetaModal('iOS'); }}
+              href={APP_STORE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Download ZKProofport for iOS on the App Store"
               title="Download on the App Store"
               style={navLinkStyle(iosHover)}
               onMouseEnter={() => setIosHover(true)}
@@ -1347,8 +1285,10 @@ const emptyDemoState: DemoState = {
               <AppleIcon /> iOS
             </a>
             <a
-              href="#"
-              onClick={(e) => { e.preventDefault(); openBetaModal('Android'); }}
+              href={GOOGLE_PLAY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Download ZKProofport for Android on Google Play"
               title="Get it on Google Play"
               style={navLinkStyle(androidHover)}
               onMouseEnter={() => setAndroidHover(true)}
@@ -2202,7 +2142,7 @@ const emptyDemoState: DemoState = {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            animation: 'betaFadeIn 0.2s ease-out',
+            animation: 'proofFadeIn 0.2s ease-out',
             padding: 20,
           }}
         >
@@ -2216,7 +2156,7 @@ const emptyDemoState: DemoState = {
             maxHeight: '85vh',
             overflowY: 'auto',
             position: 'relative',
-            animation: 'betaSlideUp 0.3s ease-out',
+            animation: 'proofSlideUp 0.3s ease-out',
           }}>
             {/* Close button */}
             <button
@@ -2254,210 +2194,6 @@ const emptyDemoState: DemoState = {
         </div>
       )}
 
-      {/* ── BETA INVITE MODAL ── */}
-      {betaOpen && (
-        <div
-          onClick={(e) => { if (e.target === e.currentTarget) closeBetaModal(); }}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.7)',
-            backdropFilter: 'blur(4px)',
-            WebkitBackdropFilter: 'blur(4px)',
-            zIndex: 200,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 16,
-            animation: 'betaFadeIn 200ms ease-out',
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: '100%',
-              maxWidth: 420,
-              background: C.bgCard,
-              border: `1.5px solid ${C.goldLine}`,
-              borderRadius: 0,
-              overflow: 'hidden',
-              animation: 'betaSlideUp 300ms cubic-bezier(0.16, 1, 0.3, 1)',
-            }}
-          >
-            {/* Modal header */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '20px 24px 0',
-            }}>
-              <h3 style={{ fontFamily: FONT.serif, fontSize: '2rem', fontWeight: 400, color: C.cream, margin: 0 }}>Closed Beta</h3>
-              <button
-                onClick={closeBetaModal}
-                aria-label="Close"
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: C.muted,
-                  cursor: 'pointer',
-                  padding: 4,
-                  lineHeight: 1,
-                }}
-              >
-                <CloseIcon />
-              </button>
-            </div>
-
-            {/* Modal body */}
-            <div style={{ padding: '16px 24px 24px' }}>
-              <p style={{ color: C.muted, fontFamily: FONT.mono, fontSize: '1.2rem', lineHeight: 1.7, margin: '0 0 20px' }}>
-                ZKProofport is currently in closed beta testing. Leave your email and preferred platform — we{"'"}ll send you an invite as soon as a spot opens up.
-              </p>
-
-              {/* Email */}
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.ink, marginBottom: 6 }}>
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  value={betaEmail}
-                  onChange={(e) => setBetaEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    fontSize: 14,
-                    background: 'rgba(0,0,0,0.3)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 8,
-                    color: '#fff',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                  onFocus={(e) => { e.target.style.borderColor = C.gold2; }}
-                  onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; }}
-                />
-              </div>
-
-              {/* Organization */}
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.ink, marginBottom: 6 }}>
-                  Organization *
-                </label>
-                <input
-                  type="text"
-                  value={betaOrg}
-                  onChange={(e) => setBetaOrg(e.target.value)}
-                  placeholder="Company or team name"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    fontSize: 14,
-                    background: 'rgba(0,0,0,0.3)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 8,
-                    color: '#fff',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                  onFocus={(e) => { e.target.style.borderColor = C.gold2; }}
-                  onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; }}
-                />
-              </div>
-
-              {/* Platform */}
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.ink, marginBottom: 6 }}>
-                  Platform
-                </label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {['iOS', 'Android', 'Both'].map((plat) => (
-                    <button
-                      key={plat}
-                      onClick={() => setBetaPlatformState(plat)}
-                      style={{
-                        flex: 1,
-                        padding: '8px 0',
-                        fontSize: 13,
-                        fontWeight: 500,
-                        background: betaPlatform === plat ? 'rgba(214, 177, 92, 0.12)' : 'rgba(0,0,0,0.3)',
-                        border: `1px solid ${betaPlatform === plat ? C.gold2 : 'rgba(255,255,255,0.1)'}`,
-                        borderRadius: 8,
-                        color: betaPlatform === plat ? C.gold2 : C.muted,
-                        cursor: 'pointer',
-                        transition: 'all 0.15s',
-                      }}
-                    >
-                      {plat}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Submit */}
-              {!betaSuccess && (
-                <button
-                  onClick={submitBetaRequest}
-                  disabled={betaSubmitting}
-                  style={{
-                    width: '100%',
-                    padding: 12,
-                    fontSize: '1.3rem',
-                    fontWeight: 700,
-                    fontFamily: FONT.mono,
-                    background: `linear-gradient(180deg, ${C.gold}, ${C.gold2})`,
-                    color: '#1a222c',
-                    border: 'none',
-                    borderRadius: 8,
-                    cursor: betaSubmitting ? 'not-allowed' : 'pointer',
-                    marginTop: 8,
-                    transition: 'opacity 0.15s',
-                    opacity: betaSubmitting ? 0.5 : 1,
-                    boxShadow: '0 8px 20px rgba(214,177,92,.35), inset 0 1px 0 rgba(255,255,255,.6)',
-                  }}
-                >
-                  Request Invite
-                </button>
-              )}
-
-              {/* Success */}
-              {betaSuccess && (
-                <div style={{
-                  marginTop: 12,
-                  padding: 12,
-                  background: 'rgba(52,211,153,0.1)',
-                  border: '1px solid rgba(52,211,153,0.2)',
-                  borderRadius: 8,
-                  color: '#34d399',
-                  fontSize: '1.2rem',
-                  fontFamily: FONT.mono,
-                  textAlign: 'center',
-                }}>
-                  Thanks! We{"'"}ll reach out when your invite is ready.
-                </div>
-              )}
-
-              {/* Error */}
-              {betaError && (
-                <div style={{
-                  marginTop: 12,
-                  padding: 12,
-                  background: 'rgba(248,113,113,0.1)',
-                  border: '1px solid rgba(248,113,113,0.2)',
-                  borderRadius: 8,
-                  color: '#f87171',
-                  fontSize: '1.2rem',
-                  fontFamily: FONT.mono,
-                  textAlign: 'center',
-                }}>
-                  {betaError}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </DemoTabs>
   );
 }

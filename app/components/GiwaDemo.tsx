@@ -1,5 +1,7 @@
 'use client';
 
+import AppDownloads from './AppDownloads';
+
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, ArrowsClockwise, Buildings, CheckCircle, LockKey, ShieldCheck, Wallet, WarningCircle } from '@phosphor-icons/react';
 import { formatUnits } from 'ethers';
 import { useGiwaVault } from '@/lib/useGiwaVault';
@@ -60,7 +62,7 @@ export default function GiwaDemo() {
             <div aria-live="polite" aria-atomic="true">
               {phase === 'blocked' && !flow.error && <div className="gv-result gv-blocked"><span className="gv-result-icon"><LockKey size={22} /></span><div><h3>Deposit blocked</h3><p>An eligibility proof is required.</p><small>No transaction sent.</small></div></div>}
               {completed && flow.receipt && <div className="gv-result gv-success"><CheckCircle size={29} weight="fill" /><div><h3>{flow.receipt.action === 'deposit' ? 'Deposit confirmed' : 'Withdrawal confirmed'}</h3><p>{displayKRW(flow.receipt.amount)} dKRW {flow.receipt.action === 'deposit' ? 'deposited into the vault.' : 'returned to your operational wallet.'}</p><a href={`${EXPLORER}/tx/${flow.receipt.hash}`} target="_blank" rel="noreferrer">View transaction <ArrowUpRight size={14} /></a></div></div>}
-              {waiting && <div className="gv-proof-request"><div className="gv-request-heading"><span className="gv-spinner" /><strong>{phase === 'requesting' ? 'Preparing proof request' : phase === 'verifying' ? 'Verifying proof on GIWA' : 'Continue on your phone'}</strong></div>{phase === 'waiting' && <><img src={flow.qr} width={220} height={220} alt="Scan with ZKProofport to prove eligibility for this deposit" /><p>Scan with ZKProofport using your KYC-linked account.</p><a className="gv-open-app" href={flow.deepLink}>Open ZKProofport <ArrowUpRight size={14} /></a></>}<button className="gv-text-button" onClick={flow.reset}>Cancel proof request</button></div>}
+              {waiting && <div className="gv-proof-request"><div className="gv-request-heading"><span className="gv-spinner" /><strong>{phase === 'requesting' ? 'Preparing proof request' : phase === 'verifying' ? 'Verifying proof on GIWA' : 'Continue on your phone'}</strong></div>{phase === 'waiting' && <><img src={flow.qr} width={220} height={220} alt="Scan with ZKProofport to prove eligibility for this deposit" /><p>Scan with ZKProofport using your KYC-linked account.</p><a className="gv-open-app" href={flow.deepLink}>Open ZKProofport <ArrowUpRight size={14} /></a><AppDownloads compact /></>}<button className="gv-text-button" onClick={flow.reset}>Cancel proof request</button></div>}
               {writing && <p className="gv-pending"><span className="gv-spinner" />{flow.txHash ? 'Transaction submitted. Waiting for confirmation.' : 'Confirm the transaction in your wallet.'}</p>}
             </div>
             {flow.error && <div className="gv-error" role="alert"><WarningCircle size={19} /><p>{flow.error}</p></div>}

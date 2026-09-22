@@ -39,7 +39,7 @@ A visually rich product showcase with live interactive demos:
 - QR code generation for mobile scanning
 - Proof status polling with real-time updates
 - On-chain verification display
-- Features overview, code examples, and beta invite modal
+- Features overview, code examples, and direct App Store / Google Play download links
 - Confetti animation on successful proof completion
 
 ### SDK Demo (`/demo`)

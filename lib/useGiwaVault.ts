@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BrowserProvider, Contract, JsonRpcProvider, TypedDataEncoder, Wallet, toBeHex, type Eip1193Provider } from 'ethers';
-import { CIRCUIT_IDS, ProofportSDK, type RelayProofResult } from '@zkproofport-app/sdk';
+import { CIRCUIT_IDS, ProofportSDK, type ProofResponse, type RelayProofResult } from '@zkproofport-app/sdk';
 import { GIWA_CHAIN_ID, prepareGiwaMembershipProof } from './giwa-membership';
-import { EXPLORER, GIWA_RPC, OPERATIONAL_WALLET, TOKEN_ABI, TOKEN_ADDRESS, VAULT_ABI, VAULT_ADDRESS, buildGiwaDepositAction, parseVaultAmount, vaultErrorMessage, vaultErrorName, waitForVaultReceipt } from './giwa-vault';
+import { EXPLORER, GIWA_RPC, OPERATIONAL_WALLET, TOKEN_ABI, TOKEN_ADDRESS, VAULT_ABI, VAULT_ADDRESS, buildGiwaDepositAction, guardGiwaWalletProvider, parseVaultAmount, vaultErrorMessage, vaultErrorName, waitForVaultReceipt } from './giwa-vault';
 
 type WalletProvider = Eip1193Provider & { on?: (event: string, listener: (...args: unknown[]) => void) => void; removeListener?: (event: string, listener: (...args: unknown[]) => void) => void };
 type Phase = 'idle' | 'checking' | 'blocked' | 'requesting' | 'waiting' | 'verifying' | 'ready' | 'approving' | 'depositing' | 'withdrawing' | 'success';
-type BoundProof = { proof: string; publicInputs: string[]; scope: string; amount: bigint; account: string };
+type BoundProof = { proof: string; publicInputs: string[]; scope: string; amount: bigint; account: string; response: ProofResponse };
+type Verification = { kind: 'offchain' | 'onchain'; status: 'verifying' | 'success' | 'error'; message: string };
 type Balances = { wallet: bigint; deposited: bigint; total: bigint; allowance: bigint };
 const injected = () => (window as Window & { ethereum?: WalletProvider }).ethereum;
 const timeout = async <T,>(promise: Promise<T>, ms = 30000): Promise<T> => {
@@ -31,12 +32,16 @@ export function useGiwaVault() {
   const [txHash, setTxHash] = useState('');
   const [receipt, setReceipt] = useState<{ hash: string; amount: bigint; action: string } | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [verification, setVerification] = useState<Verification | null>(null);
   const sdk = useRef<ProofportSDK | null>(null);
   const rpc = useRef<JsonRpcProvider | null>(null);
   const version = useRef(0);
   const locked = useRef(false);
   const walletBusy = useRef(false);
   const readVersion = useRef(0);
+  const walletVersion = useRef(0);
+  const writing = useRef(false);
+  const verifying = useRef(false);
   const readProvider = useCallback(() => {
     if (!rpc.current) rpc.current = new JsonRpcProvider(GIWA_RPC, GIWA_CHAIN_ID, { staticNetwork: true, cacheTimeout: -1 });
     return rpc.current;
@@ -58,9 +63,9 @@ export function useGiwaVault() {
   }, [account, readProvider]);
 
   function reset() {
-    version.current++; locked.current = false;
+    version.current++; locked.current = false; writing.current = false; verifying.current = false;
     sdk.current?.disconnect(); sdk.current = null;
-    setProof(null); setQr(''); setDeepLink(''); setError(''); setPhase('idle'); setTxHash('');
+    setProof(null); setVerification(null); setQr(''); setDeepLink(''); setError(''); setPhase('idle'); setTxHash('');
   }
   useEffect(() => {
     setBalances(null); void refresh();
@@ -69,13 +74,21 @@ export function useGiwaVault() {
   }, [refresh]);
   useEffect(() => {
     const provider = injected();
-    const changed = () => { reset(); setAccount(''); setError('Wallet or network changed. Reconnect the operational wallet.'); };
+    const changed = () => {
+      // The mobile proof always targets the configured wallet. A browser wallet
+      // change invalidates transaction authority, not that independent proof.
+      walletVersion.current++; setAccount('');
+      if (writing.current) {
+        writing.current = false; locked.current = false; setPhase('idle');
+        setError('Wallet or network changed. Reconnect the operational wallet.');
+      }
+    };
     provider?.on?.('accountsChanged', changed); provider?.on?.('chainChanged', changed);
     return () => { provider?.removeListener?.('accountsChanged', changed); provider?.removeListener?.('chainChanged', changed); version.current++; sdk.current?.disconnect(); rpc.current?.destroy(); rpc.current = null; };
   }, []);
 
   async function connect() {
-    if (walletBusy.current) return;
+    if (walletBusy.current || locked.current || verifying.current) return;
     walletBusy.current = true; setConnecting(true); setError('');
     try {
       const provider = injected();
@@ -93,33 +106,34 @@ export function useGiwaVault() {
       }
       const latest = await provider.request({ method: 'eth_accounts' }) as string[];
       if (latest[0]?.toLowerCase() !== OPERATIONAL_WALLET || Number(await provider.request({ method: 'eth_chainId' })) !== GIWA_CHAIN_ID) throw new Error('Select the operational wallet on GIWA Sepolia.');
-      reset(); setAccount(latest[0]);
+      setAccount(latest[0]);
     } catch (cause) { setError(vaultErrorMessage(cause)); }
     finally { walletBusy.current = false; setConnecting(false); }
   }
 
-  async function signer() {
+  async function signer(isCurrent: () => boolean) {
     const provider = injected();
     if (!provider || !account) throw new Error('Connect the operational wallet first.');
     const accounts = await provider.request({ method: 'eth_accounts' }) as string[];
     if (accounts[0]?.toLowerCase() !== OPERATIONAL_WALLET || Number(await provider.request({ method: 'eth_chainId' })) !== GIWA_CHAIN_ID) throw new Error('Reconnect the operational wallet on GIWA Sepolia.');
-    return new BrowserProvider(provider).getSigner(account);
+    return new BrowserProvider(guardGiwaWalletProvider(provider, isCurrent)).getSigner(account);
   }
 
   async function requestProof() {
-    if (locked.current || !account) return;
+    if (locked.current || verifying.current || walletBusy.current) return;
     locked.current = true; const current = ++version.current;
-    setError(''); setProof(null); setPhase('requesting'); setTxHash('');
+    setError(''); setProof(null); setVerification(null); setPhase('requesting'); setTxHash('');
     let client: ProofportSDK | undefined;
     try {
       const units = parseVaultAmount(amount);
+      const target = OPERATIONAL_WALLET;
       const contract = vault();
       const blockTag = await timeout(readProvider().getBlockNumber());
       const [scope, nonce, domainHash, actionHash] = await timeout(Promise.all([
-        contract.depositScope(account, units, { blockTag }), contract.nonces(account, { blockTag }),
-        contract.domainSeparator({ blockTag }), contract.depositActionHash(account, units, { blockTag }),
+        contract.depositScope(target, units, { blockTag }), contract.nonces(target, { blockTag }),
+        contract.domainSeparator({ blockTag }), contract.depositActionHash(target, units, { blockTag }),
       ]));
-      const action = buildGiwaDepositAction(account, units, nonce);
+      const action = buildGiwaDepositAction(target, units, nonce);
       if (TypedDataEncoder.hashDomain(action.domain) !== domainHash ||
           TypedDataEncoder.hashStruct(action.primaryType, action.types, action.message) !== actionHash) {
         throw new Error('The configured Vault uses a different deposit action. Please reload the demo.');
@@ -151,9 +165,9 @@ export function useGiwaVault() {
       if (current !== version.current) return;
       if (!result) throw new Error('The proof request expired. Please generate a new proof.');
       const response = prepareGiwaMembershipProof(result, pending.requestId, scope, action);
-      const bound: BoundProof = { proof: response.proof!, publicInputs: response.publicInputs!.map(value => toBeHex(BigInt(value), 32)), scope, amount: units, account };
+      const bound: BoundProof = { proof: response.proof!, publicInputs: response.publicInputs!.map(value => toBeHex(BigInt(value), 32)), scope, amount: units, account: target, response };
       setPhase('verifying');
-      const valid = await timeout(vault().verifyEligibility(account, units, bound.proof, bound.publicInputs));
+      const valid = await timeout(vault().verifyEligibility(target, units, bound.proof, bound.publicInputs));
       if (current !== version.current) return;
       if (!valid) throw new Error('The Vault did not accept this proof.');
       setProof(bound); setPhase('ready'); setQr(''); setDeepLink('');
@@ -161,9 +175,31 @@ export function useGiwaVault() {
     finally { client?.disconnect(); if (current === version.current) locked.current = false; }
   }
 
+  async function verifyProof(kind: 'offchain' | 'onchain') {
+    if (!proof || locked.current || verifying.current) return;
+    verifying.current = true;
+    const current = version.current;
+    const label = kind === 'onchain' ? 'On-Chain' : 'Off-Chain';
+    setVerification({ kind, status: 'verifying', message: `${label} verification in progress…` });
+    try {
+      const client = sdk.current;
+      if (!client) throw new Error('Generate an eligibility proof first.');
+      const result = await timeout(kind === 'onchain'
+        ? client.verifyResponseOnChain(proof.response)
+        : client.verifyResponseOffChain(proof.response), kind === 'onchain' ? 30000 : 90000);
+      if (current !== version.current) return;
+      if (!result.valid) throw new Error(result.error || 'The proof did not pass verification.');
+      setVerification({ kind, status: 'success', message: `${label} Verification Passed!` });
+    } catch (cause) {
+      if (current === version.current) setVerification({ kind, status: 'error', message: vaultErrorMessage(cause) });
+    } finally { if (current === version.current) verifying.current = false; }
+  }
+
   async function act(action: 'deposit' | 'approve' | 'withdraw') {
-    if (locked.current || !account) return;
-    locked.current = true; const current = ++version.current;
+    if (locked.current || verifying.current || !account) return;
+    locked.current = true; writing.current = true; const current = ++version.current;
+    const connectedVersion = walletVersion.current;
+    const isCurrent = () => current === version.current && connectedVersion === walletVersion.current;
     setError(''); setTxHash(''); setPhase('checking');
     try {
       const units = parseVaultAmount(amount);
@@ -174,51 +210,54 @@ export function useGiwaVault() {
         await timeout(contract.deposit.staticCall(units, '0x', [], { from: account }));
         throw new Error('Unexpected Vault response. No transaction was sent.');
       }
-      const connectedSigner = await signer();
-      if (current !== version.current) return;
+      const connectedSigner = await signer(isCurrent);
+      if (!isCurrent()) return;
       const token = new Contract(TOKEN_ADDRESS, TOKEN_ABI, connectedSigner);
       if (action !== 'withdraw') {
-        if (!proof || proof.account.toLowerCase() !== account.toLowerCase() || proof.amount !== units || await timeout(contract.depositScope(account, units)) !== proof.scope) {
+        const scope = await timeout(contract.depositScope(account, units));
+        if (!isCurrent()) return;
+        if (!proof || proof.account.toLowerCase() !== account.toLowerCase() || proof.amount !== units || scope !== proof.scope) {
           setProof(null); throw new Error('The deposit changed. Generate a new eligibility proof.');
         }
         const available: bigint = await timeout(token.balanceOf(account));
         if (available < units) throw new Error('Your operational wallet does not have enough dKRW.');
       } else if (await timeout(contract.balanceOf(account)) < units) throw new Error('The withdrawal exceeds your deposited balance.');
-      if (current !== version.current) return;
+      if (!isCurrent()) return;
       if (action === 'deposit' && await timeout(token.allowance(account, VAULT_ADDRESS)) < units) throw new Error('Approve dKRW before depositing.');
-      if (current !== version.current) return;
+      if (!isCurrent()) return;
       const writable = new Contract(VAULT_ADDRESS, VAULT_ABI, connectedSigner);
       setPhase(action === 'approve' ? 'approving' : action === 'deposit' ? 'depositing' : 'withdrawing');
       // Each write is a distinct user action with a wallet confirmation.
-      const tx = action === 'approve' ? await token.approve(VAULT_ADDRESS, units)
-        : action === 'deposit' ? await writable.deposit(units, proof!.proof, proof!.publicInputs)
-        : await writable.withdraw(units);
-      if (current === version.current) setTxHash(tx.hash);
+      const transaction = { chainId: GIWA_CHAIN_ID };
+      const tx = action === 'approve' ? await token.approve(VAULT_ADDRESS, units, transaction)
+        : action === 'deposit' ? await writable.deposit(units, proof!.proof, proof!.publicInputs, transaction)
+        : await writable.withdraw(units, transaction);
+      if (isCurrent()) setTxHash(tx.hash);
       const confirmed = await waitForVaultReceipt(tx, hash => {
-        if (current === version.current) setTxHash(hash);
+        if (isCurrent()) setTxHash(hash);
       });
-      if (current !== version.current) return;
+      if (!isCurrent()) return;
       setTxHash(confirmed.hash);
       if (action === 'approve') setPhase('ready');
       else { setReceipt({ hash: confirmed.hash, amount: units, action }); setProof(null); setPhase('success'); }
       await refresh();
     } catch (cause) {
-      if (current !== version.current) return;
+      if (!isCurrent()) return;
       if (action === 'deposit' && !proof && vaultErrorName(cause) === 'ProofRequired') setPhase('blocked');
       else {
         const invalidProof = ['WrongDepositScope', 'WrongDepositDomain', 'WrongDepositAction', 'IdentityProofNotAllowed', 'InvalidProof', 'UntrustedIssuer'].includes(vaultErrorName(cause) ?? '');
         if (invalidProof) setProof(null);
         setError(vaultErrorMessage(cause)); setPhase(invalidProof ? 'blocked' : proof ? 'ready' : 'idle');
       }
-    } finally { if (current === version.current) locked.current = false; }
+    } finally { if (isCurrent()) { locked.current = false; writing.current = false; } }
   }
 
-  const busy = ['checking', 'requesting', 'waiting', 'verifying', 'approving', 'depositing', 'withdrawing'].includes(phase);
+  const busy = verification?.status === 'verifying' || ['checking', 'requesting', 'waiting', 'verifying', 'approving', 'depositing', 'withdrawing'].includes(phase);
   let units: bigint | null = null;
   try { units = parseVaultAmount(amount); } catch { /* The form keeps editable partial input. */ }
   const approvalNeeded = !!proof && units !== null && (balances === null || balances.allowance < units);
-  return { account, amount, mode, phase, balances, readError, error, qr, deepLink, proof, txHash, receipt, connecting, busy, units, approvalNeeded,
-    connect, refresh, requestProof, act, reset,
+  return { account, amount, mode, phase, balances, readError, error, qr, deepLink, proof, txHash, receipt, connecting, verification, busy, units, approvalNeeded,
+    connect, refresh, requestProof, verifyProof, act, reset,
     changeAmount: (value: string) => { if (!locked.current) { reset(); setAmount(value); } },
     changeMode: (value: 'deposit' | 'withdraw') => { if (!locked.current) { reset(); setMode(value); } },
   };

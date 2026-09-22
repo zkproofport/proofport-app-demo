@@ -1,4 +1,4 @@
-import { Interface, formatUnits, isAddress, isError, MaxUint256, parseUnits, ZeroAddress, type TransactionReceipt } from 'ethers';
+import { Interface, formatUnits, isAddress, isError, MaxUint256, parseUnits, ZeroAddress, type Eip1193Provider, type TransactionReceipt } from 'ethers';
 import { type TypedAction } from '@zkproofport-app/sdk';
 import { GIWA_CHAIN_ID } from './giwa-membership';
 
@@ -28,6 +28,20 @@ export const VAULT_ABI = [
   'error IdentityProofNotAllowed()', 'error WrongDepositDomain()', 'error WrongDepositAction()',
 ];
 const vaultInterface = new Interface(VAULT_ABI);
+
+/** Recheck wallet authority at the send boundary, after ethers' async gas estimation. */
+export function guardGiwaWalletProvider(provider: Eip1193Provider, isCurrent: () => boolean): Eip1193Provider {
+  return { request: async (request) => {
+    if (!isCurrent()) throw new Error('Wallet or network changed. Reconnect the operational wallet.');
+    if (request.method === 'eth_sendTransaction') {
+      const transaction = Array.isArray(request.params) ? request.params[0] : undefined;
+      if (!transaction || Number(transaction.chainId) !== GIWA_CHAIN_ID) {
+        throw new Error('The transaction must explicitly target GIWA Sepolia.');
+      }
+    }
+    return provider.request(request);
+  } };
+}
 
 /** Build exactly the action checked by the deployed Gotgan v2 vault. */
 export function buildGiwaDepositAction(account: string, amount: bigint, nonce: bigint, vaultAddress = VAULT_ADDRESS): TypedAction {

@@ -1,12 +1,14 @@
 'use client';
 
 import AppDownloads from './AppDownloads';
+import { useEffect, useState } from 'react';
 
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, ArrowsClockwise, Buildings, CheckCircle, LockKey, ShieldCheck, Wallet, WarningCircle } from '@phosphor-icons/react';
 import { formatUnits } from 'ethers';
 import { useGiwaVault } from '@/lib/useGiwaVault';
 import { displayKRW, EXPLORER, OPERATIONAL_WALLET, TOKEN_ADDRESS, VAULT_ADDRESS } from '@/lib/giwa-vault';
 import { GIWA_VERIFIER } from '@/lib/giwa-membership';
+import { isMobileDevice } from '@/lib/device';
 import GotganLogo, { GotganMark } from './GotganLogo';
 import './giwa.css';
 
@@ -15,6 +17,8 @@ const addressLink = (address: string) => `${EXPLORER}/address/${address}`;
 
 export default function GiwaDemo() {
   const flow = useGiwaVault();
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => setMobile(isMobileDevice()), []);
   const { balances, phase, proof, busy } = flow;
   const waiting = ['requesting', 'waiting', 'verifying'].includes(phase);
   const writing = ['approving', 'depositing', 'withdrawing'].includes(phase);
@@ -62,20 +66,26 @@ export default function GiwaDemo() {
             <div aria-live="polite" aria-atomic="true">
               {phase === 'blocked' && !flow.error && <div className="gv-result gv-blocked"><span className="gv-result-icon"><LockKey size={22} /></span><div><h3>Deposit blocked</h3><p>An eligibility proof is required.</p><small>No transaction sent.</small></div></div>}
               {completed && flow.receipt && <div className="gv-result gv-success"><CheckCircle size={29} weight="fill" /><div><h3>{flow.receipt.action === 'deposit' ? 'Deposit confirmed' : 'Withdrawal confirmed'}</h3><p>{displayKRW(flow.receipt.amount)} dKRW {flow.receipt.action === 'deposit' ? 'deposited into the vault.' : 'returned to your operational wallet.'}</p><a href={`${EXPLORER}/tx/${flow.receipt.hash}`} target="_blank" rel="noreferrer">View transaction <ArrowUpRight size={14} /></a></div></div>}
-              {waiting && <div className="gv-proof-request"><div className="gv-request-heading"><span className="gv-spinner" /><strong>{phase === 'requesting' ? 'Preparing proof request' : phase === 'verifying' ? 'Verifying proof on GIWA' : 'Continue on your phone'}</strong></div>{phase === 'waiting' && <><img src={flow.qr} width={220} height={220} alt="Scan with ZKProofport to prove eligibility for this deposit" /><p>Scan with ZKProofport using your KYC-linked account.</p><a className="gv-open-app" href={flow.deepLink}>Open ZKProofport <ArrowUpRight size={14} /></a><AppDownloads compact /></>}<button className="gv-text-button" onClick={flow.reset}>Cancel proof request</button></div>}
+              {waiting && <div className="gv-proof-request"><div className="gv-request-heading"><span className="gv-spinner" /><strong>{phase === 'requesting' ? 'Preparing proof request' : phase === 'verifying' ? 'Verifying proof on GIWA' : 'Continue on your phone'}</strong></div>{phase === 'waiting' && <>{!mobile && <img src={flow.qr} width={220} height={220} alt="Scan with ZKProofport to prove eligibility for this deposit" />}<p>{mobile ? 'Open ZKProofport and sign this action with your KYC-linked account.' : 'Scan with ZKProofport using your KYC-linked account.'}</p><a className="gv-open-app" href={flow.deepLink}>Open ZKProofport <ArrowUpRight size={14} /></a><AppDownloads compact /></>}<button className="gv-text-button" onClick={flow.reset}>Cancel proof request</button></div>}
               {writing && <p className="gv-pending"><span className="gv-spinner" />{flow.txHash ? 'Transaction submitted. Waiting for confirmation.' : 'Confirm the transaction in your wallet.'}</p>}
             </div>
             {flow.error && <div className="gv-error" role="alert"><WarningCircle size={19} /><p>{flow.error}</p></div>}
             {flow.txHash && !completed && <a className="gv-tx-link" href={`${EXPLORER}/tx/${flow.txHash}`} target="_blank" rel="noreferrer">Track transaction <ArrowUpRight size={14} /></a>}
 
             {!waiting && <div className="gv-action-buttons">
-              {!flow.account ? <button className="gv-primary" onClick={() => void flow.connect()} disabled={flow.connecting}><Wallet size={18} />{flow.connecting ? 'Connecting…' : 'Connect operational wallet'}<ArrowRight size={19} /></button>
-                : completed ? <button className="gv-primary" onClick={flow.reset}>Make another {flow.mode}<ArrowRight size={19} /></button>
+              {completed ? <button className="gv-primary" onClick={flow.reset}>Make another {flow.mode}<ArrowRight size={19} /></button>
                 : <>
-                  {flow.mode === 'deposit' && !proof && <button className={phase === 'blocked' ? 'gv-primary' : 'gv-secondary'} disabled={busy || flow.units === null} onClick={() => void flow.requestProof()}><ShieldCheck size={19} />Generate eligibility proof<ArrowRight size={18} /></button>}
-                  <button className={phase === 'blocked' && !proof ? 'gv-secondary' : 'gv-primary'} disabled={busy || flow.units === null} onClick={() => void flow.act(flow.mode === 'withdraw' ? 'withdraw' : flow.approvalNeeded ? 'approve' : 'deposit')}>{busy ? <span className="gv-spinner" /> : flow.mode === 'deposit' ? <ArrowDownLeft size={19} /> : <ArrowUpRight size={19} />}{actionLabel}{!busy && <ArrowRight size={19} />}</button>
+                  {flow.mode === 'deposit' && !proof && <button className="gv-primary" disabled={busy || flow.connecting || flow.units === null} onClick={() => void flow.requestProof()}><ShieldCheck size={19} />Generate eligibility proof<ArrowRight size={18} /></button>}
+                  {proof && <>
+                    <button className="gv-secondary" disabled={busy} onClick={() => void flow.verifyProof('offchain')}>Off-Chain Verify<ShieldCheck size={18} /></button>
+                    <button className="gv-secondary" disabled={busy} onClick={() => void flow.verifyProof('onchain')}>On-Chain Verify<ShieldCheck size={18} /></button>
+                    {flow.verification && <p className="gv-action-note" role="status">{flow.verification.status === 'verifying' && <span className="gv-spinner" />}{flow.verification.message}</p>}
+                  </>}
+                  {!flow.account ? <button className="gv-secondary" onClick={() => void flow.connect()} disabled={flow.connecting || busy}><Wallet size={18} />{flow.connecting ? 'Connecting…' : 'Connect operational wallet'}<ArrowRight size={19} /></button>
+                    : <button className={!proof && flow.mode === 'deposit' ? 'gv-secondary' : 'gv-primary'} disabled={busy || flow.units === null} onClick={() => void flow.act(flow.mode === 'withdraw' ? 'withdraw' : flow.approvalNeeded ? 'approve' : 'deposit')}>{busy ? <span className="gv-spinner" /> : flow.mode === 'deposit' ? <ArrowDownLeft size={19} /> : <ArrowUpRight size={19} />}{actionLabel}{!busy && <ArrowRight size={19} />}</button>}
                 </>}
             </div>}
+            {!flow.account && flow.mode === 'deposit' && <p className="gv-action-note">Generate and verify your proof without connecting a browser wallet. Connect the operational wallet only to move dKRW.</p>}
             <p className="gv-action-note"><LockKey size={13} />{flow.mode === 'deposit' ? 'Your KYC account is not sent to the vault.' : 'Withdrawals do not require a new KYC proof.'}</p>
           </div>
           <div className="gv-card-footer"><img src="/logo.png" width={21} height={21} alt="" /><span>Proofs by <strong>ZKProofport</strong></span></div>

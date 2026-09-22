@@ -1,6 +1,8 @@
-import { Interface, formatUnits, isError, parseUnits, type TransactionReceipt } from 'ethers';
+import { Interface, formatUnits, isAddress, isError, MaxUint256, parseUnits, ZeroAddress, type TransactionReceipt } from 'ethers';
+import { type TypedAction } from '@zkproofport-app/sdk';
+import { GIWA_CHAIN_ID } from './giwa-membership';
 
-export const VAULT_ADDRESS = '0x18F72bF293E96117AF2641F304B5F1f274864EC8';
+export const VAULT_ADDRESS = '0x0036B61dBFaB8f3CfEEF77dD5D45F7EFBFE2035c';
 export const TOKEN_ADDRESS = '0x417573024528f3c9daD782eF5316E992F3029e81';
 export const OPERATIONAL_WALLET = '0x3fee628efe472ff6a6dce527523b131f2d973afb';
 export const GIWA_RPC = 'https://sepolia-rpc.giwa.io';
@@ -15,13 +17,34 @@ export const VAULT_ABI = [
   'function balanceOf(address) view returns (uint256)',
   'function totalDeposits() view returns (uint256)',
   'function depositScope(address,uint256) view returns (string)',
+  'function nonces(address) view returns (uint256)',
+  'function domainSeparator() view returns (bytes32)',
+  'function depositActionHash(address,uint256) view returns (bytes32)',
   'function verifyEligibility(address,uint256,bytes,bytes32[]) view returns (bool)',
   'function deposit(uint256,bytes,bytes32[])',
   'function withdraw(uint256)',
   'error ProofRequired()', 'error WrongDepositScope()', 'error InvalidProof()',
   'error UntrustedIssuer()', 'error InsufficientBalance()', 'error TokenTransferFailed()',
+  'error IdentityProofNotAllowed()', 'error WrongDepositDomain()', 'error WrongDepositAction()',
 ];
 const vaultInterface = new Interface(VAULT_ABI);
+
+/** Build exactly the action checked by the deployed Gotgan v2 vault. */
+export function buildGiwaDepositAction(account: string, amount: bigint, nonce: bigint, vaultAddress = VAULT_ADDRESS): TypedAction {
+  if (!isAddress(account) || account.toLowerCase() === ZeroAddress) throw new Error('Invalid deposit account address.');
+  if (!isAddress(vaultAddress) || vaultAddress.toLowerCase() === ZeroAddress) throw new Error('Invalid vault address.');
+  if (amount <= BigInt(0) || amount > MaxUint256) throw new Error('Invalid deposit amount.');
+  if (nonce < BigInt(0) || nonce > MaxUint256) throw new Error('Invalid deposit nonce.');
+  return {
+    domain: { name: 'Gotgan', version: '2', chainId: GIWA_CHAIN_ID, verifyingContract: vaultAddress },
+    primaryType: 'Deposit',
+    types: { Deposit: [
+      { name: 'account', type: 'address' }, { name: 'asset', type: 'address' },
+      { name: 'amount', type: 'uint256' }, { name: 'nonce', type: 'uint256' },
+    ] },
+    message: { account, asset: TOKEN_ADDRESS, amount: amount.toString(), nonce: nonce.toString() },
+  };
+}
 
 type VaultReceipt = Pick<TransactionReceipt, 'hash' | 'status'>;
 
@@ -72,7 +95,7 @@ export function vaultErrorMessage(cause: unknown): string {
   const error = cause as { code?: string | number; shortMessage?: string; message?: string };
   if (error?.code === 'ACTION_REJECTED' || error?.code === 4001) return 'The wallet request was declined. You can try again.';
   const name = vaultErrorName(cause);
-  if (name === 'WrongDepositScope') return 'This proof no longer matches the deposit. Generate a new proof.';
+  if (['WrongDepositScope', 'WrongDepositDomain', 'WrongDepositAction', 'IdentityProofNotAllowed'].includes(name ?? '')) return 'This proof no longer matches the deposit. Generate a new proof.';
   if (name === 'InvalidProof' || name === 'UntrustedIssuer') return 'The eligibility proof did not pass the Vault check. Generate a new proof.';
   if (name === 'TokenTransferFailed') return 'Token transfer failed. Check your dKRW balance and Vault allowance.';
   return error?.shortMessage || error?.message || 'The request could not finish. Please try again.';

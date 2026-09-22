@@ -3,10 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 // The public relay does not allow localhost origins. Keep this same-origin
 // adapter restricted to the three HTTP endpoints needed by the Vault demo.
 // Never forward browser credentials or a caller-selected upstream URL.
-const relayURL = process.env.NEXT_PUBLIC_RELAY_URL || 'https://relay.zkproofport.app';
 const uuid = '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}';
 
 async function relay(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+  const relayURL = process.env.RELAY_URL;
+  if (!relayURL) return NextResponse.json({ error: 'RELAY_URL is not configured for this demo.' }, { status: 502 });
   const { path } = await context.params;
   const endpoint = path.join('/');
   const allowed = request.method === 'GET'

@@ -3,6 +3,7 @@ import { ALL_CIRCUIT_IDS, type RelayProofResult } from '@zkproofport-app/sdk';
 import { getBytes, keccak256, toUtf8Bytes } from 'ethers';
 import { DEMOS, demoById, type DemoId } from '../lib/demo-catalog';
 import { buildDemoInputs, COINBASE_SIGNER_ROOT, DEFAULT_OPTIONS, DEMO_VERIFIERS, prepareDemoProof, type DemoOptions } from '../lib/demo-policy';
+import { depositAction, giwaResult } from './fixtures/giwa';
 
 const requestId = 'request-for-this-tab';
 const scope = 'unique-example-session';
@@ -16,7 +17,7 @@ function fixture(id: DemoId, options: DemoOptions = DEFAULT_OPTIONS) {
   const demo = demoById(id)!;
   // Arc's 192 is six 32-byte public inputs: signal_hash, domain_separator,
   // action_hash, signer_list_merkle_root, scope, nullifier.
-  const count = { kyc: 128, country: 150, email: 148, ownership: 97, age: 66, region: 96, giwa: 128, arc: 192 }[id];
+  const count = { kyc: 128, country: 150, email: 148, ownership: 97, age: 66, region: 96, giwa: 192, arc: 192 }[id];
   const publicInputs = Array.from({ length: count }, () => field(0));
   function put(start: number, bytes: Uint8Array) { bytes.forEach((value, index) => { publicInputs[start + index] = field(value); }); }
   // Where `scope` sits. Arc's is 64 fields further along than Coinbase's,
@@ -53,6 +54,16 @@ describe('dedicated circuit coverage', () => {
   it('offers one dedicated screen for every circuit exposed by the SDK', () => {
     expect(DEMOS.map(demo => demo.circuit).sort()).toEqual([...ALL_CIRCUIT_IDS].sort());
     expect(new Set(DEMOS.map(demo => demo.id)).size).toBe(DEMOS.length);
+  });
+});
+
+describe('GIWA generic identity policy uses the current SDK layout', () => {
+  const context = { demo: demoById('giwa')!, requestId: 'current-request', scope, options: DEFAULT_OPTIONS, year };
+  it('accepts identity membership with scope at byte 128', () => {
+    expect(prepareDemoProof(giwaResult(scope), context).publicInputs).toHaveLength(192);
+  });
+  it('rejects an action-bound deposit proof for an identity-only request', () => {
+    expect(() => prepareDemoProof(giwaResult(scope, depositAction()), context)).toThrow();
   });
 });
 

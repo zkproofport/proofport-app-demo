@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Interface, getBytes, keccak256, toBeHex, toUtf8Bytes } from 'ethers';
-import { CIRCUIT_IDS } from '@zkproofport-app/sdk';
-import { displayKRW, parseVaultAmount, vaultErrorMessage, vaultErrorName, waitForVaultReceipt, VAULT_ABI } from '../lib/giwa-vault';
-import { GIWA_CHAIN_ID, GIWA_SIGNER_ROOT, GIWA_VERIFIER, prepareGiwaMembershipProof } from '../lib/giwa-membership';
+import { Interface, MaxUint256 } from 'ethers';
+import { buildGiwaDepositAction, displayKRW, parseVaultAmount, vaultErrorMessage, vaultErrorName, waitForVaultReceipt, VAULT_ABI } from '../lib/giwa-vault';
+import { prepareGiwaMembershipProof } from '../lib/giwa-membership';
+import { depositAction, giwaResult, GIWA_TEST_ACCOUNT, GIWA_TEST_VAULT } from './fixtures/giwa';
 
 describe('dKRW amounts are exact six-decimal integers', () => {
   it('converts the institutional deposit amount without floating point', () => {
@@ -42,13 +42,39 @@ describe('contract rejection is distinguished from a network failure', () => {
 
 describe('Vault mobile proof binding', () => {
   const scope = 'giwa-vault:v1:' + 'ab'.repeat(32);
-  const publicInputs = [new Uint8Array(32), getBytes(GIWA_SIGNER_ROOT), getBytes(keccak256(toUtf8Bytes(scope))), new Uint8Array(32)].flatMap(field => Array.from(field, byte => toBeHex(byte, 32)));
-  const result = { requestId: 'deposit-request', circuit: CIRCUIT_IDS.GIWA_ATTESTATION, status: 'completed' as const, chainId: GIWA_CHAIN_ID, verifierAddress: GIWA_VERIFIER, proof: '0x1234', publicInputs };
+  const action = depositAction();
+  const result = giwaResult(scope, action);
   it('accepts the exact scope returned by depositScope for policy preflight', () => {
-    expect(prepareGiwaMembershipProof(result, result.requestId, scope).publicInputs).toHaveLength(128);
+    expect(prepareGiwaMembershipProof(result, result.requestId, scope, action).publicInputs).toHaveLength(192);
   });
   it('rejects proof reuse for a changed amount, wallet or consumed nonce scope', () => {
-    expect(() => prepareGiwaMembershipProof(result, result.requestId, 'giwa-vault:v1:' + 'cd'.repeat(32))).toThrow();
+    expect(() => prepareGiwaMembershipProof(result, result.requestId, 'giwa-vault:v1:' + 'cd'.repeat(32), action)).toThrow();
+  });
+});
+
+describe('Gotgan deposit action construction', () => {
+  it('binds the account, asset, amount and nonce to the v2 vault EIP-712 domain', () => {
+    expect(buildGiwaDepositAction(GIWA_TEST_ACCOUNT, BigInt(1000000), BigInt(0), GIWA_TEST_VAULT)).toEqual(depositAction());
+  });
+
+  it.each([BigInt(1), MaxUint256])('keeps boundary amounts exact and JSON serializable: %s', amount => {
+    const action = buildGiwaDepositAction(GIWA_TEST_ACCOUNT, amount, MaxUint256, GIWA_TEST_VAULT);
+    expect(action.message.amount).toBe(amount.toString());
+    expect(action.message.nonce).toBe(MaxUint256.toString());
+    expect(() => JSON.stringify(action)).not.toThrow();
+  });
+
+  it.each([BigInt(-1), BigInt(0), MaxUint256 + BigInt(1), MaxUint256 * BigInt(2)])('rejects an amount outside uint256 deposit bounds: %s', amount => {
+    expect(() => buildGiwaDepositAction(GIWA_TEST_ACCOUNT, amount, BigInt(0), GIWA_TEST_VAULT)).toThrow(/amount/i);
+  });
+
+  it.each([BigInt(-1), MaxUint256 + BigInt(1), MaxUint256 * BigInt(2)])('rejects an invalid nonce: %s', nonce => {
+    expect(() => buildGiwaDepositAction(GIWA_TEST_ACCOUNT, BigInt(1), nonce, GIWA_TEST_VAULT)).toThrow(/nonce/i);
+  });
+
+  it.each(['', ' ', '0x', '0x1234', '0x' + '00'.repeat(20), '0x' + 'gg'.repeat(20), '0x' + '11'.repeat(21), '%_\\', '<script>', '한글👛'])('rejects an unusable account or vault address: %s', address => {
+    expect(() => buildGiwaDepositAction(address, BigInt(1), BigInt(0), GIWA_TEST_VAULT)).toThrow(/address|account/i);
+    expect(() => buildGiwaDepositAction(GIWA_TEST_ACCOUNT, BigInt(1), BigInt(0), address)).toThrow(/address|vault/i);
   });
 });
 

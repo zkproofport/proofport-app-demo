@@ -1,5 +1,7 @@
 # GIWA Sepolia Gotgan Vault v2
 
+Deployed on 2026-09-23 KST to `0x0036B61dBFaB8f3CfEEF77dD5D45F7EFBFE2035c` (chain 91342). Transaction: `0xcac293988fbc00d30082db58beec4c1fdb396c1b5811c769364bd1d359cca0da`, status 1. Source: `fe56978`. RPC readback confirmed the existing dKRW asset, new verifier and 192 public inputs.
+
 This test ERC-20 vault checks both a GIWA KYC proof and an EIP-712 `Deposit` authorization. The KYC wallet signs the deposit action; the operational wallet sends the token approval, deposit, and withdrawal transactions. The vault provides custody only, with no yield, share token, or administrator withdrawal.
 
 ## Configuration and the original vault

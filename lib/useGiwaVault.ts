@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BrowserProvider, Contract, JsonRpcProvider, toBeHex, type Eip1193Provider } from 'ethers';
+import { BrowserProvider, Contract, JsonRpcProvider, TypedDataEncoder, Wallet, toBeHex, type Eip1193Provider } from 'ethers';
 import { CIRCUIT_IDS, ProofportSDK, type RelayProofResult } from '@zkproofport-app/sdk';
 import { GIWA_CHAIN_ID, prepareGiwaMembershipProof } from './giwa-membership';
-import { EXPLORER, GIWA_RPC, OPERATIONAL_WALLET, TOKEN_ABI, TOKEN_ADDRESS, VAULT_ABI, VAULT_ADDRESS, parseVaultAmount, vaultErrorMessage, vaultErrorName, waitForVaultReceipt } from './giwa-vault';
+import { EXPLORER, GIWA_RPC, OPERATIONAL_WALLET, TOKEN_ABI, TOKEN_ADDRESS, VAULT_ABI, VAULT_ADDRESS, buildGiwaDepositAction, parseVaultAmount, vaultErrorMessage, vaultErrorName, waitForVaultReceipt } from './giwa-vault';
 
 type WalletProvider = Eip1193Provider & { on?: (event: string, listener: (...args: unknown[]) => void) => void; removeListener?: (event: string, listener: (...args: unknown[]) => void) => void };
 type Phase = 'idle' | 'checking' | 'blocked' | 'requesting' | 'waiting' | 'verifying' | 'ready' | 'approving' | 'depositing' | 'withdrawing' | 'success';
@@ -113,12 +113,25 @@ export function useGiwaVault() {
     let client: ProofportSDK | undefined;
     try {
       const units = parseVaultAmount(amount);
-      const scope: string = await timeout(vault().depositScope(account, units));
+      const contract = vault();
+      const blockTag = await timeout(readProvider().getBlockNumber());
+      const [scope, nonce, domainHash, actionHash] = await timeout(Promise.all([
+        contract.depositScope(account, units, { blockTag }), contract.nonces(account, { blockTag }),
+        contract.domainSeparator({ blockTag }), contract.depositActionHash(account, units, { blockTag }),
+      ]));
+      const action = buildGiwaDepositAction(account, units, nonce);
+      if (TypedDataEncoder.hashDomain(action.domain) !== domainHash ||
+          TypedDataEncoder.hashStruct(action.primaryType, action.types, action.message) !== actionHash) {
+        throw new Error('The configured Vault uses a different deposit action. Please reload the demo.');
+      }
       if (current !== version.current) return;
       client = new ProofportSDK({ relayUrl: `${window.location.origin}/api/giwa-relay` });
+      // This key authenticates only the relay request. The app's attested wallet
+      // signs the deposit action; the connected operational wallet moves dKRW.
+      client.setSigner(Wallet.createRandom());
       sdk.current = client;
-      const pending = await timeout(client.createRelayRequest(CIRCUIT_IDS.GIWA_ATTESTATION, { scope }, {
-        dappName: 'Gotgan', dappIcon: 'https://demo.zkproofport.app/brand/gotgan-app-icon.png',
+      const pending = await timeout(client.createRelayRequest(CIRCUIT_IDS.GIWA_ATTESTATION, { scope, action }, {
+        dappName: 'Gotgan', dappIcon: `${window.location.origin}/brand/gotgan-app-icon.png`,
         message: `Prove eligibility for a ${amount} dKRW deposit into Gotgan from your operational wallet.`,
       }));
       if (current !== version.current) return;
@@ -137,7 +150,7 @@ export function useGiwaVault() {
       }
       if (current !== version.current) return;
       if (!result) throw new Error('The proof request expired. Please generate a new proof.');
-      const response = prepareGiwaMembershipProof(result, pending.requestId, scope);
+      const response = prepareGiwaMembershipProof(result, pending.requestId, scope, action);
       const bound: BoundProof = { proof: response.proof!, publicInputs: response.publicInputs!.map(value => toBeHex(BigInt(value), 32)), scope, amount: units, account };
       setPhase('verifying');
       const valid = await timeout(vault().verifyEligibility(account, units, bound.proof, bound.publicInputs));
@@ -193,7 +206,7 @@ export function useGiwaVault() {
       if (current !== version.current) return;
       if (action === 'deposit' && !proof && vaultErrorName(cause) === 'ProofRequired') setPhase('blocked');
       else {
-        const invalidProof = ['WrongDepositScope', 'InvalidProof', 'UntrustedIssuer'].includes(vaultErrorName(cause) ?? '');
+        const invalidProof = ['WrongDepositScope', 'WrongDepositDomain', 'WrongDepositAction', 'IdentityProofNotAllowed', 'InvalidProof', 'UntrustedIssuer'].includes(vaultErrorName(cause) ?? '');
         if (invalidProof) setProof(null);
         setError(vaultErrorMessage(cause)); setPhase(invalidProof ? 'blocked' : proof ? 'ready' : 'idle');
       }

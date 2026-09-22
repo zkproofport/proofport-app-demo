@@ -5,7 +5,7 @@ import {
 } from '@zkproofport-app/sdk';
 import { concat, keccak256, toUtf8Bytes } from 'ethers';
 import { type DemoDefinition, REGIONS } from './demo-catalog';
-import { GIWA_CHAIN_ID, GIWA_VERIFIER, prepareGiwaMembershipProof } from './giwa-membership';
+import { GIWA_CHAIN_ID, GIWA_VERIFIER, GIWA_PUBLIC_INPUT_COUNT, prepareGiwaMembershipProof } from './giwa-membership';
 
 /**
  * The Arc actions offered as cards, plus the escape hatch.
@@ -227,7 +227,7 @@ export function buildDemoInputs(demo: DemoDefinition, options: DemoOptions, scop
 }
 
 const PUBLIC_COUNTS: Record<CircuitType, number> = {
-  [CIRCUIT_IDS.GIWA_ATTESTATION]: 128, [CIRCUIT_IDS.COINBASE_ATTESTATION]: 128,
+  [CIRCUIT_IDS.GIWA_ATTESTATION]: GIWA_PUBLIC_INPUT_COUNT, [CIRCUIT_IDS.COINBASE_ATTESTATION]: 128,
   [CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION]: 150, [CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION]: 148,
   [CIRCUIT_IDS.MDL_KR_OWNERSHIP]: 97, [CIRCUIT_IDS.MDL_KR_AGE]: 66, [CIRCUIT_IDS.MDL_KR_REGION]: 96,
   // Six 32-byte public inputs: signal_hash, domain_separator, action_hash,

@@ -203,7 +203,7 @@ refreshing the page clears in-memory proof sessions.
 
 | Tab | Example dApp | Direct URL | Circuit |
 | --- | --- | --- | --- |
-| GIWA | Madang: Upbit KYC community for people and agents | `/?tab=giwa` | `giwa_attestation` |
+| GIWA | Gotgan: action-authorized dKRW testnet vault | `/?tab=giwa` | `giwa_attestation` |
 | KYC | Common: Coinbase KYC DeFi interface | `/?tab=kyc` | `coinbase_attestation` |
 | Country | Borderless: country blocklist exclusion | `/?tab=country` | `coinbase_country_attestation` |
 | Work email | zk blind: anonymous workplace community | `/?tab=email` | `oidc_domain_attestation` |
@@ -234,7 +234,9 @@ read-only contract check or in-browser verification through the SDK. Neither
 option sends a transaction. Access is an in-memory example, not server-enforced
 authorization. The sample venues and unlocked content are fictional.
 
-GIWA additionally pins the CIP-4 test issuer root and GIWA Sepolia verifier.
+Gotgan retains its existing screen and uses SDK 0.3.3 to bind a `Deposit` action to the operational account, asset, amount and nonce. It pins the CIP-4 test issuer root, current GIWA Sepolia verifier and 192-input format, then preflights the deployed Vault. Unlike the content-only demos, its explicit approve/deposit/withdraw buttons send testnet token transactions. See [GIWA-VAULT-DEMO.md](GIWA-VAULT-DEMO.md). The server-side GIWA adapter requires `RELAY_URL`; staging must point to `https://stg-relay.zkproofport.app`.
+
+
 Country proofs must match the entire inclusion/exclusion policy. Email proofs
 must match the domain and provider. Mobile ID proofs match anonymous disclosure
 settings, age threshold and year, or the selected region. Experimental circuit
@@ -496,3 +498,15 @@ For issues or questions:
 ## License
 
 This is part of the ZKProofport project. See parent repository for license terms.
+
+## GIWA integration verification
+
+Run `npm test`, `npm run typecheck`, `npm run build`, and the Foundry tests in `contracts`. After starting the parent Docker stack using `./scripts/dev.sh`, exercise the real HTTP request path:
+
+```sh
+DEMO_URL=http://localhost:3300 RELAY_URL=http://localhost:4001 npm run test:e2e
+```
+
+For a deployed staging smoke test, use `DEMO_URL=https://stg-demo.zkproofport.app` and `RELAY_URL=https://stg-relay.zkproofport.app`. Both endpoints are required. These tests create real pending requests, check exact typed action delivery and poll the same relay; they do not fabricate mobile proofs or assert a completed deposit. Complete the wallet-driven recording sequence in GIWA-VAULT-DEMO.md before promoting production.
+
+If GitHub Actions is unavailable, the parent workspace's `scripts/deploy-cloudrun.sh` builds the committed, pushed main revisions with Cloud Build and updates the existing Cloud Run image while preserving runtime configuration. Run `--check` with exact parent/service SHAs, then `--deploy`. Stage relay and demo first.

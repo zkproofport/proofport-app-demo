@@ -31,7 +31,7 @@ export default function GiwaDemo() {
     <div className="gv-container">
       <header className="gv-header">
         <a className="gv-brand" href="#content-giwa" aria-label="Gotgan home"><GotganLogo /></a>
-        <div className="gv-header-actions"><span className="gv-network"><img src="/giwa-logo.jpg" width={20} height={20} alt="" />GIWA Sepolia<i /></span><button className="gv-wallet-button" onClick={() => void flow.connect()} disabled={flow.connecting || busy}><Wallet size={18} />{flow.connecting ? 'Connecting…' : flow.account ? short(flow.account) : 'Connect wallet'}{flow.account && <span className="gv-connected-dot" />}</button></div>
+        <div className="gv-header-actions"><span className="gv-network"><img src="/giwa-logo.jpg" width={20} height={20} alt="" />GIWA Sepolia<i /></span><div className="gv-wallet-button" aria-label="Configured demo wallet" title={OPERATIONAL_WALLET}><Wallet size={18} /><span>{short(OPERATIONAL_WALLET)}</span><span className="gv-connected-dot" aria-hidden="true" /></div></div>
       </header>
 
       <section className="gv-heading" id="gv-overview"><div><h1>Institutional KRW vault.</h1><p>A KYC-gated vault on GIWA.</p></div></section>
@@ -48,7 +48,7 @@ export default function GiwaDemo() {
           <section className="gv-position" aria-label="Operational wallet position">
             <div className="gv-section-heading"><h2><Buildings size={20} />Your position</h2><button className="gv-icon-button" onClick={() => void flow.refresh()} aria-label="Refresh live balances"><ArrowsClockwise size={18} /></button></div>
             <div className="gv-position-grid"><div><span>Wallet balance</span><strong>{displayKRW(balances?.wallet ?? null)} <small>dKRW</small></strong></div><div><span>Your deposits</span><strong>{displayKRW(balances?.deposited ?? null)} <small>dKRW</small></strong></div></div>
-            <div className="gv-wallet-row"><span>Operational wallet</span><a href={addressLink(OPERATIONAL_WALLET)} target="_blank" rel="noreferrer" title={OPERATIONAL_WALLET}>{short(OPERATIONAL_WALLET)} <ArrowUpRight size={14} /></a><span className="gv-view-only">{flow.account ? 'Connected' : 'Read only'}</span></div>
+            <div className="gv-wallet-row"><span>Operational wallet</span><a href={addressLink(OPERATIONAL_WALLET)} target="_blank" rel="noreferrer" title={OPERATIONAL_WALLET}>{short(OPERATIONAL_WALLET)} <ArrowUpRight size={14} /></a><span className="gv-view-only">Demo wallet</span></div>
             {flow.readError && <p className="gv-read-error" role="status">{flow.readError}</p>}
           </section>
 

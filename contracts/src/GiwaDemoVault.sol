@@ -17,9 +17,13 @@ interface IGiwaVaultAsset {
 ///      This does not verify production Upbit KYC, live EAS status or revocation.
 contract GiwaDemoVault {
     uint256 public constant CHAIN_ID = 91342;
-    address public constant VERIFIER = 0xEb9eb5452790Cfe549fF83CEB3Dbe1C432231492;
+    address public constant VERIFIER = 0x5Da234546874304F8c51BBEed00fC632938211c1;
     address public constant TEST_ATTESTER = 0xEE099845CDfF93e73aDcBcB36A9B93578bcCed4b;
-    uint256 public constant PUBLIC_INPUT_COUNT = 128;
+    uint256 public constant PUBLIC_INPUT_COUNT = 192;
+    bytes32 private constant DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+    bytes32 private constant DEPOSIT_TYPEHASH =
+        keccak256("Deposit(address account,address asset,uint256 amount,uint256 nonce)");
 
     IGiwaVaultAsset public immutable asset;
     bytes32 public immutable trustedSignerRoot;
@@ -35,6 +39,9 @@ contract GiwaDemoVault {
     error ProofRequired();
     error InvalidPublicInputCount();
     error InvalidPublicInputByte(uint256 index);
+    error IdentityProofNotAllowed();
+    error WrongDepositDomain();
+    error WrongDepositAction();
     error UntrustedIssuer();
     error WrongDepositScope();
     error InvalidProof();
@@ -63,6 +70,17 @@ contract GiwaDemoVault {
         _lock = 1;
     }
 
+    /// @notice EIP-712 domain for Gotgan version 2 on this chain and vault.
+    function domainSeparator() public view returns (bytes32) {
+        return keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256("Gotgan"), keccak256("2"), block.chainid, address(this)));
+    }
+
+    /// @notice EIP-712 hashStruct of Deposit(account, asset, amount, current nonce).
+    /// @dev This is the action hash, not the complete EIP-712 signing digest.
+    function depositActionHash(address account, uint256 amount) public view returns (bytes32) {
+        return keccak256(abi.encode(DEPOSIT_TYPEHASH, account, address(asset), amount, nonces[account]));
+    }
+
     /// @notice Pass this exact string as the mobile giwa_attestation request's `scope`.
     /// @dev Binds the proof to this chain, vault, token, caller, amount and next deposit.
     ///      No KYC address is needed. A successful deposit consumes the current nonce.
@@ -79,8 +97,9 @@ contract GiwaDemoVault {
     }
 
     /// @notice Read-only preflight. Reverts on a policy mismatch or an invalid proof.
-    /// @dev `publicInputs` is 128 bytes32 fields containing ONE BYTE EACH, not four hashes.
-    ///      Layout: signal[0..31], issuer root[32..63], scope[64..95], nullifier[96..127].
+    /// @dev `publicInputs` is 192 bytes32 fields containing ONE BYTE EACH, not six hashes.
+    ///      Layout: signal[0..31], domain[32..63], action[64..95], issuer root[96..127],
+    ///      scope[128..159], nullifier[160..191]. Identity-only proofs cannot authorize deposits.
     function verifyEligibility(address account, uint256 amount, bytes calldata proof, bytes32[] calldata publicInputs)
         public
         view
@@ -91,14 +110,17 @@ contract GiwaDemoVault {
         if (proof.length == 0) revert ProofRequired();
         if (publicInputs.length != PUBLIC_INPUT_COUNT) revert InvalidPublicInputCount();
 
-        bytes32[4] memory fields;
+        bytes32[6] memory fields;
         for (uint256 i; i < PUBLIC_INPUT_COUNT; ++i) {
             uint256 value = uint256(publicInputs[i]);
             if (value > 255) revert InvalidPublicInputByte(i);
             fields[i / 32] = bytes32((uint256(fields[i / 32]) << 8) | value);
         }
-        if (fields[1] != trustedSignerRoot) revert UntrustedIssuer();
-        if (fields[2] != keccak256(bytes(depositScope(account, amount)))) revert WrongDepositScope();
+        if (fields[0] != bytes32(0)) revert IdentityProofNotAllowed();
+        if (fields[1] != domainSeparator()) revert WrongDepositDomain();
+        if (fields[2] != depositActionHash(account, amount)) revert WrongDepositAction();
+        if (fields[3] != trustedSignerRoot) revert UntrustedIssuer();
+        if (fields[4] != keccak256(bytes(depositScope(account, amount)))) revert WrongDepositScope();
 
         // The pinned Honk verifier can REVERT for invalid proofs, not just return false.
         try IGiwaEligibilityVerifier(VERIFIER).verify(proof, publicInputs) returns (bool valid) {

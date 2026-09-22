@@ -81,11 +81,11 @@ export default function GiwaDemo() {
                     <button className="gv-secondary" disabled={busy} onClick={() => void flow.verifyProof('onchain')}>On-Chain Verify<ShieldCheck size={18} /></button>
                     {flow.verification && <p className="gv-action-note" role="status">{flow.verification.status === 'verifying' && <span className="gv-spinner" />}{flow.verification.message}</p>}
                   </>}
-                  {!flow.account ? <button className="gv-secondary" onClick={() => void flow.connect()} disabled={flow.connecting || busy}><Wallet size={18} />{flow.connecting ? 'Connecting…' : 'Connect operational wallet'}<ArrowRight size={19} /></button>
+                  {!flow.account ? <button className="gv-secondary" disabled title={OPERATIONAL_WALLET}><Wallet size={18} />Demo wallet connected<CheckCircle size={19} /></button>
                     : <button className={!proof && flow.mode === 'deposit' ? 'gv-secondary' : 'gv-primary'} disabled={busy || flow.units === null} onClick={() => void flow.act(flow.mode === 'withdraw' ? 'withdraw' : flow.approvalNeeded ? 'approve' : 'deposit')}>{busy ? <span className="gv-spinner" /> : flow.mode === 'deposit' ? <ArrowDownLeft size={19} /> : <ArrowUpRight size={19} />}{actionLabel}{!busy && <ArrowRight size={19} />}</button>}
                 </>}
             </div>}
-            {!flow.account && flow.mode === 'deposit' && <p className="gv-action-note">Generate and verify your proof without connecting a browser wallet. Connect the operational wallet only to move dKRW.</p>}
+            {!flow.account && <p className="gv-action-note">This demo uses the configured operational wallet. Token transfers are disabled.</p>}
             <p className="gv-action-note"><LockKey size={13} />{flow.mode === 'deposit' ? 'Your KYC account is not sent to the vault.' : 'Withdrawals do not require a new KYC proof.'}</p>
           </div>
           <div className="gv-card-footer"><img src="/logo.png" width={21} height={21} alt="" /><span>Proofs by <strong>ZKProofport</strong></span></div>

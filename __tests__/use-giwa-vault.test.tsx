@@ -363,7 +363,7 @@ describe('Gotgan proof request orchestration', () => {
     expect(host.textContent).toContain('On-Chain Verification Passed!');
     expect(external.onchain).toHaveBeenCalledOnce();
     expect(external.onchain.mock.calls[0][0]).toEqual(external.offchain.mock.calls[0][0]);
-    expect(button('Connect operational wallet')).toBeDefined();
+    expect(button('Demo wallet connected')?.disabled).toBe(true);
     expect(button('Approve dKRW')).toBeUndefined();
     expect(external.approve).not.toHaveBeenCalled();
     expect(external.deposit).not.toHaveBeenCalled();

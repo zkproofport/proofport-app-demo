@@ -4,7 +4,6 @@ import { GIWA_CHAIN_ID } from './giwa-membership';
 
 export const VAULT_ADDRESS = '0x0036B61dBFaB8f3CfEEF77dD5D45F7EFBFE2035c';
 export const TOKEN_ADDRESS = '0x417573024528f3c9daD782eF5316E992F3029e81';
-export const OPERATIONAL_WALLET = '0x3fee628efe472ff6a6dce527523b131f2d973afb';
 export const GIWA_RPC = 'https://sepolia-rpc.giwa.io';
 export const EXPLORER = 'https://sepolia-explorer.giwa.io';
 export const TOKEN_DECIMALS = 6;

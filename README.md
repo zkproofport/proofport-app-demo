@@ -221,10 +221,13 @@ For a local preview that uses the deployed relay, set this in `.env.local`:
 
 ```dotenv
 NEXT_PUBLIC_RELAY_URL=https://relay.zkproofport.app
+RELAY_URL=https://relay.zkproofport.app
 ```
 
-Restart the development server after changing the variable. It is a public URL,
-not a secret. Without the override, local development still uses port 4001.
+Restart the development server after changing these variables. Other demos use
+`NEXT_PUBLIC_RELAY_URL`; Gotgan's same-origin server adapter uses `RELAY_URL`.
+Set both to the same relay. These are public URLs, not secrets. Without the
+overrides, local development uses port 4001 and requires a running local relay.
 
 Each dedicated tab creates a real relay request and receives a mobile-generated
 proof. The dApp checks the request, fresh session scope, circuit, allowed verifier
@@ -234,7 +237,7 @@ read-only contract check or in-browser verification through the SDK. Neither
 option sends a transaction. Access is an in-memory example, not server-enforced
 authorization. The sample venues and unlocked content are fictional.
 
-Gotgan retains its existing screen and uses SDK 0.3.3 to bind a `Deposit` action to the operational account, asset, amount and nonce. It pins the CIP-4 test issuer root, current GIWA Sepolia verifier and 192-input format, then preflights the deployed Vault. Unlike the content-only demos, its explicit approve/deposit/withdraw buttons send testnet token transactions. See [GIWA-VAULT-DEMO.md](GIWA-VAULT-DEMO.md). The server-side GIWA adapter requires `RELAY_URL`; staging must point to `https://stg-relay.zkproofport.app`.
+Gotgan uses SDK 0.3.3 to bind a `Deposit` action to the connected operational account, asset, amount and nonce. Any browser-wallet account can connect; connect before generating a proof. The Vault automatically verifies the returned proof, with no separate verification buttons. Changing account or network invalidates the current proof. It pins the CIP-4 test issuer root, current GIWA Sepolia verifier and 192-input format, then preflights the deployed Vault. Unlike the content-only demos, its explicit approve/deposit/withdraw buttons send testnet token transactions. See [GIWA-VAULT-DEMO.md](GIWA-VAULT-DEMO.md). The server-side GIWA adapter requires `RELAY_URL`; staging must point to `https://stg-relay.zkproofport.app`.
 
 
 Country proofs must match the entire inclusion/exclusion policy. Email proofs

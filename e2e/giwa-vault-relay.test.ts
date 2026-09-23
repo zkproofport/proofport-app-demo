@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 import { CIRCUIT_IDS, ProofportSDK } from '@zkproofport-app/sdk';
 import { AbiCoder, Contract, hexlify, JsonRpcProvider, keccak256, randomBytes, TypedDataEncoder, Wallet } from 'ethers';
-import { buildGiwaDepositAction, GIWA_RPC, OPERATIONAL_WALLET, TOKEN_ADDRESS, VAULT_ABI, VAULT_ADDRESS, vaultErrorName } from '../lib/giwa-vault';
+import { buildGiwaDepositAction, GIWA_RPC, TOKEN_ADDRESS, VAULT_ABI, VAULT_ADDRESS, vaultErrorName } from '../lib/giwa-vault';
 
 const demoUrl = process.env.DEMO_URL;
 const relayUrl = process.env.RELAY_URL;
@@ -72,6 +72,7 @@ describe('Gotgan deposit request crosses the real demo and relay', () => {
 
 describe('the deployed GIWA vault agrees with the SDK deposit action', () => {
   it('matches nonce, scope, domain and action at one block and rejects an unproved deposit', async () => {
+    const account = Wallet.createRandom().address;
     const provider = new JsonRpcProvider(GIWA_RPC, 91342, { staticNetwork: true, cacheTimeout: -1 });
     const contract = new Contract(VAULT_ADDRESS, [
       ...VAULT_ABI,
@@ -84,27 +85,27 @@ describe('the deployed GIWA vault agrees with the SDK deposit action', () => {
       const amount = BigInt(1000000);
       const [code, nonce, scope, domainHash, actionHash, asset, verifier] = await Promise.all([
         provider.getCode(VAULT_ADDRESS, blockTag),
-        contract.nonces(OPERATIONAL_WALLET, { blockTag }),
-        contract.depositScope(OPERATIONAL_WALLET, amount, { blockTag }),
+        contract.nonces(account, { blockTag }),
+        contract.depositScope(account, amount, { blockTag }),
         contract.domainSeparator({ blockTag }),
-        contract.depositActionHash(OPERATIONAL_WALLET, amount, { blockTag }),
+        contract.depositActionHash(account, amount, { blockTag }),
         contract.asset({ blockTag }), contract.VERIFIER({ blockTag }),
       ]);
       expect(code).not.toBe('0x');
       expect(asset.toLowerCase()).toBe(TOKEN_ADDRESS.toLowerCase());
       expect(verifier.toLowerCase()).toBe('0x5da234546874304f8c51bbeed00fc632938211c1');
-      const action = buildGiwaDepositAction(OPERATIONAL_WALLET, amount, nonce);
+      const action = buildGiwaDepositAction(account, amount, nonce);
       expect(TypedDataEncoder.hashDomain(action.domain)).toBe(domainHash);
       expect(TypedDataEncoder.hashStruct(action.primaryType, action.types, action.message)).toBe(actionHash);
       const encoded = AbiCoder.defaultAbiCoder().encode(
         ['uint256', 'address', 'address', 'address', 'uint256', 'uint256'],
-        [91342, VAULT_ADDRESS, TOKEN_ADDRESS, OPERATIONAL_WALLET, amount, nonce],
+        [91342, VAULT_ADDRESS, TOKEN_ADDRESS, account, amount, nonce],
       );
       expect(scope).toBe(`giwa-vault:v1:${keccak256(encoded).slice(2)}`);
 
       // eth_call only: no wallet key, transfer, approval or transaction broadcast.
       let rejection: unknown;
-      try { await contract.deposit.staticCall(amount, '0x', [], { from: OPERATIONAL_WALLET, blockTag }); }
+      try { await contract.deposit.staticCall(amount, '0x', [], { from: account, blockTag }); }
       catch (error) { rejection = error; }
       expect(rejection, 'an unproved deposit must revert').toBeDefined();
       expect(vaultErrorName(rejection), 'a network failure is not proof-policy enforcement').toBe('ProofRequired');

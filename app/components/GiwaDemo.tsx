@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, ArrowsClockwise, Buildings, CheckCircle, LockKey, ShieldCheck, Wallet, WarningCircle } from '@phosphor-icons/react';
 import { formatUnits } from 'ethers';
 import { useGiwaVault } from '@/lib/useGiwaVault';
-import { displayKRW, EXPLORER, OPERATIONAL_WALLET, TOKEN_ADDRESS, VAULT_ADDRESS } from '@/lib/giwa-vault';
+import { displayKRW, EXPLORER, TOKEN_ADDRESS, VAULT_ADDRESS } from '@/lib/giwa-vault';
 import { GIWA_VERIFIER } from '@/lib/giwa-membership';
 import { isMobileDevice } from '@/lib/device';
 import GotganLogo, { GotganMark } from './GotganLogo';
@@ -31,7 +31,7 @@ export default function GiwaDemo() {
     <div className="gv-container">
       <header className="gv-header">
         <a className="gv-brand" href="#content-giwa" aria-label="Gotgan home"><GotganLogo /></a>
-        <div className="gv-header-actions"><span className="gv-network"><img src="/giwa-logo.jpg" width={20} height={20} alt="" />GIWA Sepolia<i /></span><div className="gv-wallet-button" aria-label="Configured demo wallet" title={OPERATIONAL_WALLET}><Wallet size={18} /><span>{short(OPERATIONAL_WALLET)}</span><span className="gv-connected-dot" aria-hidden="true" /></div></div>
+        <div className="gv-header-actions"><span className="gv-network"><img src="/giwa-logo.jpg" width={20} height={20} alt="" />GIWA Sepolia<i /></span><button className="gv-wallet-button" onClick={() => void flow.connect()} disabled={flow.connecting || busy || !!flow.account} aria-label={flow.account ? 'Connected operational wallet' : 'Connect wallet'} title={flow.account || undefined}><Wallet size={18} /><span>{flow.connecting ? 'Connecting…' : flow.account ? short(flow.account) : 'Connect wallet'}</span>{flow.account && <span className="gv-connected-dot" aria-hidden="true" />}</button></div>
       </header>
 
       <section className="gv-heading" id="gv-overview"><div><h1>Institutional KRW vault.</h1><p>A KYC-gated vault on GIWA.</p></div></section>
@@ -48,7 +48,7 @@ export default function GiwaDemo() {
           <section className="gv-position" aria-label="Operational wallet position">
             <div className="gv-section-heading"><h2><Buildings size={20} />Your position</h2><button className="gv-icon-button" onClick={() => void flow.refresh()} aria-label="Refresh live balances"><ArrowsClockwise size={18} /></button></div>
             <div className="gv-position-grid"><div><span>Wallet balance</span><strong>{displayKRW(balances?.wallet ?? null)} <small>dKRW</small></strong></div><div><span>Your deposits</span><strong>{displayKRW(balances?.deposited ?? null)} <small>dKRW</small></strong></div></div>
-            <div className="gv-wallet-row"><span>Operational wallet</span><a href={addressLink(OPERATIONAL_WALLET)} target="_blank" rel="noreferrer" title={OPERATIONAL_WALLET}>{short(OPERATIONAL_WALLET)} <ArrowUpRight size={14} /></a><span className="gv-view-only">Demo wallet</span></div>
+            <div className="gv-wallet-row"><span>Operational wallet</span><span className="gv-view-only">{flow.account ? <a href={addressLink(flow.account)} target="_blank" rel="noreferrer" title={flow.account}>{short(flow.account)} <ArrowUpRight size={14} /></a> : 'Not connected'}</span></div>
             {flow.readError && <p className="gv-read-error" role="status">{flow.readError}</p>}
           </section>
 
@@ -58,7 +58,7 @@ export default function GiwaDemo() {
           <div className="gv-action-tabs" role="group" aria-label="Vault action"><button aria-pressed={flow.mode === 'deposit'} disabled={busy} onClick={() => flow.changeMode('deposit')}>Deposit<ArrowDownLeft size={18} /></button><button aria-pressed={flow.mode === 'withdraw'} disabled={busy} onClick={() => flow.changeMode('withdraw')}>Withdraw<ArrowUpRight size={18} /></button></div>
           <div className="gv-action-body">
             <label className="gv-amount-label" htmlFor="gv-amount">{flow.mode === 'deposit' ? 'Deposit amount' : 'Withdrawal amount'}<span>dKRW</span></label>
-            <div className="gv-amount-box"><span className="gv-mini-won">₩</span><input id="gv-amount" inputMode="decimal" autoComplete="off" value={flow.amount} onChange={event => flow.changeAmount(event.target.value)} disabled={busy} aria-describedby="gv-available" /><button disabled={busy || available === undefined || available === BigInt(0)} onClick={() => available !== undefined && flow.changeAmount(formatUnits(available, 6))}>MAX</button></div>
+            <div className="gv-amount-box"><span className="gv-mini-won">₩</span><input id="gv-amount" inputMode="decimal" autoComplete="off" value={flow.amount} onChange={event => flow.changeAmount(event.target.value)} disabled={busy} aria-describedby="gv-available" /><button disabled={busy || available == null || available === BigInt(0)} onClick={() => available != null && flow.changeAmount(formatUnits(available, 6))}>MAX</button></div>
             <div className="gv-available" id="gv-available"><span>{flow.mode === 'deposit' ? 'Wallet balance' : 'Deposited balance'}</span><strong>{displayKRW(available ?? null)} dKRW</strong></div>
 
             {flow.mode === 'deposit' && !completed && <div className={`gv-policy ${proof ? 'gv-policy-verified' : ''}`}><div><ShieldCheck size={19} /><strong>Upbit KYC eligibility</strong><span>{proof ? 'Verified' : 'Required'}</span></div><p>Test attestation</p></div>}
@@ -66,7 +66,7 @@ export default function GiwaDemo() {
             <div aria-live="polite" aria-atomic="true">
               {phase === 'blocked' && !flow.error && <div className="gv-result gv-blocked"><span className="gv-result-icon"><LockKey size={22} /></span><div><h3>Deposit blocked</h3><p>An eligibility proof is required.</p><small>No transaction sent.</small></div></div>}
               {completed && flow.receipt && <div className="gv-result gv-success"><CheckCircle size={29} weight="fill" /><div><h3>{flow.receipt.action === 'deposit' ? 'Deposit confirmed' : 'Withdrawal confirmed'}</h3><p>{displayKRW(flow.receipt.amount)} dKRW {flow.receipt.action === 'deposit' ? 'deposited into the vault.' : 'returned to your operational wallet.'}</p><a href={`${EXPLORER}/tx/${flow.receipt.hash}`} target="_blank" rel="noreferrer">View transaction <ArrowUpRight size={14} /></a></div></div>}
-              {waiting && <div className="gv-proof-request"><div className="gv-request-heading"><span className="gv-spinner" /><strong>{phase === 'requesting' ? 'Preparing proof request' : phase === 'verifying' ? 'Verifying proof on GIWA' : 'Continue on your phone'}</strong></div>{phase === 'waiting' && <>{!mobile && <img src={flow.qr} width={220} height={220} alt="Scan with ZKProofport to prove eligibility for this deposit" />}<p>{mobile ? 'Open ZKProofport and sign this action with your KYC-linked account.' : 'Scan with ZKProofport using your KYC-linked account.'}</p><a className="gv-open-app" href={flow.deepLink}>Open ZKProofport <ArrowUpRight size={14} /></a><AppDownloads compact /></>}<button className="gv-text-button" onClick={flow.reset}>Cancel proof request</button></div>}
+              {waiting && <div className="gv-proof-request"><div className="gv-request-heading"><span className="gv-spinner" /><strong>{phase === 'requesting' ? 'Preparing proof request' : phase === 'verifying' ? 'Verifying proof on GIWA' : 'Continue on your phone'}</strong></div>{phase === 'waiting' && <>{!mobile && <img src={flow.qr} width={360} height={360} alt="Scan with ZKProofport to prove eligibility for this deposit" />}<p>{mobile ? 'Open ZKProofport and sign this action with your KYC-linked account.' : 'Scan with ZKProofport using your KYC-linked account.'}</p><a className="gv-open-app" href={flow.deepLink}>Open ZKProofport <ArrowUpRight size={14} /></a><AppDownloads compact /></>}<button className="gv-text-button" onClick={flow.reset}>Cancel proof request</button></div>}
               {writing && <p className="gv-pending"><span className="gv-spinner" />{flow.txHash ? 'Transaction submitted. Waiting for confirmation.' : 'Confirm the transaction in your wallet.'}</p>}
             </div>
             {flow.error && <div className="gv-error" role="alert"><WarningCircle size={19} /><p>{flow.error}</p></div>}
@@ -75,17 +75,12 @@ export default function GiwaDemo() {
             {!waiting && <div className="gv-action-buttons">
               {completed ? <button className="gv-primary" onClick={flow.reset}>Make another {flow.mode}<ArrowRight size={19} /></button>
                 : <>
-                  {flow.mode === 'deposit' && !proof && <button className="gv-primary" disabled={busy || flow.connecting || flow.units === null} onClick={() => void flow.requestProof()}><ShieldCheck size={19} />Generate eligibility proof<ArrowRight size={18} /></button>}
-                  {proof && <>
-                    <button className="gv-secondary" disabled={busy} onClick={() => void flow.verifyProof('offchain')}>Off-Chain Verify<ShieldCheck size={18} /></button>
-                    <button className="gv-secondary" disabled={busy} onClick={() => void flow.verifyProof('onchain')}>On-Chain Verify<ShieldCheck size={18} /></button>
-                    {flow.verification && <p className="gv-action-note" role="status">{flow.verification.status === 'verifying' && <span className="gv-spinner" />}{flow.verification.message}</p>}
-                  </>}
-                  {!flow.account ? <button className="gv-secondary" disabled title={OPERATIONAL_WALLET}><Wallet size={18} />Demo wallet connected<CheckCircle size={19} /></button>
+                  {flow.account && flow.mode === 'deposit' && !proof && <button className="gv-primary" disabled={busy || flow.connecting || flow.units === null} onClick={() => void flow.requestProof()}><ShieldCheck size={19} />Generate eligibility proof<ArrowRight size={18} /></button>}
+                  {!flow.account ? <button className="gv-primary" onClick={() => void flow.connect()} disabled={flow.connecting || busy}><Wallet size={18} />{flow.connecting ? 'Connecting…' : 'Connect operational wallet'}<ArrowRight size={19} /></button>
                     : <button className={!proof && flow.mode === 'deposit' ? 'gv-secondary' : 'gv-primary'} disabled={busy || flow.units === null} onClick={() => void flow.act(flow.mode === 'withdraw' ? 'withdraw' : flow.approvalNeeded ? 'approve' : 'deposit')}>{busy ? <span className="gv-spinner" /> : flow.mode === 'deposit' ? <ArrowDownLeft size={19} /> : <ArrowUpRight size={19} />}{actionLabel}{!busy && <ArrowRight size={19} />}</button>}
                 </>}
             </div>}
-            {!flow.account && <p className="gv-action-note">This demo uses the configured operational wallet. Token transfers are disabled.</p>}
+            {!flow.account && <p className="gv-action-note">{flow.mode === 'deposit' ? 'Connect the wallet you want to deposit from. Prove eligibility with your KYC-linked wallet on your phone.' : 'Connect the operational wallet to withdraw your deposits.'}</p>}
             <p className="gv-action-note"><LockKey size={13} />{flow.mode === 'deposit' ? 'Your KYC account is not sent to the vault.' : 'Withdrawals do not require a new KYC proof.'}</p>
           </div>
           <div className="gv-card-footer"><img src="/logo.png" width={21} height={21} alt="" /><span>Proofs by <strong>ZKProofport</strong></span></div>

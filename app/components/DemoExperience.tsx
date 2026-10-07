@@ -5,8 +5,10 @@ import { ArrowDown, ArrowUpRight, Check, Fingerprint, GlobeHemisphereWest, Ident
 import type { DemoDefinition, DemoId } from '@/lib/demo-catalog';
 import type { DemoOptions } from '@/lib/demo-policy';
 import MadangBenefits from './MadangBenefits';
+import AccessLock from './AccessLock';
+import type { DemoPhase } from '@/lib/useCredentialDemo';
 
-type Props = { demo: DemoDefinition; options: DemoOptions; panel: ReactNode; onSelect: (id: DemoId) => void; verified: boolean };
+type Props = { demo: DemoDefinition; options: DemoOptions; panel: ReactNode; onSelect: (id: DemoId) => void; verified: boolean; phase?: DemoPhase };
 
 /**
  * What the Korean mobile ID screen says, per demo.
@@ -33,7 +35,7 @@ const KOREAN_ID_WORDING: Partial<Record<DemoId, { variant: string; learns: (opti
   },
 };
 
-export default function DemoExperience({ demo, options, panel, onSelect, verified }: Props) {
+export default function DemoExperience({ demo, options, panel, onSelect, verified, phase = 'idle' }: Props) {
   const [market, setMarket] = useState('Supply');
   const [topic, setTopic] = useState('Engineering');
   const header = <header className="experience-masthead"><div className="experience-wordmark">{demo.brand}{demo.id === 'email' && <span className="blind-period">.</span>}</div><span>{demo.category}</span><span className="experience-demo-label">{demo.experimental ? 'Experimental demo' : 'Example dApp'}</span></header>;
@@ -42,8 +44,21 @@ export default function DemoExperience({ demo, options, panel, onSelect, verifie
 
   if (demo.id === 'kyc') return <>
     {header}
-    <section className="defi-opening"><div><h1>DeFi for<br /><span>verified people.</span></h1><p>Coinbase KYC gets you in.<br />Your identity stays with you.</p></div><div className="defi-access-state"><LockKey size={32} weight="light" /><span>Account access</span><strong>{verified ? 'Verified' : 'Not verified'}</strong><span>Private eligibility. No identity upload.</span></div></section>
-    <div className="defi-workspace"><section className="defi-markets"><div className="market-heading"><h2>Markets</h2><div className="scenario-switch" role="group" aria-label="Market action">{['Supply','Borrow'].map(label => <button key={label} aria-pressed={market === label} onClick={() => setMarket(label)}>{label}</button>)}</div></div><p className="market-description">{market === 'Supply' ? 'A lending market reserved for verified participants.' : 'Borrowing access starts with the same private eligibility check.'}</p><div className="market-table"><div className="market-table-head"><span>Asset</span><span>Market type</span><span>Access</span></div>{[{name:'USD Coin',symbol:'USDC',type:'Stablecoin'},{name:'Ether',symbol:'ETH',type:'Digital asset'},{name:'Coinbase Wrapped BTC',symbol:'cbBTC',type:'Wrapped asset'}].map(asset => <div className="market-row" key={asset.symbol}><div><span className="asset-symbol">{asset.symbol === 'USDC' ? '$' : asset.symbol === 'ETH' ? 'Ξ' : '₿'}</span><div><strong>{asset.symbol}</strong><span>{asset.name}</span></div></div><span>{asset.type}</span><span className="market-lock">{verified ? <Check size={18} /> : <LockKey size={18} />}{verified ? 'Eligible' : 'KYC required'}</span></div>)}</div><div className="market-disclaimer"><span>Interface preview</span><p>No live balances, rates, deposits or borrowing. Only the eligibility proof is real.</p></div></section><div className="defi-verification"><div className="defi-credential">Coinbase KYC<ArrowUpRight size={25} /></div>{panel}</div></div>
+    <section className="defi-opening"><div><h1>DeFi for<br /><span>verified people.</span></h1><p>Coinbase KYC gets you in.<br />The original KYC account address is not included in the proof.</p></div><div className={`defi-access-state${verified ? ' is-unlocked' : ''}`}><AccessLock unlocked={verified} size={36} /><span>Account access</span><strong>{verified ? 'Unlocked' : 'Locked'}</strong><span>{verified ? 'Eligibility verified with a proof.' : 'Verify eligibility with a proof.'}</span></div></section>
+    <div className="defi-workspace">
+      <section className="defi-markets" data-access={verified ? 'unlocked' : 'locked'} aria-label="Example markets">
+        <div className="market-heading"><h2>Markets</h2><div className="scenario-switch" role="group" aria-label="Market action">{['Supply','Borrow'].map(label => <button key={label} aria-pressed={market === label} onClick={() => setMarket(label)}>{label}</button>)}</div></div>
+        <p className="market-description">{market === 'Supply' ? 'A lending market reserved for verified participants.' : 'Borrowing access starts with the same private eligibility check.'}</p>
+        <div className="market-access-banner" role="status" aria-live="polite" aria-atomic="true">
+          <AccessLock unlocked={verified} size={26} />
+          <div><strong>{verified ? 'Markets unlocked' : phase === 'verifying' ? 'Verifying access' : 'Markets locked'}</strong><span>{verified ? 'Your eligibility proof passed. The original KYC account address is not included in the proof.' : phase === 'received' ? 'Proof received. Verify it to open this workspace.' : phase === 'verifying' ? 'The markets stay locked until verification succeeds.' : 'A verified Coinbase account proof opens this workspace.'}</span></div>
+          {phase === 'verifying' && !verified && <span className="market-verifying-indicator" aria-hidden="true" />}
+        </div>
+        <div className="market-table"><div className="market-table-head"><span>Asset</span><span>Market type</span><span>Access</span></div>{[{name:'USD Coin',symbol:'USDC',type:'Stablecoin'},{name:'Ether',symbol:'ETH',type:'Digital asset'},{name:'Coinbase Wrapped BTC',symbol:'cbBTC',type:'Wrapped asset'}].map(asset => <div className="market-row" key={asset.symbol}><div><span className="asset-symbol">{asset.symbol === 'USDC' ? '$' : asset.symbol === 'ETH' ? 'Ξ' : '₿'}</span><div><strong>{asset.symbol}</strong><span>{asset.name}</span></div></div><span>{asset.type}</span><span className="market-lock"><AccessLock unlocked={verified} size={18} /><span key={verified ? 'open' : 'locked'}>{verified ? 'Access granted' : 'Locked'}</span></span></div>)}</div>
+        <div className="market-disclaimer"><span>Interface preview</span><p>No live balances, rates, deposits or borrowing. Only the eligibility proof is real.</p></div>
+      </section>
+      <div className="defi-verification"><div className="defi-credential">Coinbase KYC<ArrowUpRight size={25} /></div>{panel}</div>
+    </div>
   </>;
 
   if (demo.id === 'country') return <>

@@ -10,6 +10,7 @@ import './demos.css';
 
 type Tab = DemoId | 'all';
 type Theme = 'system' | 'light' | 'dark';
+const DEFAULT_TAB: Tab = 'kyc';
 const tabs: { id: Tab; label: string; status?: 'Live' | 'PoC' }[] = [
   { id: 'kyc', label: 'Markets', status: 'Live' },
   { id: 'country', label: 'Borderless', status: 'Live' },
@@ -20,13 +21,13 @@ const tabs: { id: Tab; label: string; status?: 'Live' | 'PoC' }[] = [
 ];
 
 export default function DemoTabs({ children }: { children: ReactNode }) {
-  const [tab, setTab] = useState<Tab>('giwa');
-  const [visited, setVisited] = useState<Set<Tab>>(() => new Set(['giwa']));
+  const [tab, setTab] = useState<Tab>(DEFAULT_TAB);
+  const [visited, setVisited] = useState<Set<Tab>>(() => new Set([DEFAULT_TAB]));
   const [theme, setTheme] = useState<Theme>('system');
   useEffect(() => {
     const sync = () => {
       const value = new URLSearchParams(window.location.search).get('tab');
-      const next: Tab = value === 'all' ? 'all' : DEMOS.find(item => item.id === value)?.id ?? 'giwa';
+      const next: Tab = value === 'all' ? 'all' : DEMOS.find(item => item.id === value)?.id ?? DEFAULT_TAB;
       setTab(next);
       setVisited(previous => new Set([...previous, next]));
     };
@@ -75,7 +76,7 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
   return <div className="demo-suite" data-theme={theme} data-active={tab}>
     <a className="demo-skip" href={tab === 'all' ? '#demo-panel-all' : `#content-${tab}`}>Skip to demo</a>
     <nav className="demo-switcher" aria-label="ZKProofport demos">
-      <button className="demo-switcher-brand" onClick={() => select('giwa')} aria-label="ZKProofport demo home"><img src="/logo.png" alt="" width={25} height={25} /><span>ZKProofport<small>Live demos</small></span></button>
+      <button className="demo-switcher-brand" onClick={() => select(DEFAULT_TAB)} aria-label="ZKProofport demo home"><img src="/logo.png" alt="" width={25} height={25} /><span>ZKProofport<small>Live demos</small></span></button>
       <div role="tablist" aria-label="Choose a demo">
         {tabs.map((item, index) => <button key={item.id} id={`demo-tab-${item.id}`} role="tab" aria-selected={navTab === item.id} aria-controls={`demo-panel-${item.id === 'ownership' && ['age', 'region'].includes(tab) ? tab : item.id}`} tabIndex={navTab === item.id || (navTab === 'arc' && index === 0) ? 0 : -1} onClick={() => select(item.id)} onKeyDown={event => navigate(event, index)}>
           {item.label}

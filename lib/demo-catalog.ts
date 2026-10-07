@@ -69,13 +69,13 @@ export const DEMOS: readonly DemoDefinition[] = [
   "brand": "Common",
   "category": "Private DeFi access",
   "headline": "DeFi. For verified people.",
-  "description": "Coinbase KYC gets you in. Your identity stays with you.",
+  "description": "Coinbase KYC gets you in. The original KYC account address is not included in the proof.",
   "image": 1,
   "imageAlt": "",
   "actionTitle": "Unlock the markets",
   "actionDescription": "Prove Coinbase KYC to access this example DeFi workspace.",
   "credential": "Coinbase KYC completed",
-  "hides": "Your identity and original wallet",
+  "hides": "The original KYC account address",
   "outcomeTitle": "Your market access is verified.",
   "outcomeDescription": "Your Coinbase account proof passed verification. Explore the example workspace.",
   "outcomeItems": [
@@ -85,7 +85,7 @@ export const DEMOS: readonly DemoDefinition[] = [
     },
     {
       "title": "Private information",
-      "description": "Your identity and original wallet stay private."
+      "description": "The original KYC account address is not included in the proof."
     }
   ],
   "note": "DeFi interface demonstration only. No deposits, borrowing, returns or transactions are provided. The circuit does not establish current EAS revocation or expiry status.",

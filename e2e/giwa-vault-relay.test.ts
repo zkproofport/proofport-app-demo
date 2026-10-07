@@ -7,7 +7,7 @@
  *   DEMO_URL=http://localhost:3300 RELAY_URL=https://stg-relay.zkproofport.app npm run test:e2e
  *
  * It creates a real pending request, never posts a fabricated proof callback,
- * and therefore does not claim phone generation or on-chain proof success.
+ * and therefore does not claim phone generation or onchain proof success.
  */
 import { describe, expect, it } from 'vitest';
 import { CIRCUIT_IDS, ProofportSDK } from '@zkproofport-app/sdk';

@@ -39,7 +39,7 @@ export default function MadangBenefits({ panel, verified }: { panel: ReactNode; 
       <div className="madang-flow-heading"><h2 id="madang-flow-title">From verified KYC to private community.</h2><span><LockKey size={17} />Your eligibility travels. Your identity doesn’t.</span></div>
       <ol className="madang-flow-steps">
         <li><img src="/brand/upbit-logo.png" alt="" width={44} height={44} /><div><strong>Upbit</strong><span>KYC completed</span></div><ArrowRight size={22} aria-hidden="true" /></li>
-        <li><img src="/giwa-logo.jpg" alt="" width={44} height={44} /><div><strong>GIWA</strong><span>On-chain EAS attestation</span></div><ArrowRight size={22} aria-hidden="true" /></li>
+        <li><img src="/giwa-logo.jpg" alt="" width={44} height={44} /><div><strong>GIWA</strong><span>Onchain EAS attestation</span></div><ArrowRight size={22} aria-hidden="true" /></li>
         <li><img src="/logo.png" alt="" width={44} height={44} /><div><strong>ZKProofport</strong><span>Prove KYC. Keep identity private.</span></div><ArrowRight size={22} aria-hidden="true" /></li>
         <li><MadangLogo compact /><div><strong>Madang</strong><span>Community &amp; private perks</span></div></li>
       </ol>

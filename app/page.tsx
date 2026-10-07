@@ -65,7 +65,7 @@ const KEYFRAMES_CSS = `
 `;
 
 /* ─── Types ─── */
-/** Extended relay result with optional on-chain status from callback */
+/** Extended relay result with optional onchain status from callback */
 type ProofResultExt = RelayProofResult & {
   onChainStatus?: string;
   numPublicInputs?: number;
@@ -415,7 +415,7 @@ const emptyDemoState: DemoState = {
       receivedTitle: isAlreadyRegistered
         ? 'Already Registered'
         : proof.onChainStatus === 'verified_and_registered'
-          ? 'Verified & Registered On-Chain'
+          ? 'Verified & Registered Onchain'
           : 'Proof Received',
       proofData: JSON.stringify(proof, null, 2),
       proofObject: proof,
@@ -882,7 +882,7 @@ const emptyDemoState: DemoState = {
       ...prev,
       showVerifyResult: true,
       verifyResultClass: 'verifying',
-      verifyResultContent: `${type === 'onchain' ? 'On-Chain' : 'Off-Chain'} verification in progress...`,
+      verifyResultContent: `${type === 'onchain' ? 'Onchain' : 'Off-Chain'} verification in progress...`,
     }));
 
     try {
@@ -898,7 +898,7 @@ const emptyDemoState: DemoState = {
       };
       // Two buttons, two different checks. Until 2026-09-04 both called
       // verifyResponseOnChain and only the label changed, so "Off-Chain
-      // Verification Passed!" was printed by an on-chain verification — true
+      // Verification Passed!" was printed by an onchain verification — true
       // answer, wrong claim, and identical timings that made the two look the
       // same to anyone watching. It was that way from this page's first commit.
       const result =
@@ -909,7 +909,7 @@ const emptyDemoState: DemoState = {
         setDemoState(prefix, (prev) => ({
           ...prev,
           verifyResultClass: 'success',
-          verifyResultContent: `${type === 'onchain' ? 'On-Chain' : 'Off-Chain'} Verification Passed!`,
+          verifyResultContent: `${type === 'onchain' ? 'Onchain' : 'Off-Chain'} Verification Passed!`,
         }));
         launchConfetti();
       } else {
@@ -1127,7 +1127,7 @@ const emptyDemoState: DemoState = {
                       color: C.cream,
                     }}
                   >
-                    On-Chain Verify
+                    Onchain Verify
                   </button>
                   <button
                     onClick={() => handleCopyProof(prefix)}
@@ -1995,7 +1995,7 @@ const emptyDemoState: DemoState = {
             {[
               { num: 1, title: 'Request', desc: 'Your dApp creates a proof request via the ZKProofport SDK with specific verification requirements.' },
               { num: 2, title: 'Prove', desc: 'User generates a zero-knowledge proof on their mobile device using private credentials.' },
-              { num: 3, title: 'Verify', desc: 'Your dApp verifies the cryptographic proof on-chain or off-chain without accessing personal data.' },
+              { num: 3, title: 'Verify', desc: 'Your dApp verifies the cryptographic proof onchain or off-chain without accessing personal data.' },
             ].map((step) => (
               <div
                 key={step.num}

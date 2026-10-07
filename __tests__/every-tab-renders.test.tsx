@@ -48,12 +48,11 @@ describe('every tab renders its own screen', () => {
     });
   }
 
-  it('routes the initial GIWA tab to Gotgan rather than the retired community screen', () => {
+  it('opens Markets on the initial render', () => {
     const html = renderToStaticMarkup(<DemoTabs><p>all demos</p></DemoTabs>);
-    expect(html).toContain('Gotgan home');
-    expect(html).toContain('Total vault deposits');
-    expect(html).toContain('Upbit KYC eligibility');
-    expect(html).not.toContain('Madang home');
+    expect(html).toContain('data-active="kyc"');
+    expect(html).toContain('Unlock the markets');
+    expect(html).not.toContain('Total vault deposits');
   });
 
   it('says which demo has no screen rather than showing another one', () => {

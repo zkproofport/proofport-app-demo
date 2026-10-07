@@ -237,7 +237,7 @@ describe('Gotgan proof request orchestration', () => {
     expect(host.textContent).toContain('Verified');
     expect(external.verifyEligibility).toHaveBeenCalledOnce();
     expect(button('Off-Chain Verify')).toBeUndefined();
-    expect(button('On-Chain Verify')).toBeUndefined();
+    expect(button('Onchain Verify')).toBeUndefined();
     expect(external.offchain).not.toHaveBeenCalled();
     expect(external.onchain).not.toHaveBeenCalled();
     await click('Approve dKRW');

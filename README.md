@@ -10,7 +10,7 @@ This demo site illustrates how to integrate the `@zkproofport-app/sdk` into web 
 
 - KYC (Know Your Customer) verification using Coinbase attestations
 - Country-based proof verification with inclusion/exclusion logic
-- On-chain proof verification via ethers v6
+- Onchain proof verification via ethers v6
 - Real-time proof delivery using Socket.IO
 - Multi-step workflows from proof request to verification
 
@@ -22,7 +22,7 @@ The demo consists of 4 interactive pages, each showcasing different aspects of t
 - **React 19**
 - **TypeScript 5.7**
 - **@zkproofport-app/sdk** ^0.1.2-beta.1
-- **ethers v6** (on-chain verification)
+- **ethers v6** (onchain verification)
 - **socket.io-client** ^4.8.0 (real-time proof delivery)
 - **Node.js 20** (Docker)
 
@@ -38,7 +38,7 @@ A visually rich product showcase with live interactive demos:
   - **Country Verification**: Prove country inclusion/exclusion
 - QR code generation for mobile scanning
 - Proof status polling with real-time updates
-- On-chain verification display
+- Onchain verification display
 - Features overview, code examples, and direct App Store / Google Play download links
 - Confetti animation on successful proof completion
 
@@ -75,12 +75,12 @@ Complete relay workflow demonstration with developer visibility:
   - Nullifier management (Plan 1 and Plan 2)
 - **Nullifier Plans**:
   - **Plan 1** (localStorage): Client-side nullifier tracking in browser storage
-  - **Plan 2** (on-chain): On-chain registry verification using ethers v6
+  - **Plan 2** (onchain): Onchain registry verification using ethers v6
 - **Developer Log Panel** with 3 tabs:
   - **API Logs**: All REST API calls to relay and backend
   - **Events Log**: Real-time Socket.IO events
   - **Nullifier Log**: Nullifier registration and verification attempts
-- **BaseScan Integration**: Direct links to verify on-chain transactions
+- **BaseScan Integration**: Direct links to verify onchain transactions
 
 ### ZKPSwap (`/zkpswap`)
 
@@ -94,7 +94,7 @@ A DeFi-inspired use case demonstrating conditional proof requirements:
 - **Proof Modal**:
   - QR code for mobile scanning
   - Real-time proof status
-  - On-chain verification confirmation
+  - Onchain verification confirmation
 - **Success State**:
   - Transaction confirmation with hash
   - Confetti animation on completion
@@ -197,9 +197,11 @@ DEMO_API_KEY=your-api-key
 
 Each circuit has an English proof flow. GIWA, KYC, country and work email use
 distinct example dApp layouts. The three Korean mobile ID predicates share
-one educational screen, with an Ownership / Age check / Region selector. GIWA opens by default. **All demos** retains the original explorer and its
+one educational screen, with an Ownership / Age check / Region selector. Markets opens by default. **All demos** retains the original explorer and its
 request code. Switching tabs keeps form values and ongoing requests in memory;
 refreshing the page clears in-memory proof sessions.
+
+Markets shows the received proof's byte count, abbreviated bytes and public-input count alongside a note that the original KYC account address is not included in the proof. Expand **What remains public?** for the public values and wallet-linkability boundary. Markets remain locked until cryptographic verification succeeds; success opens the lock icons and briefly highlights each market row. Failed verification keeps access locked, and reset relocks it. The transitions respect reduced-motion settings.
 
 | Tab | Example dApp | Direct URL | Circuit |
 | --- | --- | --- | --- |
@@ -340,10 +342,10 @@ const result = await sdk.waitForProof(relay.requestId, {
   timeout: 120000
 });
 
-// 6. Verify proof on-chain (optional)
+// 6. Verify proof onchain (optional)
 if (result.status === 'completed') {
   const verification = await sdk.verifyResponseOnChain(result);
-  console.log('On-chain verification:', verification);
+  console.log('Onchain verification:', verification);
 }
 ```
 
@@ -364,7 +366,7 @@ if (result.status === 'completed') {
 4. **Generate Proof**: Phone generates proof locally using Mopro
 5. **Submit Proof**: Phone sends proof to relay server
 6. **Callback**: Relay notifies browser via `callbackUrl` endpoint
-7. **Verify**: Browser optionally verifies proof on-chain via ethers v6
+7. **Verify**: Browser optionally verifies proof onchain via ethers v6
 
 ### Real-Time Updates
 
@@ -379,7 +381,7 @@ The demo uses Server-Sent Events (SSE) for real-time proof updates:
 Two-tier nullifier tracking:
 
 - **Plan 1 (localStorage)**: Client-side tracking prevents duplicate proofs in same browser
-- **Plan 2 (on-chain)**: Validates nullifier against `ZKProofPortNullifierRegistry` smart contract
+- **Plan 2 (onchain)**: Validates nullifier against `ZKProofPortNullifierRegistry` smart contract
 
 ## Development Workflows
 
@@ -391,7 +393,7 @@ Two-tier nullifier tracking:
 4. Enter a dApp name (e.g., "My App")
 5. Click "Generate QR Code"
 6. Use ZKProofport app to scan and generate proof
-7. View proof result and on-chain verification
+7. View proof result and onchain verification
 
 ### Testing Country Verification
 
@@ -482,7 +484,7 @@ npm install
 - Check browser console for SSE connection errors
 - Inspect Network tab to verify `/api/events` SSE connection
 
-### On-Chain Verification Failing
+### Onchain Verification Failing
 
 - Ensure ethers v6 is properly initialized
 - Verify smart contract addresses are correct for the network

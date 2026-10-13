@@ -73,29 +73,12 @@ export default function DemoExperience({ demo, options, panel, onSelect, verifie
   </>;
 
   /*
-   * Arc — an agent-run treasury where every move carries a signature on that
-   * exact instruction.
-   */
-  if (demo.id === 'arc') return <>
-    {header}
-    <section className="identity-opening"><div><h1>Let an agent move money.<br /><span>On your terms.</span></h1><p>Every instruction it carries out is one you signed. The proof binds your approval to those exact fields.</p></div><div className="identity-seal"><Fingerprint size={80} weight="thin" /><span>Powered by<br /><strong>zero knowledge</strong></span></div></section>
-    <div className="identity-workspace"><section className="identity-explanation">
-      <div className="identity-source"><IdentificationCard size={36} weight="light" /><div><span>The source</span><h2>Coinbase KYC</h2></div><span className="identity-private">Stays with your wallet</span></div>
-      <div className="identity-redactions"><span>KYC documents <b>Not included</b></span><span>Candidate wallet address <b>Can be checked</b></span><span>Everything else you could sign <b>Not authorized</b></span></div>
-      <div className="identity-transform"><ArrowDown size={24} /><span>ZKProofport generates an action-bound proof</span></div>
-      <div className="identity-answer"><span>The treasury learns</span><h2>This exact instruction was authorized.</h2><p>Your wallet renders the action&apos;s fields and signs those. The proof carries the action&apos;s hash, so a proof made for this instruction verifies for no other — not a different amount, not a different nonce, not a different contract.</p></div>
-      <p className="identity-experimental">Experimental. The public nullifier lets anyone test a candidate KYC wallet address; this is not address anonymity. The verifier is deployed on Arc Testnet and nowhere else, and the public-input layout can still change.</p>
-    </section>{panel}</div>
-  </>;
-
-  /*
    * Korea Mobile ID — named, not a fallthrough.
    *
    * This `return` used to be unconditional, so any circuit that matched none of
-   * the branches above rendered the Korean mobile ID screen. Arc did exactly
-   * that on 2026-09-12: the Arc tab opened on "Your Korean ID. Only the
-   * answer." with name, date of birth and street address listed beside an Arc
-   * deposit form.
+   * the branches above rendered the Korean mobile ID screen. That happened on
+   * 2026-09-12: a new tab opened on "Your Korean ID. Only the answer." with
+   * name, date of birth and street address listed beside a deposit form.
    */
   if (demo.id !== 'ownership' && demo.id !== 'age' && demo.id !== 'region') {
     throw new Error(

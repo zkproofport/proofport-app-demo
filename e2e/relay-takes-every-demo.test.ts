@@ -5,7 +5,7 @@
  * builds its inputs, the SDK signs a challenge, and the relay either accepts
  * the circuit and its inputs or refuses them. Checking it by hand meant
  * clicking through eight tabs, so in practice one was clicked and the rest
- * assumed — which is how the Arc tab came to render another demo's screen.
+ * assumed — which is how a new tab came to render another demo's screen.
  *
  * It talks to a running relay over HTTP, so it is kept out of `npm test` and run
  * on its own:

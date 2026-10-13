@@ -66,8 +66,7 @@ describe('circuit ids in the demo come from the SDK', () => {
 
     // `experimental` joined `planned` as a status the SDK reports in 0.3.0.
     // Both mean "not something to build a product on", and the card carries
-    // the same badge for either -- so both are counted here. Arc is the first:
-    // its circuit compiles and its verifier is deployed, on a testnet only.
+    // the same badge for either -- so both are counted here.
     const notLiveInUse = ALL_CIRCUIT_IDS.filter(
       id =>
         (CIRCUIT_SUPPORT_STATUS[id] === 'planned' ||

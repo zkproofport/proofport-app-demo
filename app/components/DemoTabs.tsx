@@ -78,7 +78,7 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
     <nav className="demo-switcher" aria-label="ZKProofport demos">
       <button className="demo-switcher-brand" onClick={() => select(DEFAULT_TAB)} aria-label="ZKProofport demo home"><img src="/logo.png" alt="" width={25} height={25} /><span>ZKProofport<small>Live demos</small></span></button>
       <div role="tablist" aria-label="Choose a demo">
-        {tabs.map((item, index) => <button key={item.id} id={`demo-tab-${item.id}`} role="tab" aria-selected={navTab === item.id} aria-controls={`demo-panel-${item.id === 'ownership' && ['age', 'region'].includes(tab) ? tab : item.id}`} tabIndex={navTab === item.id || (navTab === 'arc' && index === 0) ? 0 : -1} onClick={() => select(item.id)} onKeyDown={event => navigate(event, index)}>
+        {tabs.map((item, index) => <button key={item.id} id={`demo-tab-${item.id}`} role="tab" aria-selected={navTab === item.id} aria-controls={`demo-panel-${item.id === 'ownership' && ['age', 'region'].includes(tab) ? tab : item.id}`} tabIndex={navTab === item.id ? 0 : -1} onClick={() => select(item.id)} onKeyDown={event => navigate(event, index)}>
           {item.label}
           {item.status && <span className="demo-status-badge" data-status={item.status}>{item.status}</span>}
         </button>)}
@@ -86,7 +86,7 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
       <label className="theme-control"><CircleHalf size={18} /><span className="sr-only">Color theme</span><select aria-label="Color theme" value={theme} onChange={event => changeTheme(event.target.value as Theme)}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
     </nav>
     {tab !== 'all' && <AppDownloads />}
-    {DEMOS.map(demo => <div key={demo.id} id={`demo-panel-${demo.id}`} role="tabpanel" aria-label={demo.id === 'arc' ? demo.tab : undefined} aria-labelledby={demo.id === 'arc' ? undefined : `demo-tab-${['age', 'region'].includes(demo.id) ? 'ownership' : demo.id}`} hidden={tab !== demo.id}>{visited.has(demo.id) && (demo.id === 'giwa' ? <GiwaDemo /> : <CircuitDemo demo={demo} onSelect={select} />)}</div>)}
+    {DEMOS.map(demo => <div key={demo.id} id={`demo-panel-${demo.id}`} role="tabpanel" aria-labelledby={`demo-tab-${['age', 'region'].includes(demo.id) ? 'ownership' : demo.id}`} hidden={tab !== demo.id}>{visited.has(demo.id) && (demo.id === 'giwa' ? <GiwaDemo /> : <CircuitDemo demo={demo} onSelect={select} />)}</div>)}
     <div id="demo-panel-all" className="explorer-panel" role="tabpanel" aria-labelledby="demo-tab-all" tabIndex={-1} hidden={tab !== 'all'}>{children}</div>
   </div>;
 }

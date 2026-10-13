@@ -1,8 +1,19 @@
-import { CIRCUIT_IDS, type CircuitType } from '@zkproofport-app/sdk';
+import { CIRCUIT_IDS } from '@zkproofport-app/sdk';
 
-export type DemoId = 'giwa' | 'arc' | 'kyc' | 'country' | 'email' | 'ownership' | 'age' | 'region';
+/**
+ * The circuits this demo has a tab for -- named here, not taken from the SDK's
+ * full list, so the tables keyed by circuit (verifiers, public-input counts)
+ * hold exactly these rows and a circuit the SDK adds is not silently required.
+ */
+export const DEMO_CIRCUITS = [
+  CIRCUIT_IDS.GIWA_ATTESTATION, CIRCUIT_IDS.COINBASE_ATTESTATION, CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION,
+  CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION, CIRCUIT_IDS.MDL_KR_OWNERSHIP, CIRCUIT_IDS.MDL_KR_AGE, CIRCUIT_IDS.MDL_KR_REGION,
+] as const;
+export type DemoCircuit = (typeof DEMO_CIRCUITS)[number];
+
+export type DemoId = 'giwa' | 'kyc' | 'country' | 'email' | 'ownership' | 'age' | 'region';
 export type DemoDefinition = {
-  id: DemoId; circuit: CircuitType; tab: string; brand: string; category: string;
+  id: DemoId; circuit: DemoCircuit; tab: string; brand: string; category: string;
   headline: string; description: string; image: number; imageAlt: string;
   actionTitle: string; actionDescription: string; credential: string; hides: string;
   outcomeTitle: string; outcomeDescription: string; outcomeItems: { title: string; description: string }[];
@@ -31,35 +42,6 @@ export const DEMOS: readonly DemoDefinition[] = [
     { "title": "Private information", "description": "The underlying KYC account address is not sent to the Vault." }
   ],
   "note": "GIWA Sepolia testnet vault. dKRW has no KRW backing or monetary value. Test attestation models Upbit KYC; production integration is pending. No yield is generated.",
-  "experimental": true
-},
-{
-  circuit: CIRCUIT_IDS.ARC_ELIGIBILITY,
-  "id": "arc",
-  "tab": "Ledger House",
-  "brand": "Ledger House",
-  "category": "Agent-operated treasury on Arc",
-  "headline": "Let an agent move money. On your terms.",
-  "description": "An agent runs the treasury. Every move it makes carries your signature on that exact instruction. The public proof can be checked against a candidate KYC wallet address.",
-  "image": 0,
-  "imageAlt": "A quiet ledger room where an agent works under standing instructions",
-  "actionTitle": "Authorize one action, prove you may",
-  "actionDescription": "Pick a deposit, a withdrawal, a transfer — or write your own instruction, field by field. Your wallet shows exactly those fields and signs them, and the proof carries that action's hash, so the contract checks WHICH instruction you approved — not merely that somebody eligible signed something.",
-  "credential": "Coinbase KYC → EIP-712 action on Arc",
-  "hides": "KYC documents; candidate wallet addresses can be checked",
-  "outcomeTitle": "Instruction authorized.",
-  "outcomeDescription": "The action you signed passed verification. A proof made for this instruction verifies for no other.",
-  "outcomeItems": [
-    {
-      "title": "Verified condition",
-      "description": "Coinbase KYC, bound to one named action"
-    },
-    {
-      "title": "Private information",
-      "description": "KYC documents are not included. The public nullifier lets anyone test a candidate KYC wallet address."
-    }
-  ],
-  "note": "Arc Testnet only: the verifier is deployed there and nowhere else, and Circle has published no mainnet chain id. Inputs and public-input layout can still change. The chain and the verifier contract are fixed to that one deployment — only the action is yours to choose — and nothing is moved: the proof is checked against the verifier, no treasury contract is called.",
   "experimental": true
 },
 {

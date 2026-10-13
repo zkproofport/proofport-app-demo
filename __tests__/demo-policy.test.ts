@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ALL_CIRCUIT_IDS, type RelayProofResult } from '@zkproofport-app/sdk';
+import { ALL_CIRCUIT_IDS, isCircuitId, type RelayProofResult } from '@zkproofport-app/sdk';
 import { getBytes, keccak256, toUtf8Bytes } from 'ethers';
-import { DEMOS, demoById, type DemoId } from '../lib/demo-catalog';
+import { DEMO_CIRCUITS, DEMOS, demoById, type DemoId } from '../lib/demo-catalog';
 import { buildDemoInputs, COINBASE_SIGNER_ROOT, DEFAULT_OPTIONS, DEMO_VERIFIERS, prepareDemoProof, type DemoOptions } from '../lib/demo-policy';
 import { depositAction, giwaResult } from './fixtures/giwa';
 
@@ -11,22 +11,23 @@ const year = 2026;
 const field = (value: number) => `0x${value.toString(16).padStart(64, '0')}`;
 const ids: DemoId[] = ['kyc', 'country', 'email', 'ownership', 'age', 'region'];
 
+/** Per demo: how many public inputs, and where `scope` starts. Keyed, so a demo with no row is an error. */
+const LAYOUT: Partial<Record<DemoId, { count: number; scopeAt: number }>> = {
+  kyc: { count: 128, scopeAt: 64 }, country: { count: 150, scopeAt: 86 }, email: { count: 148, scopeAt: 83 },
+  ownership: { count: 97, scopeAt: 0 }, age: { count: 66, scopeAt: 0 }, region: { count: 96, scopeAt: 0 },
+};
+
 // Public-input fixtures test the dApp's requested conditions. They deliberately
 // contain no valid proof, and must still pass SDK cryptographic verification.
 function fixture(id: DemoId, options: DemoOptions = DEFAULT_OPTIONS) {
   const demo = demoById(id)!;
-  // Arc's 192 is six 32-byte public inputs: signal_hash, domain_separator,
-  // action_hash, signer_list_merkle_root, scope, nullifier.
-  const count = { kyc: 128, country: 150, email: 148, ownership: 97, age: 66, region: 96, giwa: 192, arc: 192 }[id];
+  const layout = LAYOUT[id];
+  if (!layout) throw new Error(`No public-input layout for '${id}'. Known: ${Object.keys(LAYOUT).join(', ')}.`);
+  const count = layout.count;
   const publicInputs = Array.from({ length: count }, () => field(0));
   function put(start: number, bytes: Uint8Array) { bytes.forEach((value, index) => { publicInputs[start + index] = field(value); }); }
-  // Where `scope` sits. Arc's is 64 fields further along than Coinbase's,
-  // because domain_separator and action_hash come between signal_hash and the
-  // Merkle root.
-  const start = id === 'kyc' ? 64 : id === 'country' ? 86 : id === 'email' ? 83 : id === 'arc' ? 128 : 0;
-  put(start, getBytes(keccak256(toUtf8Bytes(scope))));
+  put(layout.scopeAt, getBytes(keccak256(toUtf8Bytes(scope))));
   if (id === 'kyc' || id === 'country') put(32, getBytes(COINBASE_SIGNER_ROOT));
-  if (id === 'arc') put(96, getBytes(COINBASE_SIGNER_ROOT));
   if (id === 'country') {
     const countries = options.countries.split(',').map(value => value.trim().toUpperCase());
     put(64, toUtf8Bytes(countries.join('')));
@@ -51,9 +52,13 @@ function fixture(id: DemoId, options: DemoOptions = DEFAULT_OPTIONS) {
 }
 
 describe('dedicated circuit coverage', () => {
-  it('offers one dedicated screen for every circuit exposed by the SDK', () => {
-    expect(DEMOS.map(demo => demo.circuit).sort()).toEqual([...ALL_CIRCUIT_IDS].sort());
+  it('offers one dedicated screen for every demo circuit, each one an SDK circuit', () => {
+    expect(DEMOS.map(demo => demo.circuit).sort()).toEqual([...DEMO_CIRCUITS].sort());
     expect(new Set(DEMOS.map(demo => demo.id)).size).toBe(DEMOS.length);
+    for (const circuit of DEMO_CIRCUITS) expect(isCircuitId(circuit), circuit).toBe(true);
+    // And every SDK circuit has a tab: a circuit the SDK adds or drops is a
+    // decision for the demo, not something it learns about from a visitor.
+    expect([...DEMO_CIRCUITS].sort()).toEqual([...ALL_CIRCUIT_IDS].sort());
   });
 });
 

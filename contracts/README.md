@@ -109,3 +109,107 @@ Foundry tests use a verifier double to exercise action, scope, issuer, replay, c
 The circuit checks a signed attestation transaction from the test `MockGiwaAttester` and the KYC wallet's signature. **This is not production Upbit KYC or production Dojang integration.** It does not prove chain inclusion, successful transaction execution, or current EAS expiry/revocation status. The KYC address is not a separate public argument, but the operational wallet, amount, nonce, and proof public inputs are public; this does not establish complete anonymity.
 
 Only standard test ERC-20 assets are supported. Fee-on-transfer deposits are rejected; rebasing and other special token behavior are unsupported. Direct token transfers to the vault do not create deposit balances, and there is no administrator recovery function. A proof remains usable until its nonce is consumed; it has no separate expiry. This is not an externally audited production vault.
+
+# Ssiat seed drop (GIWA Sepolia)
+
+Deployed on 2026-10-14 KST to `0x3e10c391d5068DCc216dfA3A7ae2e27830204eBd`
+(chain 91342), token `SEED` at `0x0165d1C1ad2c654D5e1c3B0Bf36568C89DB27aDf`.
+Transaction `0x75987d2e3c4af1a4474d47713be36e070870009f3c3ea6ab089cfd65b9cfb785`,
+status 1, block 38636909. Deployer `0x5A3E649208Ae15ec52496c1Ae23b2Ff89Ac02f0c`
+(the wallet that deployed the Dojang verifier; key from `circuits/.env.development`,
+passed as `--private-key "$PRIVATE_KEY"` from the sourced file, never typed).
+RPC readback: `VERIFIER()` is the Dojang verifier, `remaining()` 1,000,000 SEED,
+`CLAIM_AMOUNT()` 100 SEED, `claimScope()`
+`ssiat-drop:v1:1a79a3d73bcc0c6354b075a1f1fc9dab0fa3d7f925a46de6d7f1deb6940ff8f1`,
+which `__tests__/ssiat-drop.test.ts` pins against `expectedSsiatScope`.
+
+Ssiat (씨앗, "seed") is a fictional brand. `SsiatDrop` pays a fixed amount of
+`SEED`, a valueless test token, once per GIWA Playground faucet wallet. It is
+not a GIWA, Upbit or Dojang airdrop.
+
+| Setting | Value |
+| --- | --- |
+| Network | GIWA Sepolia, chain ID `91342` |
+| Verifier (`dojang_playground`) | `0x2d01C2fE3445B7DDE60118f956BB14E84Fd64724` (`circuits/deployments/91342/DojangPlayground.json`) |
+| Playground faucet the circuit requires | `0x63CCe2b569A7bC35895ee24306c1512fefc06121`, `payAndIssueEAS()` |
+| Public inputs | 160, one byte per field: signal 0–31, domain 32–63, action 64–95, scope 96–127, nullifier 128–159 |
+| Claim amount / supply (deploy script) | 100 SEED / 1,000,000 SEED (10,000 claims) |
+
+- `src/SsiatSeed.sol`: ERC-20 "Ssiat Seed" / `SEED`, 18 decimals. The whole
+  supply is minted in the constructor to one holder; no mint, owner or admin.
+- `src/SsiatDrop.sol`: deploys `SsiatSeed` in its own constructor so the full
+  supply lands in the drop in one transaction. Rejects the wrong chain and a
+  missing verifier.
+- EIP-712 domain `Ssiat` / `1` / chain / drop address; action `Claim(address recipient)`.
+  Binding the recipient stops a copied proof from being redirected.
+- `claimScope()` is `ssiat-drop:v1:<64 lowercase hex of keccak256(abi.encode(chainId, drop))>`.
+  It does not depend on the recipient: the nullifier is per (faucet wallet, scope),
+  so a recipient-dependent scope would allow one claim per recipient. Send the
+  string unhashed; the app hashes it once with `keccak256(UTF-8 bytes)`.
+- `claim(recipient, proof, publicInputs)` may be sent by anyone and pays
+  `recipient`. Checks, in order: zero recipient, empty proof, input count,
+  every field ≤ 255, zero signal, domain, `Claim(recipient)` hash, scope,
+  nullifier unused (`AlreadyClaimed`), pool ≥ claim amount (`DropExhausted`),
+  then the verifier inside try/catch (`InvalidProof` for false or revert). The
+  nullifier is marked before the transfer, under a reentrancy guard, and the
+  transfer's return value is checked. `verifyClaim` runs the same checks as a
+  read-only preflight.
+
+**Limitation that decides what this drop may hold.** The circuit proves the
+faucet wallet SIGNED a `payAndIssueEAS()` transaction to the faucet, not that
+the transaction was mined or succeeded. The ZKProofport app checks inclusion
+before proving, but a hand-built prover can sign an unbroadcast faucet call
+from a fresh key, so "one claim per faucet wallet" is one claim per key, and
+keys are free. SEED must stay valueless. The faucet wallet itself never
+appears on chain; only its per-drop nullifier does.
+
+## Deploying (operator only)
+
+From `proofport-app-demo/contracts`, with Foundry 1.4.3 (`forge --version`).
+The script takes no environment variables. This **simulates only**:
+
+```sh
+forge script script/DeploySsiatDrop.s.sol:DeploySsiatDrop \
+  --rpc-url https://sepolia-rpc.giwa.io \
+  --sender <deployer-address>
+```
+
+For the authorized deployment, sign with a Foundry keystore and add `--broadcast`:
+
+```sh
+forge script script/DeploySsiatDrop.s.sol:DeploySsiatDrop \
+  --rpc-url https://sepolia-rpc.giwa.io \
+  --account <keystore-name> --sender <deployer-address> \
+  --broadcast
+```
+
+The deployer needs GIWA Sepolia test ETH and nothing else; the transaction
+value is zero. Never put a private key in a file, in this README or in shell
+history. The script asserts the verifier, the 160-input layout, the claim
+amount, the token supply landing in the drop and the token metadata, and emits
+`SsiatDropDeployed(drop, token, scope, domainSeparator)`.
+
+After broadcasting:
+
+1. Record the drop address, the token address (`drop.token()`) and the
+   transaction hash here.
+2. Set `SSIAT_DROP_ADDRESS` in `lib/ssiat-drop.ts`. Until it is set, the Ssiat
+   tab shows "Drop not deployed yet" and `ssiatDropAddress()` throws; it never
+   reads from or sends to a stand-in address.
+3. Confirm through RPC: `VERIFIER()`, `PUBLIC_INPUT_COUNT()` = 160,
+   `CLAIM_AMOUNT()`, `remaining()`, `claimScope()` (matches
+   `expectedSsiatScope(drop)` in the demo), and `domainSeparator()`.
+
+## Tests
+
+```sh
+cd proofport-app-demo/contracts
+forge test --match-contract SsiatDropTest -vv
+forge fmt --check
+```
+
+The verifier is a double etched at the Dojang address: it does not generate or
+cryptographically verify proofs. Domain separator, `Claim` hash and scope hash
+are pinned to vectors computed independently with ethers v6; the demo's
+`__tests__/ssiat-drop.test.ts` asserts the same constants. A real phone proof
+and a broadcast claim have not been exercised; they need the deployed drop.

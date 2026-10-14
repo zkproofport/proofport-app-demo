@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { depositAction } from './fixtures/giwa';
+import { claimAction, SSIAT_TEST_SCOPE } from './fixtures/ssiat';
 
 const origin = 'http://localhost:3300/api/giwa-relay/';
 const context = (endpoint: string) => ({ params: Promise.resolve({ path: endpoint.split('/') }) });
@@ -89,6 +90,30 @@ describe('Vault relay adapter', () => {
       expect(response.status).toBe(400);
       expect(fetchMock).not.toHaveBeenCalled();
     });
+  });
+  it('forwards a Ssiat drop claim request with its exact scope and Claim action', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{"requestId":"example"}'));
+    vi.stubGlobal('fetch', fetchMock);
+    const body = { circuitId: 'dojang_playground', inputs: { scope: SSIAT_TEST_SCOPE, action: claimAction() }, signature: 's', nonce: 'n' };
+    const response = await POST(new NextRequest(origin + 'api/v1/proof/request', { method: 'POST', body: JSON.stringify(body) }), context('api/v1/proof/request'));
+    expect(response.status).toBe(200);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(body);
+  });
+  it.each([
+    ['a vault scope on the Dojang circuit', { circuitId: 'dojang_playground', inputs: { scope: 'giwa-vault:v1:' + 'ab'.repeat(32) } }],
+    ['a drop scope on the GIWA circuit', { circuitId: 'giwa_attestation', inputs: { scope: SSIAT_TEST_SCOPE } }],
+    ['the app laboratory scope', { circuitId: 'dojang_playground', inputs: { scope: 'proofport:dojang-playground' } }],
+    ['an uppercase drop scope', { circuitId: 'dojang_playground', inputs: { scope: SSIAT_TEST_SCOPE.toUpperCase() } }],
+    ['a short drop scope', { circuitId: 'dojang_playground', inputs: { scope: 'ssiat-drop:v1:' + 'ab'.repeat(31) } }],
+    ['a drop scope with a trailing newline', { circuitId: 'dojang_playground', inputs: { scope: SSIAT_TEST_SCOPE + '\n' } }],
+    ['a non-string scope', { circuitId: 'dojang_playground', inputs: { scope: ['ssiat-drop:v1:' + 'ab'.repeat(32)] } }],
+    ['a prototype key as circuit', { circuitId: '__proto__', inputs: { scope: SSIAT_TEST_SCOPE } }],
+    ['a constructor key as circuit', { circuitId: 'constructor', inputs: { scope: SSIAT_TEST_SCOPE } }],
+  ])('rejects %s before forwarding', async (_, body) => {
+    const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock);
+    const response = await POST(new NextRequest(origin, { method: 'POST', body: JSON.stringify(body) }), context('api/v1/proof/request'));
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
   it('rejects an oversized request before forwarding', async () => {
     const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock);

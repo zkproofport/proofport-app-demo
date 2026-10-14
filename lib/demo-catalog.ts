@@ -1,4 +1,4 @@
-import { CIRCUIT_IDS } from '@zkproofport-app/sdk';
+import { CIRCUIT_IDS, type CircuitId } from '@zkproofport-app/sdk';
 
 /**
  * The circuits this demo has a tab for -- named here, not taken from the SDK's
@@ -6,7 +6,7 @@ import { CIRCUIT_IDS } from '@zkproofport-app/sdk';
  * hold exactly these rows and a circuit the SDK adds is not silently required.
  */
 export const DEMO_CIRCUITS = [
-  CIRCUIT_IDS.GIWA_ATTESTATION, CIRCUIT_IDS.COINBASE_ATTESTATION, CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION,
+  CIRCUIT_IDS.GIWA_ATTESTATION, CIRCUIT_IDS.DOJANG_PLAYGROUND, CIRCUIT_IDS.COINBASE_ATTESTATION, CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION,
   CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION, CIRCUIT_IDS.MDL_KR_OWNERSHIP, CIRCUIT_IDS.MDL_KR_AGE, CIRCUIT_IDS.MDL_KR_REGION,
 ] as const;
 export type DemoCircuit = (typeof DEMO_CIRCUITS)[number];
@@ -16,13 +16,11 @@ export type DemoCircuit = (typeof DEMO_CIRCUITS)[number];
  * so a circuit the SDK adds still fails the coverage test until someone either
  * gives it a tab or lists it here.
  *
- * `dojang_playground` arrived in SDK 0.4.1 (GIWA Sepolia, experimental). It was
- * listed here when the demo moved to 0.4.2 for the relay's terminal statuses;
- * whether it gets a tab is a product decision that has not been made.
+ * Empty since `dojang_playground` got the Ssiat tab (lib/useSsiatDrop.ts).
  */
-export const SDK_CIRCUITS_WITHOUT_A_DEMO = [CIRCUIT_IDS.DOJANG_PLAYGROUND] as const;
+export const SDK_CIRCUITS_WITHOUT_A_DEMO: readonly CircuitId[] = [];
 
-export type DemoId = 'giwa' | 'kyc' | 'country' | 'email' | 'ownership' | 'age' | 'region';
+export type DemoId = 'giwa' | 'ssiat' | 'kyc' | 'country' | 'email' | 'ownership' | 'age' | 'region';
 export type DemoDefinition = {
   id: DemoId; circuit: DemoCircuit; tab: string; brand: string; category: string;
   headline: string; description: string; image: number; imageAlt: string;
@@ -53,6 +51,29 @@ export const DEMOS: readonly DemoDefinition[] = [
     { "title": "Private information", "description": "The underlying KYC account address is not sent to the Vault." }
   ],
   "note": "GIWA Sepolia testnet vault. dKRW has no KRW backing or monetary value. Test attestation models Upbit KYC; production integration is pending. No yield is generated.",
+  "experimental": true
+},
+{
+  circuit: CIRCUIT_IDS.DOJANG_PLAYGROUND,
+  "id": "ssiat",
+  "tab": "Ssiat",
+  "brand": "Ssiat",
+  "category": "Seed drop for early GIWA testers",
+  "headline": "Plant a seed. Claim once.",
+  "description": "Ssiat, a fictional testnet drop for wallets that issued themselves a Dojang through the GIWA Playground faucet.",
+  "image": 7,
+  "imageAlt": "",
+  "actionTitle": "Prove you used the Playground faucet",
+  "actionDescription": "Prove your faucet wallet signed a Playground Dojang issuance, and sign the claim for the wallet that receives the seeds.",
+  "credential": "Signed a GIWA Playground faucet issuance",
+  "hides": "Which faucet wallet is claiming",
+  "outcomeTitle": "Seeds claimed.",
+  "outcomeDescription": "The drop checked your proof on GIWA Sepolia and sent SEED to the recipient you signed for.",
+  "outcomeItems": [
+    { "title": "Verified condition", "description": "The faucet wallet signed a payAndIssueEAS() call to the GIWA Playground faucet" },
+    { "title": "Private information", "description": "The faucet wallet's address is not sent to the drop contract." }
+  ],
+  "note": "Fictional brand on GIWA Sepolia testnet; not a GIWA, Upbit or Dojang airdrop. SEED has no value. The proof shows the faucet wallet signed a Playground issuance, not that the transaction was mined, so the drop is open to anyone who builds a proof by hand.",
   "experimental": true
 },
 {

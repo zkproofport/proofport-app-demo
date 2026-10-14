@@ -65,6 +65,20 @@ describe('dedicated circuit coverage', () => {
   });
 });
 
+describe('Ssiat goes through its own claim policy, never the generic one', () => {
+  it('builds a scope-only request for the relay check, like the other GIWA demo', () => {
+    expect(buildDemoInputs(demoById('ssiat')!, DEFAULT_OPTIONS, scope)).toEqual({ scope });
+  });
+  it('refuses to accept a Ssiat proof through prepareDemoProof, which does not know the claim action', () => {
+    const demo = demoById('ssiat')!;
+    const response: RelayProofResult = { requestId, circuit: demo.circuit, status: 'completed', proof: '0x1234', publicInputs: Array(160).fill(field(0)), chainId: 91342, verifierAddress: DEMO_VERIFIERS[demo.circuit][91342] };
+    expect(() => prepareDemoProof(response, { demo, requestId, scope, options: DEFAULT_OPTIONS, year })).toThrow(/prepareSsiatClaimProof/);
+  });
+  it('allowlists only the GIWA Sepolia Dojang Playground verifier', () => {
+    expect(DEMO_VERIFIERS.dojang_playground).toEqual({ 91342: '0x2d01c2fe3445b7dde60118f956bb14e84fd64724' });
+  });
+});
+
 describe('GIWA generic identity policy uses the current SDK layout', () => {
   const context = { demo: demoById('giwa')!, requestId: 'current-request', scope, options: DEFAULT_OPTIONS, year };
   it('accepts identity membership with scope at byte 128', () => {

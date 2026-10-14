@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DEMOS } from '../lib/demo-catalog';
+import { DEDICATED_SCREENS } from '../app/components/DemoTabs';
 
 /**
  * Every demo has a screen of its own. None inherits another circuit's.
@@ -22,9 +23,11 @@ const source = readFileSync(
 );
 
 describe('every demo has its own screen', () => {
-  it('names a branch for each demo in the catalog', () => {
+  it('names a branch for each demo in the catalog, or gives it a dedicated screen', () => {
+    // Gotgan and Ssiat render their own component (DEDICATED_SCREENS in DemoTabs)
+    // and never reach DemoExperience.
     const missing = DEMOS.map(demo => demo.id).filter(
-      id => !source.includes(`demo.id === '${id}'`),
+      id => !source.includes(`demo.id === '${id}'`) && !DEDICATED_SCREENS[id],
     );
     // The three Korea Mobile ID variants share one screen, named together in
     // its guard rather than each getting a branch.

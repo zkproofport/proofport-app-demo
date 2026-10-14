@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState, type ReactNode, type KeyboardEvent } from 'react';
+import { useEffect, useState, type ComponentType, type ReactNode, type KeyboardEvent } from 'react';
 import { CircleHalf } from '@phosphor-icons/react';
-import { DEMOS, type DemoId } from '@/lib/demo-catalog';
+import { DEMOS, type DemoDefinition, type DemoId } from '@/lib/demo-catalog';
 import CircuitDemo from './CircuitDemo';
 import GiwaDemo from './GiwaDemo';
+import SsiatDemo from './SsiatDemo';
 import AppDownloads from './AppDownloads';
 import './demos.css';
 
@@ -17,8 +18,20 @@ const tabs: { id: Tab; label: string; status?: 'Live' | 'PoC' }[] = [
   { id: 'email', label: 'zk blind', status: 'Live' },
   { id: 'ownership', label: 'Korean ID', status: 'PoC' },
   { id: 'giwa', label: 'Gotgan', status: 'PoC' },
+  { id: 'ssiat', label: 'Ssiat', status: 'PoC' },
   { id: 'all', label: 'All demos' },
 ];
+
+/**
+ * Demos with a screen of their own instead of the shared CircuitDemo, with the
+ * browser title and icon that screen uses. Every other demo renders through
+ * CircuitDemo, whose DemoExperience throws for a demo it has no branch for.
+ */
+export const DEDICATED_SCREENS: Partial<Record<DemoId, { Screen: ComponentType; title: string; icon: { href: string; type: string } }>> = {
+  giwa: { Screen: GiwaDemo, title: 'Gotgan — A KYC-gated vault on GIWA', icon: { href: '/brand/gotgan-app-icon.svg', type: 'image/svg+xml' } },
+  ssiat: { Screen: SsiatDemo, title: 'Ssiat — A testnet seed drop on GIWA Sepolia', icon: { href: '/brand/ssiat-app-icon.svg', type: 'image/svg+xml' } },
+};
+const SHARED_ICON = { href: '/favicon.png', type: 'image/png' };
 
 export default function DemoTabs({ children }: { children: ReactNode }) {
   const [tab, setTab] = useState<Tab>(DEFAULT_TAB);
@@ -40,14 +53,14 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('popstate', sync);
   }, []);
   useEffect(() => {
-    const title = tab === 'giwa' ? 'Gotgan — A KYC-gated vault on GIWA' : tab === 'all' ? 'All demos | ZKProofport' : `${DEMOS.find(demo => demo.id === tab)?.brand} | ZKProofport demos`;
+    const dedicated = tab === 'all' ? undefined : DEDICATED_SCREENS[tab];
+    const title = tab === 'all' ? 'All demos | ZKProofport' : dedicated ? dedicated.title : `${DEMOS.find(demo => demo.id === tab)?.brand} | ZKProofport demos`;
     const syncTitle = () => { if (document.title !== title) document.title = title; };
     syncTitle();
     const frame = requestAnimationFrame(syncTitle);
     const icon = document.createElement('link');
-    icon.rel = 'icon'; icon.type = 'image/svg+xml'; icon.sizes.add('any');
-    icon.href = tab === 'giwa' ? '/brand/gotgan-app-icon.svg' : '/favicon.png';
-    if (tab !== 'giwa') icon.type = 'image/png';
+    const { href, type } = dedicated ? dedicated.icon : SHARED_ICON;
+    icon.rel = 'icon'; icon.type = type; icon.href = href; icon.sizes.add('any');
     document.head.appendChild(icon);
     return () => { cancelAnimationFrame(frame); icon.remove(); };
   }, [tab]);
@@ -86,7 +99,13 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
       <label className="theme-control"><CircleHalf size={18} /><span className="sr-only">Color theme</span><select aria-label="Color theme" value={theme} onChange={event => changeTheme(event.target.value as Theme)}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
     </nav>
     {tab !== 'all' && <AppDownloads />}
-    {DEMOS.map(demo => <div key={demo.id} id={`demo-panel-${demo.id}`} role="tabpanel" aria-labelledby={`demo-tab-${['age', 'region'].includes(demo.id) ? 'ownership' : demo.id}`} hidden={tab !== demo.id}>{visited.has(demo.id) && (demo.id === 'giwa' ? <GiwaDemo /> : <CircuitDemo demo={demo} onSelect={select} />)}</div>)}
+    {DEMOS.map(demo => <div key={demo.id} id={`demo-panel-${demo.id}`} role="tabpanel" aria-labelledby={`demo-tab-${['age', 'region'].includes(demo.id) ? 'ownership' : demo.id}`} hidden={tab !== demo.id}>{visited.has(demo.id) && <DemoScreen demo={demo} onSelect={select} />}</div>)}
     <div id="demo-panel-all" className="explorer-panel" role="tabpanel" aria-labelledby="demo-tab-all" tabIndex={-1} hidden={tab !== 'all'}>{children}</div>
   </div>;
+}
+
+function DemoScreen({ demo, onSelect }: { demo: DemoDefinition; onSelect: (id: DemoId) => void }) {
+  const dedicated = DEDICATED_SCREENS[demo.id];
+  if (dedicated) return <dedicated.Screen />;
+  return <CircuitDemo demo={demo} onSelect={onSelect} />;
 }

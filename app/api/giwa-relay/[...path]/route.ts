@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // The public relay does not allow localhost origins. Keep this same-origin
-// adapter restricted to the three HTTP endpoints needed by the Vault demo.
-// Never forward browser credentials or a caller-selected upstream URL.
+// adapter restricted to the three HTTP endpoints needed by the GIWA Sepolia
+// demos (Gotgan vault, Ssiat drop). Never forward browser credentials or a
+// caller-selected upstream URL.
 const uuid = '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}';
+
+/** The only proof requests this adapter forwards: circuit -> the scope its demo's contract issues. */
+const ALLOWED_REQUESTS: ReadonlyMap<string, RegExp> = new Map([
+  ['giwa_attestation', /^giwa-vault:v1:[a-f0-9]{64}$/],
+  ['dojang_playground', /^ssiat-drop:v1:[a-f0-9]{64}$/],
+]);
 
 async function relay(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const relayURL = process.env.RELAY_URL;
@@ -20,8 +27,9 @@ async function relay(request: NextRequest, context: { params: Promise<{ path: st
     if (body.length > 16384) return NextResponse.json({ error: 'Proof request is too large.' }, { status: 413 });
     try {
       const payload = JSON.parse(body);
-      if (payload.circuitId !== 'giwa_attestation' || !/^giwa-vault:v1:[a-f0-9]{64}$/.test(payload.inputs?.scope ?? '')) {
-        return NextResponse.json({ error: 'A GIWA Vault proof request is required.' }, { status: 400 });
+      const scope = ALLOWED_REQUESTS.get(payload.circuitId);
+      if (!scope || typeof payload.inputs?.scope !== 'string' || !scope.test(payload.inputs.scope)) {
+        return NextResponse.json({ error: `Only these proof requests are forwarded: ${[...ALLOWED_REQUESTS.keys()].join(', ')}, each with its demo contract's scope.` }, { status: 400 });
       }
     } catch { return NextResponse.json({ error: 'Invalid proof request.' }, { status: 400 }); }
   }

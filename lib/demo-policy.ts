@@ -6,6 +6,7 @@ import {
 import { concat, keccak256, toUtf8Bytes } from 'ethers';
 import { type DemoCircuit, type DemoDefinition, REGIONS } from './demo-catalog';
 import { GIWA_CHAIN_ID, GIWA_VERIFIER, GIWA_PUBLIC_INPUT_COUNT, prepareGiwaMembershipProof } from './giwa-membership';
+import { SSIAT_PUBLIC_INPUT_COUNT, SSIAT_VERIFIER } from './ssiat-drop';
 
 export type DemoOptions = {
   countries: string; inclusion: boolean; domain: string; provider: 'google' | 'microsoft'; age: string; region: string;
@@ -18,6 +19,7 @@ export const DEFAULT_OPTIONS: DemoOptions = {
 // select an existing deployment, never supply an arbitrary verifier contract.
 export const DEMO_VERIFIERS: Record<DemoCircuit, Record<number, string>> = {
   [CIRCUIT_IDS.GIWA_ATTESTATION]: { [GIWA_CHAIN_ID]: GIWA_VERIFIER },
+  [CIRCUIT_IDS.DOJANG_PLAYGROUND]: { [GIWA_CHAIN_ID]: SSIAT_VERIFIER },
   [CIRCUIT_IDS.COINBASE_ATTESTATION]: { 8453: '0xf7ded73e7a7fc8fb030c35c5a88d40abe6865382', 84532: '0x0036b61dbfab8f3cfeef77dd5d45f7efbfe2035c' },
   [CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION]: { 8453: '0xf3d5a09d2c85b28c52ef2905c1be3a852b609d0c', 84532: '0xdee363585926c3c28327efd1edd01cf4559738cf' },
   [CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION]: { 8453: '0x9677ba46ad226ce8b3c4517d9c0143e4d458beae', 84532: '0x27afdea349f247cf698f97fdfab59e1bf8bd0550' },
@@ -60,9 +62,10 @@ export function buildDemoInputs(demo: DemoDefinition, options: DemoOptions, scop
       if (!REGIONS.some(region => region.value === options.region)) throw new Error('Select a region from the list.');
       return { scope, targetRegion: options.region };
     case 'ownership': return { scope, discloseFlags: 0 };
-    // These two requests carry only the scope. The Gotgan deposit flow builds
-    // its action-bound request in lib/useGiwaVault.ts, not here.
-    case 'kyc': case 'giwa': return { scope };
+    // These requests carry only the scope. The Gotgan deposit flow builds its
+    // action-bound request in lib/useGiwaVault.ts, and the Ssiat claim builds
+    // its Claim(recipient) request in lib/useSsiatDrop.ts, not here.
+    case 'kyc': case 'giwa': case 'ssiat': return { scope };
     default: {
       const unknown: never = demo.id;
       throw new Error(`No inputs are defined for demo '${unknown}'.`);
@@ -71,7 +74,8 @@ export function buildDemoInputs(demo: DemoDefinition, options: DemoOptions, scop
 }
 
 const PUBLIC_COUNTS: Record<DemoCircuit, number> = {
-  [CIRCUIT_IDS.GIWA_ATTESTATION]: GIWA_PUBLIC_INPUT_COUNT, [CIRCUIT_IDS.COINBASE_ATTESTATION]: 128,
+  [CIRCUIT_IDS.GIWA_ATTESTATION]: GIWA_PUBLIC_INPUT_COUNT, [CIRCUIT_IDS.DOJANG_PLAYGROUND]: SSIAT_PUBLIC_INPUT_COUNT,
+  [CIRCUIT_IDS.COINBASE_ATTESTATION]: 128,
   [CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION]: 150, [CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION]: 148,
   [CIRCUIT_IDS.MDL_KR_OWNERSHIP]: 97, [CIRCUIT_IDS.MDL_KR_AGE]: 66, [CIRCUIT_IDS.MDL_KR_REGION]: 96,
 };
@@ -95,6 +99,9 @@ export type DemoRequestContext = { demo: DemoDefinition; requestId: string; scop
 export function prepareDemoProof(result: RelayProofResult, context: DemoRequestContext): ProofResponse {
   const { demo, requestId, scope, options, year } = context;
   if (demo.id === 'giwa') return prepareGiwaMembershipProof(result, requestId, scope);
+  // A claim proof is only meaningful with its Claim(recipient) action, which this
+  // generic path does not know. prepareSsiatClaimProof in lib/ssiat-drop.ts checks it.
+  if (demo.id === 'ssiat') throw new Error('Ssiat claim proofs are checked by prepareSsiatClaimProof, with the claim action.');
   if (result.requestId !== requestId || result.circuit !== demo.circuit) throw new Error('This proof belongs to a different demo request.');
   if (result.status !== 'completed' || !result.proof || !/^0x(?:[0-9a-f]{2})+$/i.test(result.proof)) throw new Error(result.error || 'A completed proof is required.');
   const verifier = result.chainId === undefined ? undefined : DEMO_VERIFIERS[demo.circuit][result.chainId];

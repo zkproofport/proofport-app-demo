@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import DemoExperience from '../app/components/DemoExperience';
 import DemoFields from '../app/components/DemoFields';
-import GiwaDemo from '../app/components/GiwaDemo';
-import DemoTabs from '../app/components/DemoTabs';
+import DemoTabs, { DEDICATED_SCREENS } from '../app/components/DemoTabs';
 import { DEFAULT_OPTIONS } from '../lib/demo-policy';
 import { DEMOS } from '../lib/demo-catalog';
 
@@ -16,16 +15,24 @@ import { DEMOS } from '../lib/demo-catalog';
  * every branch and threw for the new tab. Both were invisible to tests that
  * read source text. This renders each tab and reads what comes out.
  */
+/** Text only a dedicated screen renders, so the wrong screen cannot pass for it. */
+const SCREEN_MARKERS: Partial<Record<string, string>> = { giwa: 'Manage vault deposits', ssiat: 'Seeds left in the drop' };
+
 describe('every tab renders its own screen', () => {
+  it('has a marker for every dedicated screen', () => {
+    for (const id of Object.keys(DEDICATED_SCREENS)) expect(SCREEN_MARKERS[id], id).toBeTruthy();
+  });
+
   for (const demo of DEMOS) {
     it(`${demo.tab} opens without throwing`, () => {
+      const dedicated = DEDICATED_SCREENS[demo.id];
       const html = renderToStaticMarkup(
-        demo.id === 'giwa'
-          ? <GiwaDemo />
+        dedicated
+          ? <dedicated.Screen />
           : <DemoExperience demo={demo} options={DEFAULT_OPTIONS} panel={<p>panel</p>} onSelect={() => {}} verified={false} />,
       );
       expect(html).toContain(demo.brand);
-      expect(html).toContain(demo.id === 'giwa' ? 'Manage vault deposits' : 'panel');
+      expect(html).toContain(SCREEN_MARKERS[demo.id] ?? 'panel');
     });
 
     it(`${demo.tab} shows its own fields`, () => {

@@ -44,3 +44,18 @@ not the GIWA network logo or the ZKProofport proof-provider logo.
 
 Palette: navy `#142d4e`, pearl `#f3f5f8`, brass `#b99a61`.
 The product descriptor is “A KYC-gated vault on GIWA.”
+
+## Ssiat
+
+Ssiat (씨앗, "seed") is the fictional seed-drop demo for GIWA Sepolia
+Playground faucet participants. Its original mark is a seed in the soil with
+its first two leaves. It is not the GIWA, Upbit, Dojang or ZKProofport logo,
+and the tab shows no third-party logo at all, so it cannot be read as an
+official GIWA airdrop.
+
+- `ssiat-app-icon.svg`: square icon, forest background.
+- `ssiat-app-icon.png`: the same icon at 512 px, rendered from the SVG with
+  macOS `sips -s format png`; used as the mobile proof request's `dappIcon`.
+- `app/components/SsiatLogo.tsx`: theme-aware inline SVG mark and wordmark.
+
+Palette: forest `#1f3a2a`, hanji paper `#f6f1e6`, sprout `#5f9b4c`, seed ochre `#c8923a`.

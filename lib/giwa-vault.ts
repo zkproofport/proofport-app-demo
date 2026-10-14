@@ -29,9 +29,12 @@ export const VAULT_ABI = [
 const vaultInterface = new Interface(VAULT_ABI);
 
 /** Recheck wallet authority at the send boundary, after ethers' async gas estimation. */
-export function guardGiwaWalletProvider(provider: Eip1193Provider, isCurrent: () => boolean): Eip1193Provider {
+export function guardGiwaWalletProvider(
+  provider: Eip1193Provider, isCurrent: () => boolean,
+  staleMessage = 'Wallet or network changed. Reconnect the operational wallet.',
+): Eip1193Provider {
   return { request: async (request) => {
-    if (!isCurrent()) throw new Error('Wallet or network changed. Reconnect the operational wallet.');
+    if (!isCurrent()) throw new Error(staleMessage);
     if (request.method === 'eth_sendTransaction') {
       const transaction = Array.isArray(request.params) ? request.params[0] : undefined;
       if (!transaction || Number(transaction.chainId) !== GIWA_CHAIN_ID) {

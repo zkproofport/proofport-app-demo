@@ -14,9 +14,14 @@
  * Run with the dev stack up (./scripts/dev.sh), the demo container rebuilt:
  *   DEMO_URL=http://localhost:3300 RELAY_URL=http://localhost:4001 npm run test:e2e
  *
- * The page talks to the relay on port 4001 of the host it was opened on
- * (lib/sdk.ts), so DEMO_URL must be a local address and RELAY_URL the relay on
- * that host; the test checks that the browser's request reached RELAY_URL.
+ * The page picks its relay from the host it was opened on (lib/sdk.ts): port
+ * 4001 of a local address, the staging relay for an stg- host. So it also runs
+ * against a deployed staging demo:
+ *   DEMO_URL=https://stg-demo.zkproofport.app RELAY_URL=https://stg-relay.zkproofport.app npm run test:e2e -- e2e/relay-outcomes-browser.test.ts
+ * The test checks that the browser's request reached RELAY_URL. A deployed
+ * relay takes its caller from the load balancer, not from this test's
+ * X-Forwarded-For, so every run from one machine shares the relay's limit of
+ * 10 requests a minute: run one E2E file at a time there.
  *
  * DEMO_E2E_EXPIRY=1 also waits for the relay's own deadline (about 280 s) and
  * checks the page shows the expired ending. Off by default because of the wait.
@@ -60,11 +65,23 @@ async function open(query: string): Promise<Opened> {
   const page = await context.newPage();
   const pageErrors: string[] = [];
   page.on('pageerror', e => pageErrors.push(String(e)));
+  // Settled by the relay's ANSWER, not by the request leaving: a refused
+  // request (429 once the per-caller limit is used up) must end the test at
+  // once with that reason, not as a 30 s wait for a screen that never comes.
   const requestId = new Promise<string>((resolve, reject) => {
-    page.on('request', request => {
+    page.on('response', response => {
+      const request = response.request();
       if (request.method() !== 'POST' || !request.url().endsWith('/api/v1/proof/request')) return;
       if (!request.url().startsWith(new URL('/api/v1/proof/request', relayUrl).toString())) {
         reject(new Error(`The page sent its request to ${request.url()}, not to RELAY_URL ${relayUrl}.`));
+        return;
+      }
+      if (response.status() === 429) {
+        reject(new Error('The relay refused the proof request with 429: its per-caller limit (10 a minute) is used up. Run one E2E file at a time against a deployed relay.'));
+        return;
+      }
+      if (!response.ok()) {
+        reject(new Error(`The relay answered the proof request with HTTP ${response.status()}.`));
         return;
       }
       const id = (request.postDataJSON() as { requestId?: unknown }).requestId;
@@ -73,6 +90,14 @@ async function open(query: string): Promise<Opened> {
   });
   await page.goto(new URL(query, demoUrl).toString());
   return { context, page, requestId, pageErrors };
+}
+
+/**
+ * Waits for the page's waiting state, but ends at once if the relay refused
+ * the request, so a refusal reads as itself and not as a 30 s timeout.
+ */
+async function untilRequested(waiting: Promise<void>, requestId: Promise<string>) {
+  await Promise.race([waiting, requestId.then(() => new Promise<void>(() => {}))]);
 }
 
 /** What the ZKProofport app sends when it finishes, one way or another. */
@@ -90,7 +115,7 @@ async function startOnMarkets(): Promise<Opened & { id: string }> {
   const opened = await open('/?tab=kyc');
   const panel = opened.page.locator('#demo-panel-kyc .proof-panel');
   await panel.locator('button.proof-primary').click();
-  await panel.and(opened.page.locator('[data-phase="waiting"]')).waitFor({ timeout: 30_000 });
+  await untilRequested(panel.and(opened.page.locator('[data-phase="waiting"]')).waitFor({ timeout: 30_000 }), opened.requestId);
   return { ...opened, id: await opened.requestId };
 }
 
@@ -134,7 +159,7 @@ describe(`the demo shows how a relay request ended (demo ${demoUrl}, relay ${rel
     const { context, page, requestId, pageErrors } = await open('/?tab=all');
     try {
       await page.locator('#demo-kyc button', { hasText: 'Request Proof' }).click();
-      await page.getByText('Waiting for proof...').waitFor({ timeout: 30_000 });
+      await untilRequested(page.getByText('Waiting for proof...').waitFor({ timeout: 30_000 }), requestId);
       const sent = await answerAsThePhone(await requestId, { status: 'cancelled' });
       const ending = page.locator('[data-ending="declined"]');
       await ending.waitFor({ timeout: PROMPT_MS });
@@ -152,7 +177,7 @@ describe(`the demo shows how a relay request ended (demo ${demoUrl}, relay ${rel
     const { context, page, requestId, pageErrors } = await open('/?tab=all');
     try {
       await page.locator('#demo-kyc button', { hasText: 'Request Proof' }).click();
-      await page.getByText('Waiting for proof...').waitFor({ timeout: 30_000 });
+      await untilRequested(page.getByText('Waiting for proof...').waitFor({ timeout: 30_000 }), requestId);
       await answerAsThePhone(await requestId, { status: 'error', errorCode: 'E2005', error: '<b>증명 실패</b> 🙏' });
       const ending = page.locator('[data-ending="error"]');
       await ending.waitFor({ timeout: PROMPT_MS });

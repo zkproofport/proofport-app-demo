@@ -18,6 +18,7 @@ import { CIRCUIT_IDS } from '@zkproofport-app/sdk';
 import { ethers } from 'ethers';
 import DemoTabs from './components/DemoTabs';
 import { APP_STORE_URL, GOOGLE_PLAY_URL } from '@/lib/app-stores';
+import { DEMO_PROOF_WAIT_MS, NO_RELAY_ANSWER_MESSAGE, isWaitTimeout, settleRelayResult } from '@/lib/relay-outcome';
 
 /* ─── Color tokens (matching portal-web design system) ─── */
 const C = {
@@ -163,6 +164,10 @@ export default function LandingPage() {
     showFailed: boolean;
     showReceived: boolean;
     failedReason: string;
+    /** Which ending the failed panel shows; see ENDING_STYLE. */
+    failedTone: EndingTone;
+    /** The app's error code (e.g. E2005) when it sent one, else ''. */
+    failedCode: string;
     qrHtml: string;
     deepLink: string;
     proofData: string;
@@ -240,12 +245,25 @@ function modalCopy(prefix: DemoPrefix): {title: string; instruction: string} {
   return copy;
 }
 
+/**
+ * How a request that produced no proof ended. A decline in the app is not a
+ * failure and is not shown in error red; neither is a request nobody answered.
+ */
+type EndingTone = 'error' | 'declined' | 'expired';
+const ENDING_STYLE: Record<EndingTone, { title: string; color: string; background: string; border: string }> = {
+  error: { title: 'Proof Failed', color: '#f87171', background: 'rgba(248, 113, 113, 0.1)', border: '1px solid rgba(248, 113, 113, 0.3)' },
+  declined: { title: 'Request Declined', color: C.cream, background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.16)' },
+  expired: { title: 'Request Expired', color: C.gold, background: 'rgba(214, 177, 92, 0.1)', border: '1px solid rgba(214, 177, 92, 0.3)' },
+};
+
 const emptyDemoState: DemoState = {
     showResult: false,
     showWaiting: false,
     showFailed: false,
     showReceived: false,
-    failedReason: 'The proof request timed out. Please try again.',
+    failedReason: '',
+    failedTone: 'error',
+    failedCode: '',
     qrHtml: '',
     deepLink: '',
     proofData: '',
@@ -424,27 +442,40 @@ const emptyDemoState: DemoState = {
     if (proof.status === 'completed' && !isAlreadyRegistered) launchConfetti();
   }, [setDemoState, launchConfetti]);
 
-  const showProofTimeout = useCallback((prefix: DemoPrefix) => {
-    setDemoState(prefix, (prev) => ({
-      ...prev,
-      showWaiting: false,
-      showReceived: false,
-      showFailed: true,
-      failedReason: 'The proof request timed out after 3 minutes. Please try again.',
-    }));
-    clearActiveRequestId(prefix);
-  }, [setDemoState]);
-
-  const showProofFailed = useCallback((prefix: DemoPrefix, reason: string) => {
+  const showProofEnded = useCallback((prefix: DemoPrefix, tone: EndingTone, reason: string, code = '') => {
     setDemoState(prefix, (prev) => ({
       ...prev,
       showWaiting: false,
       showReceived: false,
       showFailed: true,
       failedReason: reason,
+      failedTone: tone,
+      failedCode: code,
     }));
     clearActiveRequestId(prefix);
   }, [setDemoState]);
+
+  const showProofFailed = useCallback((prefix: DemoPrefix, reason: string) => {
+    showProofEnded(prefix, 'error', reason);
+  }, [showProofEnded]);
+
+  /**
+   * Every `waitForProof()` on this page ends here. The relay answers each
+   * request exactly once — completed, error (or the older `failed`), cancelled
+   * or expired — and settleRelayResult throws on anything else, naming it.
+   */
+  const applyRelayResult = useCallback((prefix: DemoPrefix, result: RelayProofResult) => {
+    const outcome = settleRelayResult(result);
+    if (outcome.kind === 'proof') { showProofReceived(prefix, outcome.result as ProofResultExt); return; }
+    const tones: Record<typeof outcome.kind, EndingTone> = { error: 'error', cancelled: 'declined', expired: 'expired' };
+    showProofEnded(prefix, tones[outcome.kind], outcome.message, outcome.kind === 'error' ? outcome.errorCode ?? '' : '');
+  }, [showProofReceived, showProofEnded]);
+
+  /** A wait that threw: the SDK's own timer (no relay answer at all), or anything else, shown as it is. */
+  const applyWaitFailure = useCallback((prefix: DemoPrefix, err: unknown) => {
+    if (isWaitTimeout(err)) showProofEnded(prefix, 'expired', NO_RELAY_ANSWER_MESSAGE);
+    else showProofEnded(prefix, 'error', err instanceof Error ? err.message : String(err));
+  }, [showProofEnded]);
 
   const showProofResult = useCallback(async (deepLink: string, prefix: DemoPrefix) => {
     console.log(`[showProofResult] prefix=${prefix}, deepLink=${deepLink}, isMobile=${isMobileDevice()}`);
@@ -479,6 +510,10 @@ const emptyDemoState: DemoState = {
     proofModalOpenRef.current = true;
     setKycState((prev) => ({
       ...prev,
+      // A new request: nothing from the previous one (its QR included) stays on screen.
+      showResult: false,
+      qrHtml: '',
+      deepLink: '',
       showReceived: false,
       showWaiting: false,
       showFailed: false,
@@ -535,34 +570,15 @@ const emptyDemoState: DemoState = {
       await showProofResult(deepLink, 'kyc');
       setKycState((prev) => ({ ...prev, showResult: true, showWaiting: true }));
 
-      let proofAlreadyReceived = false;
-      const finalResult = await sdk.waitForProof(result.requestId, {
-        timeoutMs: 180000,
-        onStatusChange: (status) => {
-          if (status.status === 'completed') {
-            proofAlreadyReceived = true;
-            showProofReceived('kyc', status as ProofResultExt);
-          } else if (status.status === 'failed') {
-            showProofFailed('kyc', ('error' in status && status.error) || 'Proof generation failed');
-          }
-        },
-      });
-
-      if (finalResult.status === 'completed') {
-        showProofReceived('kyc', finalResult as ProofResultExt);
-      } else if (finalResult.status === 'failed') {
-        showProofFailed('kyc', finalResult.error || 'Proof generation failed');
-      }
+      const finalResult = await sdk.waitForProof(result.requestId, { timeoutMs: DEMO_PROOF_WAIT_MS });
+      applyRelayResult('kyc', finalResult);
     } catch (err) {
       console.log('[requestKycProof] error:', (err as Error).message, 'modalOpen=', proofModalOpenRef.current);
       if (!proofModalOpenRef.current) return; // user closed modal, suppress
-      if ((err as Error).message.includes('timeout')) {
-        showProofTimeout('kyc');
-      } else {
-        console.error('Failed to create proof request:', (err as Error).message);
-      }
+      console.error('[kyc] proof request failed:', (err as Error).message);
+      applyWaitFailure('kyc', err);
     }
-  }, [signerReady, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, handleGenerateWallet]);
+  }, [signerReady, getSDK, showProofResult, showProofFailed, applyRelayResult, applyWaitFailure, handleGenerateWallet]);
 
   /* ── Country request ── */
   const requestCountryProof = useCallback(async () => {
@@ -578,6 +594,10 @@ const emptyDemoState: DemoState = {
     proofModalOpenRef.current = true;
     setCountryState((prev) => ({
       ...prev,
+      // A new request: nothing from the previous one (its QR included) stays on screen.
+      showResult: false,
+      qrHtml: '',
+      deepLink: '',
       showReceived: false,
       showWaiting: false,
       showFailed: false,
@@ -601,34 +621,15 @@ const emptyDemoState: DemoState = {
       await showProofResult(deepLink, 'country');
       setCountryState((prev) => ({ ...prev, showResult: true, showWaiting: true }));
 
-      let proofAlreadyReceived = false;
-      const finalResult = await sdk.waitForProof(result.requestId, {
-        timeoutMs: 180000,
-        onStatusChange: (status) => {
-          if (status.status === 'completed') {
-            proofAlreadyReceived = true;
-            showProofReceived('country', status as ProofResultExt);
-          } else if (status.status === 'failed') {
-            showProofFailed('country', ('error' in status && status.error) || 'Proof generation failed');
-          }
-        },
-      });
-
-      if (finalResult.status === 'completed') {
-        showProofReceived('country', finalResult as ProofResultExt);
-      } else if (finalResult.status === 'failed') {
-        showProofFailed('country', finalResult.error || 'Proof generation failed');
-      }
+      const finalResult = await sdk.waitForProof(result.requestId, { timeoutMs: DEMO_PROOF_WAIT_MS });
+      applyRelayResult('country', finalResult);
     } catch (err) {
       console.log('[requestCountryProof] error:', (err as Error).message, 'modalOpen=', proofModalOpenRef.current);
       if (!proofModalOpenRef.current) return; // user closed modal, suppress
-      if ((err as Error).message.includes('timeout')) {
-        showProofTimeout('country');
-      } else {
-        console.error('Failed to create proof request:', (err as Error).message);
-      }
+      console.error('[country] proof request failed:', (err as Error).message);
+      applyWaitFailure('country', err);
     }
-  }, [signerReady, countryList, isIncluded, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, handleGenerateWallet]);
+  }, [signerReady, countryList, isIncluded, getSDK, showProofResult, showProofFailed, applyRelayResult, applyWaitFailure, handleGenerateWallet]);
 
   /* ── Email Domain request ── */
   const requestEmailProof = useCallback(async () => {
@@ -643,6 +644,10 @@ const emptyDemoState: DemoState = {
     proofModalOpenRef.current = true;
     setEmailState((prev) => ({
       ...prev,
+      // A new request: nothing from the previous one (its QR included) stays on screen.
+      showResult: false,
+      qrHtml: '',
+      deepLink: '',
       showReceived: false,
       showWaiting: false,
       showFailed: false,
@@ -668,34 +673,15 @@ const emptyDemoState: DemoState = {
       await showProofResult(deepLink, 'email');
       setEmailState((prev) => ({ ...prev, showResult: true, showWaiting: true }));
 
-      let proofAlreadyReceived = false;
-      const finalResult = await sdk.waitForProof(result.requestId, {
-        timeoutMs: 180000,
-        onStatusChange: (status) => {
-          if (status.status === 'completed') {
-            proofAlreadyReceived = true;
-            showProofReceived('email', status as ProofResultExt);
-          } else if (status.status === 'failed') {
-            showProofFailed('email', ('error' in status && status.error) || 'Proof generation failed');
-          }
-        },
-      });
-
-      if (finalResult.status === 'completed') {
-        showProofReceived('email', finalResult as ProofResultExt);
-      } else if (finalResult.status === 'failed') {
-        showProofFailed('email', finalResult.error || 'Proof generation failed');
-      }
+      const finalResult = await sdk.waitForProof(result.requestId, { timeoutMs: DEMO_PROOF_WAIT_MS });
+      applyRelayResult('email', finalResult);
     } catch (err) {
       console.log('[requestEmailProof] error:', (err as Error).message, 'modalOpen=', proofModalOpenRef.current);
       if (!proofModalOpenRef.current) return; // user closed modal, suppress
-      if ((err as Error).message.includes('timeout')) {
-        showProofTimeout('email');
-      } else {
-        console.error('Failed to create proof request:', (err as Error).message);
-      }
+      console.error('[email] proof request failed:', (err as Error).message);
+      applyWaitFailure('email', err);
     }
-  }, [signerReady, emailDomain, emailProvider, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, handleGenerateWallet]);
+  }, [signerReady, emailDomain, emailProvider, getSDK, showProofResult, showProofFailed, applyRelayResult, applyWaitFailure, handleGenerateWallet]);
 
   /* ── Korea Mobile ID (mDL) request ── */
   const requestMdlProof = useCallback(async () => {
@@ -722,7 +708,8 @@ const emptyDemoState: DemoState = {
         setProofModalPrefix('mdl');
         setProofModalOpen(true);
         proofModalOpenRef.current = true;
-        setMdlState((prev) => ({ ...prev, showResult: true }));
+        // No request was made, so no result panel: the failure shows on its own.
+        setMdlState((prev) => ({ ...prev, showResult: false, qrHtml: '', deepLink: '' }));
         return;
       }
       inputs = { scope: 'zkproofport:demo', ageThreshold };
@@ -734,7 +721,8 @@ const emptyDemoState: DemoState = {
         setProofModalPrefix('mdl');
         setProofModalOpen(true);
         proofModalOpenRef.current = true;
-        setMdlState((prev) => ({ ...prev, showResult: true }));
+        // No request was made, so no result panel: the failure shows on its own.
+        setMdlState((prev) => ({ ...prev, showResult: false, qrHtml: '', deepLink: '' }));
         return;
       }
       inputs = { scope: 'zkproofport:demo', targetRegion };
@@ -746,6 +734,10 @@ const emptyDemoState: DemoState = {
     proofModalOpenRef.current = true;
     setMdlState((prev) => ({
       ...prev,
+      // A new request: nothing from the previous one (its QR included) stays on screen.
+      showResult: false,
+      qrHtml: '',
+      deepLink: '',
       showReceived: false,
       showWaiting: false,
       showFailed: false,
@@ -769,32 +761,15 @@ const emptyDemoState: DemoState = {
       await showProofResult(deepLink, 'mdl');
       setMdlState((prev) => ({ ...prev, showResult: true, showWaiting: true }));
 
-      const finalResult = await sdk.waitForProof(result.requestId, {
-        timeoutMs: 180000,
-        onStatusChange: (status) => {
-          if (status.status === 'completed') {
-            showProofReceived('mdl', status as ProofResultExt);
-          } else if (status.status === 'failed') {
-            showProofFailed('mdl', ('error' in status && status.error) || 'Proof generation failed');
-          }
-        },
-      });
-
-      if (finalResult.status === 'completed') {
-        showProofReceived('mdl', finalResult as ProofResultExt);
-      } else if (finalResult.status === 'failed') {
-        showProofFailed('mdl', finalResult.error || 'Proof generation failed');
-      }
+      const finalResult = await sdk.waitForProof(result.requestId, { timeoutMs: DEMO_PROOF_WAIT_MS });
+      applyRelayResult('mdl', finalResult);
     } catch (err) {
       console.log('[requestMdlProof] error:', (err as Error).message, 'modalOpen=', proofModalOpenRef.current);
       if (!proofModalOpenRef.current) return; // user closed modal, suppress
-      if ((err as Error).message.includes('timeout')) {
-        showProofTimeout('mdl');
-      } else {
-        console.error('Failed to create proof request:', (err as Error).message);
-      }
+      console.error('[mdl] proof request failed:', (err as Error).message);
+      applyWaitFailure('mdl', err);
     }
-  }, [signerReady, mdlVariant, mdlAgeThreshold, mdlTargetRegion, getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout, handleGenerateWallet]);
+  }, [signerReady, mdlVariant, mdlAgeThreshold, mdlTargetRegion, getSDK, showProofResult, showProofFailed, applyRelayResult, applyWaitFailure, handleGenerateWallet]);
 
   /**
    * The state object behind one card. Was three separate ternary chains, each
@@ -825,6 +800,10 @@ const emptyDemoState: DemoState = {
     proofModalOpenRef.current = true;
     setGiwaState((prev) => ({
       ...prev,
+      // A new request: nothing from the previous one (its QR included) stays on screen.
+      showResult: false,
+      qrHtml: '',
+      deepLink: '',
       showReceived: false,
       showWaiting: false,
       showFailed: false,
@@ -845,20 +824,12 @@ const emptyDemoState: DemoState = {
       await showProofResult(deepLink, 'giwa');
       setGiwaState((prev) => ({ ...prev, showResult: true, showWaiting: true }));
 
-      const finalResult = await sdk.waitForProof(result.requestId, { timeoutMs: 180000 });
-      if (finalResult.status === 'completed') {
-        showProofReceived('giwa', finalResult as ProofResultExt);
-      } else {
-        showProofFailed('giwa', finalResult.error || 'Proof generation failed');
-      }
+      const finalResult = await sdk.waitForProof(result.requestId, { timeoutMs: DEMO_PROOF_WAIT_MS });
+      applyRelayResult('giwa', finalResult);
     } catch (err) {
-      if ((err as Error).message?.includes('timeout')) {
-        showProofTimeout('giwa');
-      } else {
-        showProofFailed('giwa', (err as Error).message);
-      }
+      applyWaitFailure('giwa', err);
     }
-  }, [getSDK, showProofResult, showProofReceived, showProofFailed, showProofTimeout]);
+  }, [getSDK, showProofResult, applyRelayResult, applyWaitFailure]);
 
   /* ── Copy proof ── */
   const handleCopyProof = useCallback((prefix: DemoPrefix) => {
@@ -961,10 +932,14 @@ const emptyDemoState: DemoState = {
       border: '1px solid rgba(214, 177, 92, 0.3)',
     };
 
+    const ending = ENDING_STYLE[state.failedTone];
     const failedStyle: React.CSSProperties = {
       ...callbackBaseStyle,
-      background: 'rgba(248, 113, 113, 0.1)',
-      border: '1px solid rgba(248, 113, 113, 0.3)',
+      background: ending.background,
+      border: ending.border,
+    };
+    const retry: Record<DemoPrefix, () => void> = {
+      kyc: requestKycProof, country: requestCountryProof, email: requestEmailProof, mdl: requestMdlProof, giwa: requestGiwaProof,
     };
 
     const receivedStyle: React.CSSProperties = {
@@ -1001,8 +976,37 @@ const emptyDemoState: DemoState = {
       };
     }
 
+    const failedPanel = (
+      <div style={failedStyle} data-ending={state.failedTone} role={state.failedTone === 'error' ? 'alert' : 'status'}>
+        <h4 style={{ fontSize: 14, marginBottom: 8, color: ending.color, fontFamily: FONT.mono }}>{ending.title}</h4>
+        <p style={{ fontSize: 13, color: C.muted, overflowWrap: 'anywhere' }}>{state.failedReason}</p>
+        {state.failedCode && (
+          <p style={{ fontSize: 12, color: C.muted, fontFamily: FONT.mono, marginTop: 6 }}>Error code {state.failedCode}</p>
+        )}
+        <button
+          onClick={() => { void retry[prefix](); }}
+          style={{
+            marginTop: 12,
+            padding: '8px 16px',
+            fontSize: 13,
+            fontWeight: 600,
+            borderRadius: 8,
+            cursor: 'pointer',
+            background: 'rgba(255,255,255,.07)',
+            border: '1.5px solid rgba(255,255,255,.16)',
+            color: C.cream,
+          }}
+        >
+          Try again
+        </button>
+      </div>
+    );
+
     return (
       <>
+        {/* A request that never got as far as a QR (the relay refused it, the
+            form was invalid) still has to say so, outside the result panel. */}
+        {state.showFailed && !state.showResult && failedPanel}
         {/* Result Panel */}
         {state.showResult && (
           <div style={{
@@ -1063,12 +1067,7 @@ const emptyDemoState: DemoState = {
             )}
 
             {/* Failed */}
-            {state.showFailed && (
-              <div style={failedStyle}>
-                <h4 style={{ fontSize: 14, marginBottom: 8, color: '#f87171', fontFamily: FONT.mono }}>Proof Failed</h4>
-                <p style={{ fontSize: 13, color: C.muted }}>{state.failedReason}</p>
-              </div>
-            )}
+            {state.showFailed && failedPanel}
 
             {/* Received */}
             {state.showReceived && (
@@ -2096,10 +2095,21 @@ const emptyDemoState: DemoState = {
               <span style={{ color: '#6a9955' }}>{'// Generate QR code for desktop users'}</span>{'\n'}
               <span style={{ color: '#569cd6' }}>const</span>{' '}qrDataUrl = <span style={{ color: '#c586c0' }}>await</span>{' '}sdk.<span style={{ color: '#dcdcaa' }}>generateQRCode</span>{'(relay.deepLink);'}{'\n'}
               {'\n'}
-              <span style={{ color: '#6a9955' }}>{'// Wait for proof via WebSocket'}</span>{'\n'}
+              <span style={{ color: '#6a9955' }}>{'// Wait over WebSocket. The relay always answers: completed,'}</span>{'\n'}
+              <span style={{ color: '#6a9955' }}>{'// error, cancelled or expired (about 5 minutes after the request).'}</span>{'\n'}
               <span style={{ color: '#569cd6' }}>const</span>{' '}result = <span style={{ color: '#c586c0' }}>await</span>{' '}sdk.<span style={{ color: '#dcdcaa' }}>waitForProof</span>{'(relay.requestId);'}{'\n'}
-              <span style={{ color: '#c586c0' }}>if</span>{' (result.status === '}<span style={{ color: '#ce9178' }}>{`'completed'`}</span>{') {'}{'\n'}
-              {'  console.'}<span style={{ color: '#dcdcaa' }}>log</span>{'('}<span style={{ color: '#ce9178' }}>{`'Proof received:'`}</span>{', result.proof);'}{'\n'}
+              <span style={{ color: '#c586c0' }}>switch</span>{' (result.status) {'}{'\n'}
+              {'  '}<span style={{ color: '#c586c0' }}>case</span>{' '}<span style={{ color: '#ce9178' }}>{`'completed'`}</span>{':'}{'\n'}
+              {'    '}<span style={{ color: '#c586c0' }}>return</span>{' '}<span style={{ color: '#dcdcaa' }}>verifyProof</span>{'(result); '}<span style={{ color: '#6a9955' }}>{'// verify before trusting it'}</span>{'\n'}
+              {'  '}<span style={{ color: '#c586c0' }}>case</span>{' '}<span style={{ color: '#ce9178' }}>{`'error'`}</span>{':'}{'\n'}
+              {'  '}<span style={{ color: '#c586c0' }}>case</span>{' '}<span style={{ color: '#ce9178' }}>{`'failed'`}</span>{': '}<span style={{ color: '#6a9955' }}>{'// older app versions'}</span>{'\n'}
+              {'    '}<span style={{ color: '#c586c0' }}>return</span>{' '}<span style={{ color: '#dcdcaa' }}>showError</span>{'(result.error, result.errorCode);'}{'\n'}
+              {'  '}<span style={{ color: '#c586c0' }}>case</span>{' '}<span style={{ color: '#ce9178' }}>{`'cancelled'`}</span>{': '}<span style={{ color: '#6a9955' }}>{'// declined in the app'}</span>{'\n'}
+              {'    '}<span style={{ color: '#c586c0' }}>return</span>{' '}<span style={{ color: '#dcdcaa' }}>offerRetry</span>{'();'}{'\n'}
+              {'  '}<span style={{ color: '#c586c0' }}>case</span>{' '}<span style={{ color: '#ce9178' }}>{`'expired'`}</span>{': '}<span style={{ color: '#6a9955' }}>{'// the app never answered'}</span>{'\n'}
+              {'    '}<span style={{ color: '#c586c0' }}>return</span>{' '}<span style={{ color: '#dcdcaa' }}>offerRetry</span>{'();'}{'\n'}
+              {'  '}<span style={{ color: '#c586c0' }}>default</span>{':'}{'\n'}
+              {'    '}<span style={{ color: '#c586c0' }}>throw</span>{' '}<span style={{ color: '#c586c0' }}>new</span>{' '}<span style={{ color: '#dcdcaa' }}>Error</span>{'('}<span style={{ color: '#ce9178' }}>{'`Unknown status ${result.status}`'}</span>{');'}{'\n'}
               {'}'}
             </pre>
           </div>

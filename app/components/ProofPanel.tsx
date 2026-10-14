@@ -7,10 +7,17 @@ import { ArrowRight, ArrowUpRight, Check, Fingerprint, LockKey, X } from '@phosp
 import { isMobileDevice } from '@/lib/device';
 import { type DemoDefinition } from '@/lib/demo-catalog';
 import { networkName, type DemoOptions } from '@/lib/demo-policy';
-import type { useCredentialDemo, VerificationMethod } from '@/lib/useCredentialDemo';
+import type { DemoPhase, useCredentialDemo, VerificationMethod } from '@/lib/useCredentialDemo';
 import DemoFields from './DemoFields';
 import AccessLock from './AccessLock';
 import MarketsProofDisclosure from './MarketsProofDisclosure';
+
+const STATUS: Record<DemoPhase, string> = {
+  idle: 'Private access', requesting: 'Preparing request', waiting: 'Waiting for your phone', received: 'Proof received',
+  verifying: 'Checking your proof', verified: 'Access unlocked', error: 'Request needs attention', declined: 'Request declined', expired: 'Request expired',
+};
+/** Phases that end a request and hand the form back, with a way to try again. */
+const ENDED: readonly DemoPhase[] = ['error', 'declined', 'expired'];
 
 type Props = { demo: DemoDefinition; options: DemoOptions; onOptions: (options: DemoOptions) => void; flow: ReturnType<typeof useCredentialDemo> };
 
@@ -18,11 +25,12 @@ export default function ProofPanel({ demo, options, onOptions, flow }: Props) {
   const [mobile, setMobile] = useState(false);
   const [method, setMethod] = useState<VerificationMethod>('onchain');
   useEffect(() => setMobile(isMobileDevice()), []);
-  const idle = flow.phase === 'idle' || flow.phase === 'error';
+  const ended = ENDED.includes(flow.phase);
+  const idle = flow.phase === 'idle' || ended;
   const received = flow.phase === 'received' || flow.phase === 'verifying';
   const verified = flow.phase === 'verified';
   const markets = demo.id === 'kyc';
-  const status = { idle: 'Private access', requesting: 'Preparing request', waiting: 'Waiting for your phone', received: 'Proof received', verifying: 'Checking your proof', verified: 'Access unlocked', error: 'Request needs attention' }[flow.phase];
+  const status = STATUS[flow.phase];
 
   return <aside className={`proof-panel${verified ? ' is-verified' : ''}`} data-phase={flow.phase} aria-label={`${demo.brand} verification`}>
     <div className="proof-panel-top"><Fingerprint size={25} weight="light" /><span role="status">{status}</span>{flow.phase !== 'idle' && <button className="icon-button" onClick={flow.reset} aria-label={`Reset ${demo.tab} demo`} title="Reset demo"><X size={17} /></button>}</div>
@@ -30,13 +38,14 @@ export default function ProofPanel({ demo, options, onOptions, flow }: Props) {
       <h2>{demo.actionTitle}</h2><p className="panel-intro">{demo.id === 'giwa' ? 'Use ZKProofport to privately prove your KYC attestation on GIWA.' : demo.actionDescription}</p>
       <form onSubmit={event => { event.preventDefault(); void flow.request(options); }}>
         <DemoFields demo={demo} options={options} onChange={onOptions} disabled={false} />
-        {flow.error && <p className="proof-error" role="alert">{flow.error}</p>}
-        <button className="proof-primary" type="submit">{flow.phase === 'error' ? 'Try again' : demo.id === 'giwa' ? 'Get my Madang pass' : 'Get verified'}<ArrowUpRight size={19} /></button>
+        {flow.notice && <p className="proof-notice" role="status" data-ending={flow.phase}>{flow.notice}</p>}
+        {flow.error && <p className="proof-error" role="alert">{flow.error}{flow.errorCode && <span className="proof-error-code">Error code {flow.errorCode}</span>}</p>}
+        <button className="proof-primary" type="submit">{ended ? 'Try again' : demo.id === 'giwa' ? 'Get my Madang pass' : 'Get verified'}<ArrowUpRight size={19} /></button>
       </form>
       {demo.id !== 'giwa' && <p className="panel-provider"><LockKey size={14} />Verified with ZKProofport</p>}
     </>}
     {flow.phase === 'requesting' && <div className="proof-processing" role="status"><h2>Creating your request.</h2><p className="panel-intro">Preparing a secure connection to your phone.</p><div className="qr-skeleton" aria-hidden="true"><span /><span /><span /><span /></div><p className="field-help">This may take a few seconds.</p></div>}
-    {flow.phase === 'waiting' && <div className="proof-waiting"><h2>Your phone. Your proof.</h2><p className="panel-intro">{mobile ? 'Open ZKProofport and approve the proof request.' : 'Scan with ZKProofport, then approve the request on your phone.'}</p>{mobile ? <a className="proof-primary" href={flow.deepLink}>Open app<ArrowUpRight size={19} /></a> : <img className="proof-qr" src={flow.qrCode} alt={`Scan with ZKProofport to generate a ${demo.tab} proof`} width={224} height={224} />}<p className="field-help">Keep this tab open. Your request expires after 3 minutes.</p><button className="proof-text-button" onClick={flow.reset}>Cancel request</button><AppDownloads compact /></div>}
+    {flow.phase === 'waiting' && <div className="proof-waiting"><h2>Your phone. Your proof.</h2><p className="panel-intro">{mobile ? 'Open ZKProofport and approve the proof request.' : 'Scan with ZKProofport, then approve the request on your phone.'}</p>{mobile ? <a className="proof-primary" href={flow.deepLink}>Open app<ArrowUpRight size={19} /></a> : <img className="proof-qr" src={flow.qrCode} alt={`Scan with ZKProofport to generate a ${demo.tab} proof`} width={224} height={224} />}<p className="field-help">Keep this tab open. Your request expires in under 5 minutes.</p><button className="proof-text-button" onClick={flow.reset}>Cancel request</button><AppDownloads compact /></div>}
     {received && <>
       <h2>{flow.phase === 'verifying' ? 'Checking the proof.' : markets ? 'Proof received.' : 'Ready for a private check.'}</h2><p className="panel-intro">{flow.phase === 'verifying' ? 'Access opens only after your proof passes verification.' : markets ? 'Verify this proof to unlock the markets.' : 'Your proof arrived. Choose how to verify it.'}</p>
       {markets && flow.proof && <MarketsProofDisclosure proof={flow.proof} />}

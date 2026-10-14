@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ALL_CIRCUIT_IDS, isCircuitId, type RelayProofResult } from '@zkproofport-app/sdk';
 import { getBytes, keccak256, toUtf8Bytes } from 'ethers';
-import { DEMO_CIRCUITS, DEMOS, demoById, type DemoId } from '../lib/demo-catalog';
+import { DEMO_CIRCUITS, DEMOS, SDK_CIRCUITS_WITHOUT_A_DEMO, demoById, type DemoId } from '../lib/demo-catalog';
 import { buildDemoInputs, COINBASE_SIGNER_ROOT, DEFAULT_OPTIONS, DEMO_VERIFIERS, prepareDemoProof, type DemoOptions } from '../lib/demo-policy';
 import { depositAction, giwaResult } from './fixtures/giwa';
 
@@ -56,9 +56,12 @@ describe('dedicated circuit coverage', () => {
     expect(DEMOS.map(demo => demo.circuit).sort()).toEqual([...DEMO_CIRCUITS].sort());
     expect(new Set(DEMOS.map(demo => demo.id)).size).toBe(DEMOS.length);
     for (const circuit of DEMO_CIRCUITS) expect(isCircuitId(circuit), circuit).toBe(true);
-    // And every SDK circuit has a tab: a circuit the SDK adds or drops is a
-    // decision for the demo, not something it learns about from a visitor.
-    expect([...DEMO_CIRCUITS].sort()).toEqual([...ALL_CIRCUIT_IDS].sort());
+    // And every SDK circuit has a tab or is listed as deliberately without one:
+    // a circuit the SDK adds or drops is a decision for the demo, not something
+    // it learns about from a visitor.
+    const excluded: readonly string[] = SDK_CIRCUITS_WITHOUT_A_DEMO;
+    for (const circuit of excluded) expect(DEMO_CIRCUITS as readonly string[], `${circuit} is both demoed and excluded`).not.toContain(circuit);
+    expect([...DEMO_CIRCUITS, ...excluded].sort()).toEqual([...ALL_CIRCUIT_IDS].sort());
   });
 });
 

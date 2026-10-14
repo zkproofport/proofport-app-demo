@@ -459,4 +459,28 @@ describe('Gotgan proof request orchestration', () => {
     expect(flow.error).toContain('RPC unavailable');
     expect(external.create).not.toHaveBeenCalled();
   });
+
+  // The relay ends every request with one terminal status. Polling used to stop
+  // only on completed/failed, so these kept it polling until its own deadline.
+  it.each([
+    [{ status: 'cancelled' }, /declined in the ZKProofport app/],
+    [{ status: 'error', error: 'No attestation found', errorCode: 'E2005' }, /No attestation found \(error code E2005\)/],
+    [{ status: 'failed', error: 'Proof generation failed' }, /Proof generation failed/],
+    [{ status: 'expired', error: 'The request timed out before the app answered' }, /did not answer in time/],
+    [{ status: 'approved' }, /unknown status 'approved'/],
+  ])('stops polling on %j and says how the request ended', async (answer, message) => {
+    await connect();
+    external.poll.mockResolvedValueOnce({ requestId: 'current-request', status: 'pending' })
+      .mockResolvedValueOnce({ requestId: 'current-request', status: 'generating' })
+      .mockResolvedValue({ requestId: 'current-request', circuit: 'giwa_attestation', proof: '0x1234', ...answer });
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    let requesting!: Promise<void>;
+    await act(async () => { requesting = flow.requestProof(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(4_100); await requesting; });
+    expect(external.poll).toHaveBeenCalledTimes(3);
+    expect(flow.phase).toBe('blocked');
+    expect(flow.error).toMatch(message);
+    expect(flow.proof).toBeNull();
+    expect(external.verifyEligibility).not.toHaveBeenCalled();
+  });
 });

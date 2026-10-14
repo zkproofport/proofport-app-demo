@@ -337,17 +337,33 @@ const relay = await sdk.createRelayRequest(
 // 4. Generate QR code for mobile scanning
 const qrHtml = await sdk.generateQRCode(relay.deepLink);
 
-// 5. Wait for proof (Socket.IO connection with 2-minute timeout)
-const result = await sdk.waitForProof(relay.requestId, {
-  timeout: 120000
-});
+// 5. Wait for the relay's answer over Socket.IO (polling fallback).
+//    The relay ends every request with exactly one terminal status and
+//    answers `expired` itself about 280 s in, so keep timeoutMs above that
+//    (300000 is the SDK default) or the SDK's own timer fires first.
+const result = await sdk.waitForProof(relay.requestId, { timeoutMs: 300000 });
 
-// 6. Verify proof onchain (optional)
-if (result.status === 'completed') {
-  const verification = await sdk.verifyResponseOnChain(result);
-  console.log('Onchain verification:', verification);
+// 6. Branch on every outcome, not only success
+switch (result.status) {
+  case 'completed':
+    console.log('Onchain verification:', await sdk.verifyResponseOnChain(result));
+    break;
+  case 'error':
+  case 'failed': // older app versions send 'failed' for 'error'
+    showError(result.error, result.errorCode); // errorCode like 'E2005' when the app sent one
+    break;
+  case 'cancelled': // the user declined in the ZKProofport app
+  case 'expired':   // the app never answered
+    offerRetry();
+    break;
+  default:
+    throw new Error(`Unknown relay status ${result.status}`);
 }
 ```
+
+In this demo every wait goes through `settleRelayResult()` in
+`lib/relay-outcome.ts`, which maps the four outcomes (and legacy `failed`) to
+what the page shows and throws on any status the SDK does not list.
 
 ### Supported Circuits
 

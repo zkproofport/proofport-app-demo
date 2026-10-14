@@ -11,6 +11,17 @@ export const DEMO_CIRCUITS = [
 ] as const;
 export type DemoCircuit = (typeof DEMO_CIRCUITS)[number];
 
+/**
+ * SDK circuits this demo deliberately has no tab for. Each row is a decision,
+ * so a circuit the SDK adds still fails the coverage test until someone either
+ * gives it a tab or lists it here.
+ *
+ * `dojang_playground` arrived in SDK 0.4.1 (GIWA Sepolia, experimental). It was
+ * listed here when the demo moved to 0.4.2 for the relay's terminal statuses;
+ * whether it gets a tab is a product decision that has not been made.
+ */
+export const SDK_CIRCUITS_WITHOUT_A_DEMO = [CIRCUIT_IDS.DOJANG_PLAYGROUND] as const;
+
 export type DemoId = 'giwa' | 'kyc' | 'country' | 'email' | 'ownership' | 'age' | 'region';
 export type DemoDefinition = {
   id: DemoId; circuit: DemoCircuit; tab: string; brand: string; category: string;

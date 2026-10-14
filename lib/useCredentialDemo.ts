@@ -6,8 +6,13 @@ import type { ProofResponse, ProofportSDK } from '@zkproofport-app/sdk';
 import { createSDK } from './sdk';
 import type { DemoDefinition } from './demo-catalog';
 import { buildDemoInputs, prepareDemoProof, type DemoOptions } from './demo-policy';
+import { DEMO_PROOF_WAIT_MS, NO_RELAY_ANSWER_MESSAGE, isWaitTimeout, settleRelayResult } from './relay-outcome';
 
-export type DemoPhase = 'idle' | 'requesting' | 'waiting' | 'received' | 'verifying' | 'verified' | 'error';
+/**
+ * `declined` and `expired` are endings, not errors: the person said no in the
+ * app, or nobody answered in time. Both return to the form with a neutral note.
+ */
+export type DemoPhase = 'idle' | 'requesting' | 'waiting' | 'received' | 'verifying' | 'verified' | 'error' | 'declined' | 'expired';
 export type VerificationMethod = 'onchain' | 'offchain';
 
 async function deadline<T>(operation: Promise<T>, milliseconds: number, message: string): Promise<T> {
@@ -17,11 +22,16 @@ async function deadline<T>(operation: Promise<T>, milliseconds: number, message:
   } finally { clearTimeout(timer); }
 }
 
+/** Keyed by outcome kind; settleRelayResult has already refused any status it does not name. */
+const ENDING_PHASE: Record<'cancelled' | 'expired', DemoPhase> = { cancelled: 'declined', expired: 'expired' };
+
 export function useCredentialDemo(demo: DemoDefinition) {
   const [phase, setPhase] = useState<DemoPhase>('idle');
   const [qrCode, setQrCode] = useState('');
   const [deepLink, setDeepLink] = useState('');
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState('');
+  const [notice, setNotice] = useState('');
   const [proof, setProof] = useState<ProofResponse | null>(null);
   const [method, setMethod] = useState<VerificationMethod>('onchain');
   const attempt = useRef(0);
@@ -34,14 +44,14 @@ export function useCredentialDemo(demo: DemoDefinition) {
     attempt.current++;
     sdkRef.current?.disconnect(); sdkRef.current = null;
     busy.current = false;
-    setPhase('idle'); setError(''); setProof(null); setQrCode(''); setDeepLink('');
+    setPhase('idle'); setError(''); setErrorCode(''); setNotice(''); setProof(null); setQrCode(''); setDeepLink('');
   }
 
   async function request(options: DemoOptions) {
     if (busy.current) return;
     busy.current = true;
     const current = ++attempt.current;
-    setPhase('requesting'); setError(''); setProof(null); setQrCode(''); setDeepLink('');
+    setPhase('requesting'); setError(''); setErrorCode(''); setNotice(''); setProof(null); setQrCode(''); setDeepLink('');
     let sdk: ProofportSDK | undefined;
     try {
       const scope = `${demo.brand.toLowerCase()}:${demo.id}:${hexlify(randomBytes(16))}`;
@@ -61,12 +71,20 @@ export function useCredentialDemo(demo: DemoDefinition) {
       const qr = await sdk.generateQRCode(pending.deepLink, { width: 240 });
       if (current !== attempt.current) return;
       setDeepLink(pending.deepLink); setQrCode(qr); setPhase('waiting');
-      const result = await sdk.waitForProof(pending.requestId, { timeoutMs: 180000 });
+      const result = await sdk.waitForProof(pending.requestId, { timeoutMs: DEMO_PROOF_WAIT_MS });
       if (current !== attempt.current) return;
-      setProof(prepareDemoProof(result, { demo, requestId: pending.requestId, scope, options: snapshot, year }));
-      setPhase('received');
+      const outcome = settleRelayResult(result);
+      if (outcome.kind === 'proof') {
+        setProof(prepareDemoProof(outcome.result, { demo, requestId: pending.requestId, scope, options: snapshot, year }));
+        setPhase('received');
+      } else if (outcome.kind === 'error') {
+        setError(outcome.message); setErrorCode(outcome.errorCode ?? ''); setPhase('error');
+      } else {
+        setNotice(outcome.message); setPhase(ENDING_PHASE[outcome.kind]);
+      }
     } catch (cause) {
       if (current !== attempt.current) return;
+      if (isWaitTimeout(cause)) { setNotice(NO_RELAY_ANSWER_MESSAGE); setPhase('expired'); return; }
       setError(cause instanceof Error ? cause.message : 'The proof request failed. Please try again.'); setPhase('error');
     } finally {
       sdk?.disconnect();
@@ -92,5 +110,5 @@ export function useCredentialDemo(demo: DemoDefinition) {
     } finally { if (current === attempt.current) busy.current = false; }
   }
 
-  return { phase, qrCode, deepLink, error, proof, method, request, verify, reset };
+  return { phase, qrCode, deepLink, error, errorCode, notice, proof, method, request, verify, reset };
 }

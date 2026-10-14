@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { BrowserProvider, Contract, JsonRpcProvider, TypedDataEncoder, Wallet, isAddress, toBeHex, type Eip1193Provider } from 'ethers';
 import { CIRCUIT_IDS, ProofportSDK, type RelayProofResult } from '@zkproofport-app/sdk';
 import { GIWA_CHAIN_ID, prepareGiwaMembershipProof } from './giwa-membership';
+import { DEMO_PROOF_WAIT_MS, describeFailure, isPendingRelayStatus, settleRelayResult } from './relay-outcome';
 import { EXPLORER, GIWA_RPC, TOKEN_ABI, TOKEN_ADDRESS, VAULT_ABI, VAULT_ADDRESS, buildGiwaDepositAction, guardGiwaWalletProvider, parseVaultAmount, vaultErrorMessage, vaultErrorName, waitForVaultReceipt } from './giwa-vault';
 
 type WalletProvider = Eip1193Provider & { on?: (event: string, listener: (...args: unknown[]) => void) => void; removeListener?: (event: string, listener: (...args: unknown[]) => void) => void };
@@ -151,15 +152,19 @@ export function useGiwaVault() {
       // The same-origin relay adapter is HTTP-only. Poll through the SDK rather
       // than opening a Socket.IO namespace against the Next.js server.
       let result: RelayProofResult | undefined;
-      const expires = Date.now() + 180000;
+      // Every status that is not pending ends the wait — error, cancelled and
+      // expired included — and settleRelayResult refuses one it does not know.
+      const expires = Date.now() + DEMO_PROOF_WAIT_MS;
       while (current === version.current && Date.now() < expires) {
         const update = await timeout(client.pollResult(pending.requestId));
-        if (update.status === 'completed' || update.status === 'failed') { result = update; break; }
+        if (!isPendingRelayStatus(update.status)) { result = update; break; }
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
       if (current !== version.current) return;
-      if (!result) throw new Error('The proof request expired. Please generate a new proof.');
-      const response = prepareGiwaMembershipProof(result, pending.requestId, scope, action);
+      if (!result) throw new Error('No answer came back from the relay. Please generate a new proof.');
+      const outcome = settleRelayResult(result);
+      if (outcome.kind !== 'proof') throw new Error(describeFailure(outcome));
+      const response = prepareGiwaMembershipProof(outcome.result, pending.requestId, scope, action);
       const bound: BoundProof = { proof: response.proof!, publicInputs: response.publicInputs!.map(value => toBeHex(BigInt(value), 32)), scope, amount: units, account: target };
       setPhase('verifying');
       const valid = await timeout(vault().verifyEligibility(target, units, bound.proof, bound.publicInputs));

@@ -191,6 +191,36 @@ describe('Ssiat claim orchestration', () => {
     expect(flow.proof).toBeNull();
   });
 
+  it('after a claim, reads the figures no earlier than the claim block, waiting out a lagging RPC server', async () => {
+    await proveReady();
+    const hash = '0x' + '13'.repeat(32);
+    external.claim.mockResolvedValue({ hash, wait: async () => ({ hash, status: 1, blockNumber: 400 }) });
+    // The first answers come from a server still before the claim; the next one has it.
+    external.getBlockNumber.mockResolvedValueOnce(398).mockResolvedValueOnce(399).mockResolvedValue(400);
+    external.totalClaims.mockImplementation(async (overrides?: { blockTag?: number }) => (overrides?.blockTag ?? 0) >= 400 ? BigInt(4) : BigInt(3));
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    let claiming!: Promise<void>;
+    await act(async () => { claiming = flow.claim(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_100); await claiming; });
+    expect(flow.phase).toBe('claimed');
+    expect(flow.info?.totalClaims).toBe(BigInt(4));
+    expect(external.totalClaims).toHaveBeenLastCalledWith({ blockTag: 400 });
+    expect(flow.readError).toBe('');
+  });
+
+  it('after a claim, says the figures are unavailable when no server reaches the claim block', async () => {
+    await proveReady();
+    const hash = '0x' + '14'.repeat(32);
+    external.claim.mockResolvedValue({ hash, wait: async () => ({ hash, status: 1, blockNumber: 400 }) });
+    external.getBlockNumber.mockResolvedValue(399);
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    let claiming!: Promise<void>;
+    await act(async () => { claiming = flow.claim(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000); await claiming; });
+    expect(flow.phase).toBe('claimed');
+    expect(flow.readError).toMatch(/unavailable/);
+  });
+
   it('shows an already-used faucet wallet as its own state, before any transaction', async () => {
     await connect();
     external.claimed.mockResolvedValue(true);

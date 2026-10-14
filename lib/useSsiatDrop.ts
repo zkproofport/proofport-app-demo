@@ -26,6 +26,8 @@ export type SsiatPhase =
 export type BoundClaim = SsiatClaimProof & { amount: bigint };
 export type SsiatDropInfo = { token: string; claimAmount: bigint; remaining: bigint; totalClaims: bigint; recipientBalance: bigint | null };
 
+const REFRESH_AFTER_CLAIM_ATTEMPTS = 15;
+const REFRESH_AFTER_CLAIM_DELAY_MS = 1000;
 const STALE_WALLET = 'Wallet or network changed. Reconnect the recipient wallet and generate a new proof.';
 const BUSY: readonly SsiatPhase[] = ['requesting', 'waiting', 'verifying', 'claiming'];
 const TOKEN_ABI = ['function balanceOf(address) view returns (uint256)'];
@@ -69,21 +71,40 @@ export function useSsiatDrop() {
   }, []);
   const contract = (address: string) => new Contract(address, SSIAT_DROP_ABI, readProvider());
 
-  const refresh = useCallback(async () => {
+  /**
+   * Reads every figure at one block. `atLeastBlock` is the claim's own block:
+   * the public GIWA RPC answers from several servers and some trail the chain,
+   * so a plain "latest" read right after a claim can come from before it and
+   * show the old figures. Then it waits for a server that has the block.
+   */
+  const refresh = useCallback(async (atLeastBlock?: number) => {
     const current = ++readVersion.current;
     const recipient = account;
     let address: string;
     try { address = ssiatDropAddress(); } catch { return; }
-    try {
-      const reader = new Contract(address, SSIAT_DROP_ABI, readProvider());
-      const [token, claimAmount, remaining, totalClaims] = await timeout(Promise.all([
-        reader.token(), reader.CLAIM_AMOUNT(), reader.remaining(), reader.totalClaims(),
-      ]));
-      const recipientBalance = recipient && isAddress(token)
-        ? await timeout(new Contract(token, TOKEN_ABI, readProvider()).balanceOf(recipient)) as bigint : null;
-      if (current !== readVersion.current) return;
-      setInfo({ token, claimAmount, remaining, totalClaims, recipientBalance }); setReadError('');
-    } catch { if (current === readVersion.current) setReadError('Live drop figures are unavailable. Retry before claiming.'); }
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const blockTag = await timeout(readProvider().getBlockNumber());
+        if (atLeastBlock !== undefined && blockTag < atLeastBlock) throw new Error(`The RPC is at block ${blockTag}, before the claim's block ${atLeastBlock}.`);
+        const reader = new Contract(address, SSIAT_DROP_ABI, readProvider());
+        const [token, claimAmount, remaining, totalClaims] = await timeout(Promise.all([
+          reader.token({ blockTag }), reader.CLAIM_AMOUNT({ blockTag }), reader.remaining({ blockTag }), reader.totalClaims({ blockTag }),
+        ]));
+        const recipientBalance = recipient && isAddress(token)
+          ? await timeout(new Contract(token, TOKEN_ABI, readProvider()).balanceOf(recipient, { blockTag })) as bigint : null;
+        if (current !== readVersion.current) return;
+        setInfo({ token, claimAmount, remaining, totalClaims, recipientBalance }); setReadError('');
+        return;
+      } catch {
+        if (current !== readVersion.current) return;
+        if (atLeastBlock === undefined || attempt >= REFRESH_AFTER_CLAIM_ATTEMPTS) {
+          setReadError('Live drop figures are unavailable. Retry before claiming.');
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, REFRESH_AFTER_CLAIM_DELAY_MS));
+        if (current !== readVersion.current) return;
+      }
+    }
   }, [account, readProvider]);
 
   function reset() {
@@ -238,7 +259,7 @@ export function useSsiatDrop() {
       setTxHash(confirmed.hash);
       setReceipt({ hash: confirmed.hash, amount: bound.amount, recipient: bound.recipient });
       setProof(null); setPhase('claimed');
-      await refresh();
+      await refresh(confirmed.blockNumber);
     } catch (cause) {
       if (!isCurrent()) return;
       const name = ssiatErrorName(cause);

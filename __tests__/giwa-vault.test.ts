@@ -79,7 +79,7 @@ describe('Gotgan deposit action construction', () => {
 });
 
 describe('wallet transaction replacement', () => {
-  const receipt = { hash: '0xreplacement', status: 1 };
+  const receipt = { hash: '0xreplacement', status: 1, blockNumber: 7 };
   const replaced = (reason: string, status = 1) => ({ wait: async () => {
     throw { code: 'TRANSACTION_REPLACED', reason, cancelled: reason !== 'repriced', receipt: { ...receipt, status } };
   } });

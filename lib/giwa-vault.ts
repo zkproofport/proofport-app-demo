@@ -62,7 +62,7 @@ export function buildGiwaDepositAction(account: string, amount: bigint, nonce: b
   };
 }
 
-type VaultReceipt = Pick<TransactionReceipt, 'hash' | 'status'>;
+type VaultReceipt = Pick<TransactionReceipt, 'hash' | 'status' | 'blockNumber'>;
 
 /** A wallet fee bump replaces the hash without changing the requested vault action. */
 export async function waitForVaultReceipt(

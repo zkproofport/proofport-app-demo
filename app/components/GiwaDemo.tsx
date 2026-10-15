@@ -11,6 +11,7 @@ import { GIWA_VERIFIER } from '@/lib/giwa-membership';
 import { isMobileDevice } from '@/lib/device';
 import GotganLogo, { GotganMark } from './GotganLogo';
 import './giwa.css';
+import { ZKPROOFPORT_SYMBOL } from '@/lib/brand';
 
 const short = (value: string) => `${value.slice(0, 6)}…${value.slice(-4)}`;
 const addressLink = (address: string) => `${EXPLORER}/address/${address}`;
@@ -83,7 +84,7 @@ export default function GiwaDemo() {
             {!flow.account && <p className="gv-action-note">{flow.mode === 'deposit' ? 'Connect the wallet you want to deposit from. Prove eligibility with your KYC-linked wallet on your phone.' : 'Connect the operational wallet to withdraw your deposits.'}</p>}
             <p className="gv-action-note"><LockKey size={13} />{flow.mode === 'deposit' ? 'Your KYC account is not sent to the vault.' : 'Withdrawals do not require a new KYC proof.'}</p>
           </div>
-          <div className="gv-card-footer"><img src="/logo.png" width={21} height={21} alt="" /><span>Proofs by <strong>ZKProofport</strong></span></div>
+          <div className="gv-card-footer"><img src={ZKPROOFPORT_SYMBOL} width={21} height={21} alt="" /><span>Proofs by <strong>ZKProofport</strong></span></div>
         </section>
       </div>
 

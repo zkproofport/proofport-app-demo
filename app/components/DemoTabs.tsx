@@ -8,6 +8,8 @@ import GiwaDemo from './GiwaDemo';
 import SsiatDemo from './SsiatDemo';
 import AppDownloads from './AppDownloads';
 import './demos.css';
+import ZKProofportWordmark from './ZKProofportWordmark';
+import { ZKPROOFPORT_SYMBOL } from '@/lib/brand';
 
 type Tab = DemoId | 'all';
 type Theme = 'system' | 'light' | 'dark';
@@ -89,7 +91,7 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
   return <div className="demo-suite" data-theme={theme} data-active={tab}>
     <a className="demo-skip" href={tab === 'all' ? '#demo-panel-all' : `#content-${tab}`}>Skip to demo</a>
     <nav className="demo-switcher" aria-label="ZKProofport demos">
-      <button className="demo-switcher-brand" onClick={() => select(DEFAULT_TAB)} aria-label="ZKProofport demo home"><img src="/logo.png" alt="" width={25} height={25} /><span>ZKProofport<small>Live demos</small></span></button>
+      <button className="demo-switcher-brand" onClick={() => select(DEFAULT_TAB)} aria-label="ZKProofport demo home"><img src={ZKPROOFPORT_SYMBOL} alt="" width={32} height={32} /><span><ZKProofportWordmark /><small>Live demos</small></span></button>
       <div role="tablist" aria-label="Choose a demo">
         {tabs.map((item, index) => <button key={item.id} id={`demo-tab-${item.id}`} role="tab" aria-selected={navTab === item.id} aria-controls={`demo-panel-${item.id === 'ownership' && ['age', 'region'].includes(tab) ? tab : item.id}`} tabIndex={navTab === item.id ? 0 : -1} onClick={() => select(item.id)} onKeyDown={event => navigate(event, index)}>
           {item.label}

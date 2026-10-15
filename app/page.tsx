@@ -19,6 +19,8 @@ import { ethers } from 'ethers';
 import DemoTabs from './components/DemoTabs';
 import { APP_STORE_URL, GOOGLE_PLAY_URL } from '@/lib/app-stores';
 import { DEMO_PROOF_WAIT_MS, NO_RELAY_ANSWER_MESSAGE, isWaitTimeout, settleRelayResult } from '@/lib/relay-outcome';
+import { ZKPROOFPORT_SYMBOL } from '@/lib/brand';
+import ZKProofportWordmark from './components/ZKProofportWordmark';
 
 /* ─── Color tokens (matching portal-web design system) ─── */
 const C = {
@@ -1258,15 +1260,8 @@ const emptyDemoState: DemoState = {
         }}>
           {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
-            <img src="/logo.png" alt="" width={30} height={30} style={{ borderRadius: 8 }} />
-            <span style={{
-              fontFamily: FONT.mono,
-              fontWeight: 700,
-              letterSpacing: '0.04em',
-              fontSize: 'clamp(1.3rem, 2.5vw, 1.7rem)',
-              textTransform: 'uppercase' as const,
-              color: C.cream,
-            }}>ZKProofport</span>
+            <img src={ZKPROOFPORT_SYMBOL} alt="" width={30} height={30} style={{ borderRadius: 8 }} />
+            <ZKProofportWordmark background="dark" />
           </div>
 
           {/* Nav (iOS/Android) */}

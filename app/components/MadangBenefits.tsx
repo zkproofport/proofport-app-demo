@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ArrowRight, Check, Gift, LockKey, Robot, Ticket } from '@phosphor-icons/react';
 import MadangLogo from './MadangLogo';
+import { ZKPROOFPORT_SYMBOL } from '@/lib/brand';
 
 export default function MadangBenefits({ panel, verified }: { panel: ReactNode; verified: boolean }) {
   return <>
@@ -40,7 +41,7 @@ export default function MadangBenefits({ panel, verified }: { panel: ReactNode; 
       <ol className="madang-flow-steps">
         <li><img src="/brand/upbit-logo.png" alt="" width={44} height={44} /><div><strong>Upbit</strong><span>KYC completed</span></div><ArrowRight size={22} aria-hidden="true" /></li>
         <li><img src="/giwa-logo.jpg" alt="" width={44} height={44} /><div><strong>GIWA</strong><span>Onchain EAS attestation</span></div><ArrowRight size={22} aria-hidden="true" /></li>
-        <li><img src="/logo.png" alt="" width={44} height={44} /><div><strong>ZKProofport</strong><span>Prove KYC. Keep identity private.</span></div><ArrowRight size={22} aria-hidden="true" /></li>
+        <li><img src={ZKPROOFPORT_SYMBOL} alt="" width={44} height={44} /><div><strong>ZKProofport</strong><span>Prove KYC. Keep identity private.</span></div><ArrowRight size={22} aria-hidden="true" /></li>
         <li><MadangLogo compact /><div><strong>Madang</strong><span>Community &amp; private perks</span></div></li>
       </ol>
     </section>

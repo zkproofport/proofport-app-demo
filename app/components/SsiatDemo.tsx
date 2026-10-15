@@ -9,6 +9,7 @@ import { isMobileDevice } from '@/lib/device';
 import AppDownloads from './AppDownloads';
 import SsiatLogo, { SsiatMark } from './SsiatLogo';
 import './ssiat.css';
+import { ZKPROOFPORT_SYMBOL } from '@/lib/brand';
 
 const short = (value: string) => `${value.slice(0, 6)}…${value.slice(-4)}`;
 const addressLink = (address: string) => `${EXPLORER}/address/${address}`;
@@ -104,7 +105,7 @@ export default function SsiatDemo() {
             </div>}
             <p className="sd-action-note"><LockKey size={13} />The faucet wallet&rsquo;s address is not sent to the drop.</p>
           </div>
-          <div className="sd-card-footer"><img src="/logo.png" width={21} height={21} alt="" /><span>Proofs by <strong>ZKProofport</strong></span></div>
+          <div className="sd-card-footer"><img src={ZKPROOFPORT_SYMBOL} width={21} height={21} alt="" /><span>Proofs by <strong>ZKProofport</strong></span></div>
         </section>
       </div>
 

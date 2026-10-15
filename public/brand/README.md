@@ -9,7 +9,13 @@
 - `public/og-image.png` retains the same corrected image for old direct links.
   Open Graph and Twitter metadata use the dated URL to avoid reusing the old
   purple image. Messaging apps may still cache previews of previously sent URLs.
-- `public/logo.png` was checked against the official site's logo and is identical.
+- `zkproofport/` holds the marks from the brand kit (version 2026-10-13), copied
+  unchanged from the parent repository's `docs/design/zkproofport-brand-kit/`:
+  `zkproofport-symbol.png` (the shield, formerly `public/logo.png`, byte-identical)
+  and `zkproofport-wordmark-dark.svg` / `-light.svg` (for dark / light backgrounds).
+  Code takes them from `lib/brand.ts`; the header wordmark is
+  `app/components/ZKProofportWordmark.tsx`. Keep the kit's minimums: wordmark
+  160 px wide, shield 32 px tall.
 - Official site palette: midnight `#071827`, deep `#06131f`, gold `#cba65e`,
   paper `#f2f3ee`, muted `#9bafc1`.
 
@@ -22,7 +28,7 @@
   declared favicon at https://upbit.com/favicon.jpg on 2026-09-05. Only the local
   extension was corrected; the artwork is unchanged.
 - GIWA uses the existing `/giwa-logo.jpg` from this project.
-- ZKProofport uses the existing `/logo.png` from this project.
+- ZKProofport uses `zkproofport/zkproofport-symbol.png`.
 
 Third-party marks identify credential source, network and proof provider.
 They are not presented as endorsements of the fictional Madang service.

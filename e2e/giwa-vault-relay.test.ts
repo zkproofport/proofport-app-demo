@@ -1,10 +1,10 @@
 /**
- * Real HTTP boundary test: running demo adapter -> running relay -> mobile
- * deep-link payload, followed by polling through the demo adapter.
+ * Real HTTP boundary test: SDK -> running relay -> mobile deep-link payload,
+ * followed by polling. The demo's browser code calls the relay this way, with
+ * no server of its own in between, so this is the same path.
  *
- * Requires a rebuilt, healthy Docker demo with RELAY_URL configured to the
- * relay under test. Supply both endpoints explicitly:
- *   DEMO_URL=http://localhost:3300 RELAY_URL=https://stg-relay.zkproofport.app npm run test:e2e
+ * Supply the relay under test explicitly:
+ *   RELAY_URL=https://stg-relay.zkproofport.app npm run test:e2e
  *
  * It creates a real pending request, never posts a fabricated proof callback,
  * and therefore does not claim phone generation or onchain proof success.
@@ -14,18 +14,31 @@ import { CIRCUIT_IDS, ProofportSDK } from '@zkproofport-app/sdk';
 import { AbiCoder, Contract, hexlify, JsonRpcProvider, keccak256, randomBytes, TypedDataEncoder, Wallet } from 'ethers';
 import { buildGiwaDepositAction, GIWA_RPC, TOKEN_ADDRESS, VAULT_ABI, VAULT_ADDRESS, vaultErrorName } from '../lib/giwa-vault';
 
-const demoUrl = process.env.DEMO_URL;
 const relayUrl = process.env.RELAY_URL;
-if (!demoUrl) throw new Error('DEMO_URL is required to test the running GIWA demo adapter.');
-if (!relayUrl) throw new Error('RELAY_URL is required to verify which relay owns the pending request.');
-const adapterUrl = new URL('/api/giwa-relay', demoUrl).toString();
+if (!relayUrl) throw new Error('RELAY_URL is required: the relay the request is created on.');
 
-describe('Gotgan deposit request crosses the real demo and relay', () => {
+describe('a browser on any site may call the relay', () => {
+  it.each(['https://demo.zkproofport.app', 'https://dojangscan.com', 'http://localhost:3000'])('answers %s on every endpoint the SDK uses', async (origin) => {
+    for (const [path, method, headers] of [
+      ['/api/v1/challenge', 'GET', undefined],
+      ['/api/v1/proof/request', 'POST', 'content-type'],
+      ['/api/v1/proof/00000000-0000-4000-8000-000000000000', 'GET', undefined],
+    ] as const) {
+      const preflight = await fetch(new URL(path, relayUrl), {
+        method: 'OPTIONS', signal: AbortSignal.timeout(15000),
+        headers: { Origin: origin, 'Access-Control-Request-Method': method, ...(headers ? { 'Access-Control-Request-Headers': headers } : {}) },
+      });
+      expect(preflight.headers.get('access-control-allow-origin'), `${method} ${path}`).toBe('*');
+    }
+  }, 60000);
+});
+
+describe('Gotgan deposit request crosses the real relay', () => {
   it('preserves scope and the complete EIP-712 action for the phone and polls the same pending request', async () => {
     const wallet = Wallet.createRandom();
     const scope = `giwa-vault:v1:${keccak256(randomBytes(32)).slice(2)}`;
     const action = buildGiwaDepositAction(wallet.address, BigInt(1000000), BigInt(0));
-    const sdk = new ProofportSDK({ relayUrl: adapterUrl });
+    const sdk = new ProofportSDK({ relayUrl });
     sdk.setSigner(wallet);
     try {
       const pending = await sdk.createRelayRequest(CIRCUIT_IDS.GIWA_ATTESTATION, { scope, action }, {
@@ -54,8 +67,7 @@ describe('Gotgan deposit request crosses the real demo and relay', () => {
       expect(polled.deepLink).toBe(pending.deepLink);
       expect(polled.proof).toBeUndefined();
 
-      // If the adapter silently chose production, this request cannot be
-      // looked up on the explicitly selected staging/local relay.
+      // The request lives on the relay that was named, nowhere else.
       const direct = await fetch(new URL(`/api/v1/proof/${pending.requestId}`, relayUrl), {
         redirect: 'error', signal: AbortSignal.timeout(15000),
       });

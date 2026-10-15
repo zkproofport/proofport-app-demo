@@ -10,6 +10,7 @@ import { TOKEN_ADDRESS, VAULT_ADDRESS } from '../lib/giwa-vault';
 import { depositAction, giwaResult, GIWA_TEST_ACCOUNT } from './fixtures/giwa';
 
 const external = vi.hoisted(() => ({
+  sdkConfigs: [] as unknown[],
   signer: vi.fn(), create: vi.fn(), poll: vi.fn(), qr: vi.fn(), disconnect: vi.fn(),
   getBlockNumber: vi.fn(), depositScope: vi.fn(), nonces: vi.fn(), domainSeparator: vi.fn(),
   depositActionHash: vi.fn(), verifyEligibility: vi.fn(), balanceOf: vi.fn(),
@@ -22,6 +23,7 @@ const external = vi.hoisted(() => ({
 vi.mock('@zkproofport-app/sdk', async importOriginal => {
   const sdk = await importOriginal<typeof import('@zkproofport-app/sdk')>();
   return { ...sdk, ProofportSDK: class {
+    constructor(config: unknown) { external.sdkConfigs.push(config); }
     setSigner = external.signer;
     createRelayRequest = external.create;
     pollResult = external.poll;
@@ -270,6 +272,8 @@ describe('Gotgan proof request orchestration', () => {
     expect(external.signer).toHaveBeenCalledOnce();
     expect(external.signer.mock.calls[0][0]).toEqual(expect.objectContaining({ signMessage: expect.any(Function), getAddress: expect.any(Function) }));
     expect(external.signer.mock.invocationCallOrder[0]).toBeLessThan(external.create.mock.invocationCallOrder[0]);
+    // The browser talks to the relay itself, never through a route on this demo's server.
+    expect(external.sdkConfigs.at(-1)).toEqual({ relayUrl: 'http://localhost:4001' });
     expect(external.create).toHaveBeenCalledWith('giwa_attestation', { scope, action: expectedAction() }, expect.objectContaining({ dappName: 'Gotgan' }));
     expect(external.nonces).toHaveBeenCalledWith(GIWA_TEST_ACCOUNT, { blockTag: 321 });
     expect(external.depositScope).toHaveBeenCalledWith(GIWA_TEST_ACCOUNT, BigInt('10000000000'), { blockTag: 321 });

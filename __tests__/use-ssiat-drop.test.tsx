@@ -12,6 +12,7 @@ import { claimAction, SSIAT_TEST_DROP, SSIAT_TEST_NULLIFIER, SSIAT_TEST_RECIPIEN
 
 const external = vi.hoisted(() => ({
   dropAddress: '' as string,
+  sdkConfigs: [] as unknown[],
   signer: vi.fn(), create: vi.fn(), poll: vi.fn(), qr: vi.fn(), disconnect: vi.fn(),
   getBlockNumber: vi.fn(), destroy: vi.fn(), contracts: [] as string[],
   token: vi.fn(), claimAmount: vi.fn(), remaining: vi.fn(), totalClaims: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock('../lib/ssiat-drop', async importOriginal => {
 vi.mock('@zkproofport-app/sdk', async importOriginal => {
   const sdk = await importOriginal<typeof import('@zkproofport-app/sdk')>();
   return { ...sdk, ProofportSDK: class {
+    constructor(config: unknown) { external.sdkConfigs.push(config); }
     setSigner = external.signer;
     createRelayRequest = external.create;
     pollResult = external.poll;
@@ -172,6 +174,8 @@ describe('Ssiat claim orchestration', () => {
     }
     expect(external.claimActionHash).toHaveBeenCalledWith(SSIAT_TEST_RECIPIENT, { blockTag: 321 });
     expect(external.signer.mock.invocationCallOrder[0]).toBeLessThan(external.create.mock.invocationCallOrder[0]);
+    // The browser talks to the relay itself, never through a route on this demo's server.
+    expect(external.sdkConfigs.at(-1)).toEqual({ relayUrl: 'http://localhost:4001' });
     expect(external.create).toHaveBeenCalledWith('dojang_playground', { scope: SSIAT_TEST_SCOPE, action: claimAction() }, expect.objectContaining({ dappName: 'Ssiat' }));
     expect(external.claimed).toHaveBeenCalledWith(SSIAT_TEST_NULLIFIER);
     expect(external.verifyClaim).toHaveBeenCalledWith(SSIAT_TEST_RECIPIENT, '0x1234', expect.any(Array));

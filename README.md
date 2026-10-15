@@ -112,7 +112,6 @@ A DeFi-inspired use case demonstrating conditional proof requirements:
 | `/api/events` | GET | Server-Sent Events (SSE) endpoint for real-time proof delivery |
 | `/api/results/[requestId]` | GET | Retrieves stored proof result by request ID |
 | `/api/proxy/[...path]` | All | Proxies requests to backend API (`API_URL` environment variable) |
-| `/api/relay/[...path]` | All | Proxies requests to relay server (`RELAY_URL` environment variable) |
 | `/api/demo/config` | GET | Returns demo configuration (client ID, API key, dashboard URL) |
 
 ## Project Structure
@@ -226,9 +225,9 @@ NEXT_PUBLIC_RELAY_URL=https://relay.zkproofport.app
 RELAY_URL=https://relay.zkproofport.app
 ```
 
-Restart the development server after changing these variables. Other demos use
-`NEXT_PUBLIC_RELAY_URL`; Gotgan's same-origin server adapter uses `RELAY_URL`.
-Set both to the same relay. These are public URLs, not secrets. Without the
+Restart the development server after changing these variables. Every demo, Gotgan and Ssiat
+included, calls the relay from the browser through the SDK, as any dApp does;
+the relay allows every origin. Set both variables to the same relay. These are public URLs, not secrets. Without the
 overrides, local development uses port 4001 and requires a running local relay.
 
 Each dedicated tab creates a real relay request and receives a mobile-generated
@@ -239,7 +238,7 @@ read-only contract check or in-browser verification through the SDK. Neither
 option sends a transaction. Access is an in-memory example, not server-enforced
 authorization. The sample venues and unlocked content are fictional.
 
-Gotgan uses SDK 0.3.3 to bind a `Deposit` action to the connected operational account, asset, amount and nonce. Any browser-wallet account can connect; connect before generating a proof. The Vault automatically verifies the returned proof, with no separate verification buttons. Changing account or network invalidates the current proof. It pins the CIP-4 test issuer root, current GIWA Sepolia verifier and 192-input format, then preflights the deployed Vault. Unlike the content-only demos, its explicit approve/deposit/withdraw buttons send testnet token transactions. See [GIWA-VAULT-DEMO.md](GIWA-VAULT-DEMO.md). The server-side GIWA adapter requires `RELAY_URL`; staging must point to `https://stg-relay.zkproofport.app`.
+Gotgan uses SDK 0.3.3 to bind a `Deposit` action to the connected operational account, asset, amount and nonce. Any browser-wallet account can connect; connect before generating a proof. The Vault automatically verifies the returned proof, with no separate verification buttons. Changing account or network invalidates the current proof. It pins the CIP-4 test issuer root, current GIWA Sepolia verifier and 192-input format, then preflights the deployed Vault. Unlike the content-only demos, its explicit approve/deposit/withdraw buttons send testnet token transactions. See [GIWA-VAULT-DEMO.md](GIWA-VAULT-DEMO.md).
 
 
 Country proofs must match the entire inclusion/exclusion policy. Email proofs
@@ -525,7 +524,7 @@ This is part of the ZKProofport project. See parent repository for license terms
 Run `npm test`, `npm run typecheck`, `npm run build`, and the Foundry tests in `contracts`. After starting the parent Docker stack using `./scripts/dev.sh`, exercise the real HTTP request path:
 
 ```sh
-DEMO_URL=http://localhost:3300 RELAY_URL=http://localhost:4001 npm run test:e2e
+RELAY_URL=http://localhost:4001 npm run test:e2e
 ```
 
 For a deployed staging smoke test, use `DEMO_URL=https://stg-demo.zkproofport.app` and `RELAY_URL=https://stg-relay.zkproofport.app`. Both endpoints are required. These tests create real pending requests, check exact typed action delivery and poll the same relay; they do not fabricate mobile proofs or assert a completed deposit. Complete the wallet-driven recording sequence in GIWA-VAULT-DEMO.md before promoting production.

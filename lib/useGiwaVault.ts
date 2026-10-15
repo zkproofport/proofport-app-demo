@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BrowserProvider, Contract, JsonRpcProvider, TypedDataEncoder, Wallet, isAddress, toBeHex, type Eip1193Provider } from 'ethers';
+import { BrowserProvider, Contract, JsonRpcProvider, TypedDataEncoder, isAddress, toBeHex, type Eip1193Provider } from 'ethers';
 import { CIRCUIT_IDS, ProofportSDK, type RelayProofResult } from '@zkproofport-app/sdk';
 import { GIWA_CHAIN_ID, prepareGiwaMembershipProof } from './giwa-membership';
+import { createSDK } from './sdk';
 import { DEMO_PROOF_WAIT_MS, describeFailure, isPendingRelayStatus, settleRelayResult } from './relay-outcome';
 import { EXPLORER, GIWA_RPC, TOKEN_ABI, TOKEN_ADDRESS, VAULT_ABI, VAULT_ADDRESS, buildGiwaDepositAction, guardGiwaWalletProvider, parseVaultAmount, vaultErrorMessage, vaultErrorName, waitForVaultReceipt } from './giwa-vault';
 
@@ -135,10 +136,10 @@ export function useGiwaVault() {
         throw new Error('The configured Vault uses a different deposit action. Please reload the demo.');
       }
       if (current !== version.current) return;
-      client = new ProofportSDK({ relayUrl: `${window.location.origin}/api/giwa-relay` });
-      // This key authenticates only the relay request. The app's attested wallet
-      // signs the deposit action; the connected operational wallet moves dKRW.
-      client.setSigner(Wallet.createRandom());
+      // The browser calls the relay directly, as any dApp does. createSDK's random key
+      // authenticates only the relay request. The app's attested wallet signs the
+      // deposit action; the connected operational wallet moves dKRW.
+      client = createSDK();
       sdk.current = client;
       const pending = await timeout(client.createRelayRequest(CIRCUIT_IDS.GIWA_ATTESTATION, { scope, action }, {
         dappName: 'Gotgan', dappIcon: `${window.location.origin}/brand/gotgan-app-icon.png`,
@@ -149,8 +150,6 @@ export function useGiwaVault() {
       const image = await client.generateQRCode(pending.deepLink, { width: 1080 });
       if (current !== version.current) return;
       setQr(image); setDeepLink(pending.deepLink); setPhase('waiting');
-      // The same-origin relay adapter is HTTP-only. Poll through the SDK rather
-      // than opening a Socket.IO namespace against the Next.js server.
       let result: RelayProofResult | undefined;
       // Every status that is not pending ends the wait — error, cancelled and
       // expired included — and settleRelayResult refuses one it does not know.

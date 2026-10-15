@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BrowserProvider, Contract, JsonRpcProvider, TypedDataEncoder, Wallet, isAddress, type Eip1193Provider } from 'ethers';
+import { BrowserProvider, Contract, JsonRpcProvider, TypedDataEncoder, isAddress, type Eip1193Provider } from 'ethers';
 import { ProofportSDK, type RelayProofResult } from '@zkproofport-app/sdk';
 import { GIWA_CHAIN_ID } from './giwa-membership';
+import { createSDK } from './sdk';
 import { EXPLORER, GIWA_RPC, guardGiwaWalletProvider, waitForVaultReceipt } from './giwa-vault';
 import { DEMO_PROOF_WAIT_MS, describeFailure, isPendingRelayStatus, settleRelayResult } from './relay-outcome';
 import {
@@ -176,10 +177,10 @@ export function useSsiatDrop() {
         throw new Error('The configured drop contract is not the Ssiat drop this page expects. Please reload the demo.');
       }
       if (remaining < claimAmount) { setPhase('exhausted'); return; }
-      client = new ProofportSDK({ relayUrl: `${window.location.origin}/api/giwa-relay` });
-      // This key authenticates only the relay request. The phone's faucet wallet signs
+      // The browser calls the relay directly, as any dApp does. createSDK's random key
+      // authenticates only the relay request. The phone's faucet wallet signs
       // Claim(recipient); the connected recipient wallet sends the claim transaction.
-      client.setSigner(Wallet.createRandom());
+      client = createSDK();
       sdk.current = client;
       const pending = await timeout(client.createRelayRequest(SSIAT_CIRCUIT, { scope, action }, {
         dappName: 'Ssiat', dappIcon: `${window.location.origin}/brand/ssiat-app-icon.png`,
@@ -190,7 +191,6 @@ export function useSsiatDrop() {
       const image = await client.generateQRCode(pending.deepLink, { width: 1080 });
       if (current !== version.current) return;
       setQr(image); setDeepLink(pending.deepLink); setPhase('waiting');
-      // The same-origin relay adapter is HTTP-only, so poll through the SDK.
       // Every status that is not pending ends the wait; settleRelayResult refuses one it does not know.
       let result: RelayProofResult | undefined;
       const expires = Date.now() + DEMO_PROOF_WAIT_MS;

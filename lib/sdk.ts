@@ -1,5 +1,5 @@
 import { ProofportSDK } from '@zkproofport-app/sdk';
-import { ethers } from 'ethers';
+import { Wallet } from 'ethers';
 
 export function createSDK(): ProofportSDK {
   let sdk: ProofportSDK;
@@ -21,7 +21,7 @@ export function createSDK(): ProofportSDK {
   }
 
   // Ephemeral random wallet — only used for relay nonce replay prevention
-  sdk.setSigner(ethers.Wallet.createRandom());
+  sdk.setSigner(Wallet.createRandom());
   return sdk;
 }
 

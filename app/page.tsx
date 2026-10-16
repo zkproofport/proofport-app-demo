@@ -19,6 +19,7 @@ import { ethers } from 'ethers';
 import DemoTabs from './components/DemoTabs';
 import { APP_STORE_URL, GOOGLE_PLAY_URL } from '@/lib/app-stores';
 import { DEMO_PROOF_WAIT_MS, NO_RELAY_ANSWER_MESSAGE, isWaitTimeout, settleRelayResult } from '@/lib/relay-outcome';
+import { liveSectionScope } from '@/lib/demo-scopes';
 import { ZKPROOFPORT_SYMBOL } from '@/lib/brand';
 import ZKProofportWordmark from './components/ZKProofportWordmark';
 
@@ -524,7 +525,7 @@ const emptyDemoState: DemoState = {
 
     try {
       const sdk = getSDK();
-      const result = await sdk.createRelayRequest(CIRCUIT_IDS.COINBASE_ATTESTATION, { scope: 'zkproofport:demo' }, {
+      const result = await sdk.createRelayRequest(CIRCUIT_IDS.COINBASE_ATTESTATION, { scope: liveSectionScope(CIRCUIT_IDS.COINBASE_ATTESTATION) }, {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message: 'Prove your Coinbase KYC identity verification',
@@ -608,7 +609,7 @@ const emptyDemoState: DemoState = {
 
     try {
       const sdk = getSDK();
-      const result = await sdk.createRelayRequest(CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION, { countryList: countries, isIncluded }, {
+      const result = await sdk.createRelayRequest(CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION, { scope: liveSectionScope(CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION), countryList: countries, isIncluded }, {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message: 'Prove your Coinbase country of residence',
@@ -658,7 +659,7 @@ const emptyDemoState: DemoState = {
 
     try {
       const sdk = getSDK();
-      const inputs: Record<string, unknown> = { domain: emailDomain.trim().toLowerCase(), scope: 'zkproofport:demo' };
+      const inputs: Record<string, unknown> = { domain: emailDomain.trim().toLowerCase(), scope: liveSectionScope(CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION) };
       if (emailProvider) inputs.provider = emailProvider;
       const result = await sdk.createRelayRequest(CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION, inputs as any, {
         dappName: 'ZKProofport Demo',
@@ -701,7 +702,7 @@ const emptyDemoState: DemoState = {
     let inputs: MdlKrOwnershipInputs | MdlKrAgeInputs | MdlKrRegionInputs;
     let message: string;
     if (mdlVariant === 'ownership') {
-      inputs = { scope: 'zkproofport:demo', discloseFlags: 0 }; // anonymous ownership proof
+      inputs = { scope: liveSectionScope(circuit), discloseFlags: 0 }; // anonymous ownership proof
       message = 'Prove Korean mobile ID ownership';
     } else if (mdlVariant === 'age') {
       const ageThreshold = Number(mdlAgeThreshold);
@@ -714,7 +715,7 @@ const emptyDemoState: DemoState = {
         setMdlState((prev) => ({ ...prev, showResult: false, qrHtml: '', deepLink: '' }));
         return;
       }
-      inputs = { scope: 'zkproofport:demo', ageThreshold };
+      inputs = { scope: liveSectionScope(circuit), ageThreshold };
       message = `Prove you are ${ageThreshold}+ years old`;
     } else {
       const targetRegion = mdlTargetRegion.trim();
@@ -727,7 +728,7 @@ const emptyDemoState: DemoState = {
         setMdlState((prev) => ({ ...prev, showResult: false, qrHtml: '', deepLink: '' }));
         return;
       }
-      inputs = { scope: 'zkproofport:demo', targetRegion };
+      inputs = { scope: liveSectionScope(circuit), targetRegion };
       message = `Prove residency in ${targetRegion}`;
     }
 
@@ -814,7 +815,7 @@ const emptyDemoState: DemoState = {
 
     try {
       const sdk = getSDK();
-      const result = await sdk.createRelayRequest(CIRCUIT_IDS.GIWA_ATTESTATION, { scope: 'zkproofport:demo' }, {
+      const result = await sdk.createRelayRequest(CIRCUIT_IDS.GIWA_ATTESTATION, { scope: liveSectionScope(CIRCUIT_IDS.GIWA_ATTESTATION) }, {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message: 'Prove your GIWA account verification',

@@ -11,12 +11,17 @@
  * on its own:
  *
  *   RELAY_URL=http://localhost:4001 npm run test:e2e
+ *
+ * It sends one request per demo (eight), and the relay takes ten per minute
+ * from one address (proofport-relay/src/app.ts), so a second run inside the
+ * same minute is answered "Too many requests". Wait a minute between runs.
  */
 import { describe, it, expect } from 'vitest';
 import { ProofportSDK } from '@zkproofport-app/sdk';
 import { ethers } from 'ethers';
 import { DEMOS } from '../lib/demo-catalog';
 import { DEFAULT_OPTIONS, buildDemoInputs } from '../lib/demo-policy';
+import { cardScope } from '../lib/demo-scopes';
 
 const relayUrl = process.env.RELAY_URL;
 if (!relayUrl) throw new Error('RELAY_URL is required — there is no default, because a silent one would check the wrong relay.');
@@ -24,7 +29,7 @@ if (!relayUrl) throw new Error('RELAY_URL is required — there is no default, b
 describe(`the relay takes a request from every demo`, () => {
   for (const demo of DEMOS) {
     it(`${demo.tab} — ${demo.circuit}`, async () => {
-      const scope = `${demo.brand.toLowerCase()}:${demo.id}:${ethers.hexlify(ethers.randomBytes(16))}`;
+      const scope = cardScope(demo.id);
       const sdk = new ProofportSDK({ relayUrl });
       // Ephemeral, like the browser's: the relay only uses it to stop a replayed request.
       sdk.setSigner(ethers.Wallet.createRandom());
@@ -44,6 +49,10 @@ describe(`the relay takes a request from every demo`, () => {
         expect(payload, 'the deep link carries no payload').toBeTruthy();
         const carried = JSON.parse(Buffer.from(payload!, 'base64').toString('utf8'));
         expect(carried.circuitId).toBe(demo.circuit);
+        // The demo's own scope, inside the inputs the phone proves and on the
+        // envelope the relay counts per scope.
+        expect(carried.inputs.scope).toBe(scope);
+        expect(carried.scope).toBe(scope);
       } finally {
         sdk.disconnect();
       }

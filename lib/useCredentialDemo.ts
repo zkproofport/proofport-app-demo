@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { hexlify, randomBytes } from 'ethers';
 import type { ProofResponse, ProofportSDK } from '@zkproofport-app/sdk';
 import { createSDK } from './sdk';
 import type { DemoDefinition } from './demo-catalog';
 import { buildDemoInputs, prepareDemoProof, type DemoOptions } from './demo-policy';
+import { cardScope } from './demo-scopes';
 import { DEMO_PROOF_WAIT_MS, NO_RELAY_ANSWER_MESSAGE, isWaitTimeout, settleRelayResult } from './relay-outcome';
 
 /**
@@ -54,7 +54,7 @@ export function useCredentialDemo(demo: DemoDefinition) {
     setPhase('requesting'); setError(''); setErrorCode(''); setNotice(''); setProof(null); setQrCode(''); setDeepLink('');
     let sdk: ProofportSDK | undefined;
     try {
-      const scope = `${demo.brand.toLowerCase()}:${demo.id}:${hexlify(randomBytes(16))}`;
+      const scope = cardScope(demo.id);
       const snapshot = { ...options };
       const inputs = buildDemoInputs(demo, snapshot, scope);
       sdkRef.current?.disconnect();

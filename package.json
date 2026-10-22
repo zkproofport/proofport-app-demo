@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "vitest run --config vitest.config.e2e.mts",
+    "test:e2e:ssiat-claim": "vitest run --config vitest.config.ssiat-claim.mts",
     "sdk:local": "npm install --no-save ../proofport-app-sdk && node -e \"console.log('Using LOCAL SDK build (node_modules only; package.json untouched)')\"",
     "sdk:npm": "npm ci && node -e \"console.log('Restored npm-published SDK from lockfile')\""
   },

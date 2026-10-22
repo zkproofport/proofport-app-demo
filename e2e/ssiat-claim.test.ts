@@ -15,7 +15,9 @@
  *   SSIAT_E2E_EXPECT=claimed|already-claimed
  *   DEMO_URL=https://stg-demo.zkproofport.app
  *   SSIAT_E2E_SIMULATOR=<udid>      optional
- *   npm run test:e2e -- e2e/ssiat-claim.test.ts
+ *   npm run test:e2e:ssiat-claim
+ *
+ * Not part of `npm run test:e2e`, which would fail without these variables.
  *
  * One claim per faucet wallet per drop: the first run with a faucet wallet
  * expects `claimed`, every later run with it `already-claimed`.

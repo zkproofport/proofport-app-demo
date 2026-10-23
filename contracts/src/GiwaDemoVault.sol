@@ -17,7 +17,7 @@ interface IGiwaVaultAsset {
 ///      This does not verify production Upbit KYC, live EAS status or revocation.
 contract GiwaDemoVault {
     uint256 public constant CHAIN_ID = 91342;
-    address public constant VERIFIER = 0x5Da234546874304F8c51BBEed00fC632938211c1;
+    address public constant VERIFIER = 0xF6Edb9d6114B2546B6E559997fdDE08CAeEA83b3;
     address public constant TEST_ATTESTER = 0xEE099845CDfF93e73aDcBcB36A9B93578bcCed4b;
     uint256 public constant PUBLIC_INPUT_COUNT = 192;
     bytes32 private constant DOMAIN_TYPEHASH =

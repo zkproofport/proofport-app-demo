@@ -1,6 +1,10 @@
 # GIWA Sepolia Gotgan Vault v2
 
-Deployed on 2026-09-23 KST to `0x0036B61dBFaB8f3CfEEF77dD5D45F7EFBFE2035c` (chain 91342). Transaction: `0xcac293988fbc00d30082db58beec4c1fdb396c1b5811c769364bd1d359cca0da`, status 1. Source: `fe56978`. RPC readback confirmed the existing dKRW asset, new verifier and 192 public inputs.
+Current deployment, 2026-10-23 KST: `0x79e327731172EA4b522dD1c7Df6e61d1D3fB2620` (chain 91342), transaction `0xadb6093ebecd473bd9154f01e4c6e20cded2aacf045abe4ff1e6fad9a30df3c3`, status 1, block 39402056, deployer `0x5A3E649208Ae15ec52496c1Ae23b2Ff89Ac02f0c`. Same contract as before with one change: `VERIFIER` is the beta.19 GIWA verifier. RPC readback: `VERIFIER()` `0xF6Edb9d6114B2546B6E559997fdDE08CAeEA83b3`, `PUBLIC_INPUT_COUNT()` 192, `asset()` the existing dKRW, `trustedSignerRoot()` the root below, `totalDeposits()` 0, `domainSeparator()` `0xd24805db0be0617dba4a0c082bf61eb6321637a370169dd3b6c8466faba9920d` (equal to ethers `TypedDataEncoder.hashDomain` for `Gotgan` / `2` / 91342 / this address).
+
+**Why it was redeployed.** `VERIFIER` is a compile-time constant. The vault deployed on 2026-09-23 at `0x0036B61dBFaB8f3CfEEF77dD5D45F7EFBFE2035c` (transaction `0xcac293988fbc00d30082db58beec4c1fdb396c1b5811c769364bd1d359cca0da`) points at `0x5Da234546874304F8c51BBEed00fC632938211c1`, the GIWA verifier built with the old toolchain, so it refuses every proof the beta.19 app produces. That vault is **retired** but unchanged: deposits in it stay withdrawable through its own `withdraw(uint256)`, exactly like v1 below.
+
+Proof check at deployment, by `eth_call`: the circuits fixture proof for `giwa_attestation` (9,920 bytes, 192 public inputs) returns `true` from the new vault's verifier, and the same proof with one public input changed reverts. `verifyEligibility` on the new vault refuses that fixture with `WrongDepositDomain()`, as it must: the fixture is bound to a test domain, not to this vault. A proof bound to this vault comes from the phone flow below.
 
 This test ERC-20 vault checks both a GIWA KYC proof and an EIP-712 `Deposit` authorization. The KYC wallet signs the deposit action; the operational wallet sends the token approval, deposit, and withdrawal transactions. The vault provides custody only, with no yield, share token, or administrator withdrawal.
 
@@ -9,11 +13,13 @@ This test ERC-20 vault checks both a GIWA KYC proof and an EIP-712 `Deposit` aut
 | Setting | Value |
 | --- | --- |
 | Network | GIWA Sepolia, chain ID `91342` |
-| Current GIWA verifier | `0x5Da234546874304F8c51BBEed00fC632938211c1` |
+| Current GIWA verifier (beta.19) | `0xF6Edb9d6114B2546B6E559997fdDE08CAeEA83b3` (`circuits/deployments/91342/GiwaAttestation.json`) |
+| Retired GIWA verifier (old toolchain) | `0x5Da234546874304F8c51BBEed00fC632938211c1` |
 | Test issuer EOA | `0xEE099845CDfF93e73aDcBcB36A9B93578bcCed4b` |
 | Trusted signer root | `0xad0e6d81c16211cd9d5d1580bbcea34f90a7dbf861530724a28bcba585360b92` |
 | Existing dKRW asset | `0x417573024528f3c9daD782eF5316E992F3029e81` (6 decimals) |
 | Original v1 vault | `0x18F72bF293E96117AF2641F304B5F1f274864EC8` |
+| Retired v2 vault (old verifier) | `0x0036B61dBFaB8f3CfEEF77dD5D45F7EFBFE2035c` |
 
 **Deploy v2 at a new address.** The v1 vault cannot be upgraded: its verifier and 128-input layout are immutable. Deploying v2 does not change or transfer v1 balances, allowances, or withdrawal rights. A depositor can withdraw an existing v1 balance by connecting the original operational wallet to the [v1 contract explorer](https://sepolia-explorer.giwa.io/address/0x18F72bF293E96117AF2641F304B5F1f274864EC8?tab=contract) and calling `withdraw(amount)` on that address. The amount is in token base units and transaction ETH value is zero. The GIWA screen keeps its existing layout; there is no migration or legacy-vault selector. New v2 deposits need an allowance for the new address and a new proof.
 
@@ -63,7 +69,7 @@ const message = {
 | 128–159 | Scope | `keccak256(UTF8(depositScope result))` |
 | 160–191 | Nullifier | Included in cryptographic verification |
 
-Supply **192 bytes32 values, each containing one byte left-padded with zeros**. Do not combine them into six hashes or send the old 128-input layout. Use the 16,256-byte onchain proof already separated by the app, without prepending public inputs. The verifier's `verify(bytes,bytes32[])` may return false or revert; the vault converts both outcomes to `InvalidProof()`.
+Supply **192 bytes32 values, each containing one byte left-padded with zeros**. Do not combine them into six hashes or send the old 128-input layout. Use the onchain proof already separated by the app (9,920 bytes with the beta.19 toolchain; it was 16,256 with the old one), without prepending public inputs. The verifier's `verify(bytes,bytes32[])` may return false or revert; the vault converts both outcomes to `InvalidProof()`.
 
 Each successful deposit increments the account nonce, preventing proof replay. A reverted deposit rolls back its nonce and balances. `verifyEligibility` is read-only and does not consume a nonce. Withdrawals need no new proof. The vault does not use nullifiers as permanent person identifiers or enforce one operational wallet per person.
 
@@ -73,16 +79,16 @@ Each successful deposit increments the account nonce, preventing proof replay. A
 - `src/DemoKRW.sol`: optional freely mintable test token. **It is not real KRW.** Reuse the existing asset when appropriate.
 - `script/DeployGiwaDemoVault.s.sol`: deploys a new vault using an explicitly configured asset and checks the resulting configuration. The constructor rejects the wrong chain and missing asset/verifier bytecode.
 
-Complete the repository's integration and deployment requirements before broadcasting. From `proofport-app-demo/contracts`, the following command **simulates only** and sends no chain transaction:
+Complete the repository's integration and deployment requirements before broadcasting. The script reads the deployer key with `vm.envUint("PRIVATE_KEY")`; export it from the env file in the same shell so it never appears on a command line (where `ps` would show it) and never type it. From `proofport-app-demo/contracts`, the following command **simulates only** and sends no chain transaction:
 
 ```sh
-GIWA_VAULT_ASSET=0x417573024528f3c9daD782eF5316E992F3029e81 \
-  forge script script/DeployGiwaDemoVault.s.sol:DeployGiwaDemoVault \
-  --rpc-url https://sepolia-rpc.giwa.io \
-  --sender <deployer-address>
+set -a; source ../../circuits/.env.development; set +a
+export GIWA_VAULT_ASSET=0x417573024528f3c9daD782eF5316E992F3029e81
+forge script script/DeployGiwaDemoVault.s.sol:DeployGiwaDemoVault \
+  --rpc-url https://sepolia-rpc.giwa.io
 ```
 
-For an authorized deployment, select a Foundry keystore with `--account <keystore-name>` and add `--broadcast`. Never put a private key in source, shell history, or documentation. `broadcast/` contains generated files and is excluded from Git. Record the actual deployed address and transaction hash, update the frontend configuration, and confirm `asset()`, `VERIFIER()`, `PUBLIC_INPUT_COUNT()`, and `domainSeparator()` through RPC. A simulated address is not a deployed contract, and the original vault address cannot serve as v2.
+For an authorized deployment, add `--broadcast`. Never put a private key in source, on a command line, in shell history, or in documentation, and do not list processes while a deploy runs. GIWA Sepolia's RPC lags between nodes: a simulation can fail with "failed to get block" or report a contract as missing (`ContractNotDeployed` for the dKRW asset, which does exist). Retry, but first check the deployer's nonce has not moved, so a retry can never send a second deployment. `broadcast/` contains generated files and is excluded from Git. Record the actual deployed address and transaction hash, update the frontend configuration, and confirm `asset()`, `VERIFIER()`, `PUBLIC_INPUT_COUNT()`, and `domainSeparator()` through RPC. A simulated address is not a deployed contract, and the original vault address cannot serve as v2.
 
 Remix may also compile the same source with the settings above and deploy with the token address as `assetAddress`. Transaction **ETH value is zero**; gas uses GIWA Sepolia test ETH.
 
@@ -104,7 +110,7 @@ forge test -vv
 forge fmt --check
 ```
 
-Foundry tests use a verifier double to exercise action, scope, issuer, replay, custody, token-failure rollback, and reentrancy policies. Fixed EIP-712 domain and struct-hash vectors are generated independently with ethers v6. The double does not generate or cryptographically verify proofs. A real mobile proof and wallet deposit/withdrawal remain part of the manual integration checks above.
+Foundry tests use a verifier double etched at the verifier address, so a source still naming a retired verifier fails every test. `__tests__/verifier-deployments.test.ts` in the demo also checks that both contracts' `VERIFIER` and `PUBLIC_INPUT_COUNT` match the demo's verifier table, which is pinned to the circuits records. The tests use the double to exercise action, scope, issuer, replay, custody, token-failure rollback, and reentrancy policies. Fixed EIP-712 domain and struct-hash vectors are generated independently with ethers v6. The double does not generate or cryptographically verify proofs. A real mobile proof and wallet deposit/withdrawal remain part of the manual integration checks above.
 
 The circuit checks a signed attestation transaction from the test `MockGiwaAttester` and the KYC wallet's signature. **This is not production Upbit KYC or production Dojang integration.** It does not prove chain inclusion, successful transaction execution, or current EAS expiry/revocation status. The KYC address is not a separate public argument, but the operational wallet, amount, nonce, and proof public inputs are public; this does not establish complete anonymity.
 
@@ -112,16 +118,29 @@ Only standard test ERC-20 assets are supported. Fee-on-transfer deposits are rej
 
 # Ssiat seed drop (GIWA Sepolia)
 
-Deployed on 2026-10-14 KST to `0x3e10c391d5068DCc216dfA3A7ae2e27830204eBd`
-(chain 91342), token `SEED` at `0x0165d1C1ad2c654D5e1c3B0Bf36568C89DB27aDf`.
-Transaction `0x75987d2e3c4af1a4474d47713be36e070870009f3c3ea6ab089cfd65b9cfb785`,
-status 1, block 38636909. Deployer `0x5A3E649208Ae15ec52496c1Ae23b2Ff89Ac02f0c`
-(the wallet that deployed the Dojang verifier; key from `circuits/.env.development`,
-passed as `--private-key "$PRIVATE_KEY"` from the sourced file, never typed).
-RPC readback: `VERIFIER()` is the Dojang verifier, `remaining()` 1,000,000 SEED,
-`CLAIM_AMOUNT()` 100 SEED, `claimScope()`
-`ssiat-drop:v1:1a79a3d73bcc0c6354b075a1f1fc9dab0fa3d7f925a46de6d7f1deb6940ff8f1`,
-which `__tests__/ssiat-drop.test.ts` pins against `expectedSsiatScope`.
+Current deployment, 2026-10-23 KST: drop `0xA7D93C4699e86AF9f60EcBe1A1D90297fcc57dFf`
+(chain 91342), token `SEED` at `0x13269694b0c3f5f7C23A2009Da3a2503De724a77`.
+Transaction `0x1da1c8df60047f79d3a008c173372ff6b1a68ec8385ae58badaaa2edf3e24ed4`,
+status 1, block 39402079. Deployer `0x5A3E649208Ae15ec52496c1Ae23b2Ff89Ac02f0c`
+(key from `circuits/.env.development`, exported by the shell and read by the
+script with `vm.envUint`; never on a command line). RPC readback: `VERIFIER()`
+`0xAD6C9bFA60F3ee618dee9DC2027a69C57f2aD816` (beta.19 Dojang verifier),
+`PUBLIC_INPUT_COUNT()` 160, `remaining()` 1,000,000 SEED, `totalClaims()` 0,
+`CLAIM_AMOUNT()` 100 SEED, token `SEED` / 18 decimals with the whole supply in
+the drop, `domainSeparator()`
+`0xc16bdd5d09b9e483d7a5157f10c0b9a7da8076ff17e7291ba506d2a1408cd732`, `claimScope()`
+`ssiat-drop:v1:2ed6472da94b57988b11e3d8239f5bef6bf31be1ef984cf4c9adac300479eacf`,
+which `__tests__/ssiat-drop.test.ts` pins against `expectedSsiatScope`. The
+circuits fixture proof for `dojang_playground` (9,536 bytes, 160 public inputs)
+returns `true` from that verifier by `eth_call`; one changed public input reverts.
+
+**Retired:** the drop deployed on 2026-10-14 at `0x3e10c391d5068DCc216dfA3A7ae2e27830204eBd`
+(token `0x0165d1C1ad2c654D5e1c3B0Bf36568C89DB27aDf`, transaction
+`0x75987d2e3c4af1a4474d47713be36e070870009f3c3ea6ab089cfd65b9cfb785`) has the
+old-toolchain Dojang verifier `0x2d01C2fE3445B7DDE60118f956BB14E84Fd64724` compiled
+in and refuses every beta.19 proof. It is left as it is; its SEED is valueless.
+Its nullifiers do not carry over: the scope includes the drop address, so a
+faucet wallet that claimed there can claim once from the new drop.
 
 Ssiat (씨앗, "seed") is a fictional brand. `SsiatDrop` pays a fixed amount of
 `SEED`, a valueless test token, once per GIWA Playground faucet wallet. It is
@@ -130,7 +149,7 @@ not a GIWA, Upbit or Dojang airdrop.
 | Setting | Value |
 | --- | --- |
 | Network | GIWA Sepolia, chain ID `91342` |
-| Verifier (`dojang_playground`) | `0x2d01C2fE3445B7DDE60118f956BB14E84Fd64724` (`circuits/deployments/91342/DojangPlayground.json`) |
+| Verifier (`dojang_playground`, beta.19) | `0xAD6C9bFA60F3ee618dee9DC2027a69C57f2aD816` (`circuits/deployments/91342/DojangPlayground.json`) |
 | Playground faucet the circuit requires | `0x63CCe2b569A7bC35895ee24306c1512fefc06121`, `payAndIssueEAS()` |
 | Public inputs | 160, one byte per field: signal 0–31, domain 32–63, action 64–95, scope 96–127, nullifier 128–159 |
 | Claim amount / supply (deploy script) | 100 SEED / 1,000,000 SEED (10,000 claims) |
@@ -166,26 +185,20 @@ appears on chain; only its per-drop nullifier does.
 ## Deploying (operator only)
 
 From `proofport-app-demo/contracts`, with Foundry 1.4.3 (`forge --version`).
-The script takes no environment variables. This **simulates only**:
+The script reads the deployer key with `vm.envUint("PRIVATE_KEY")`, exported
+from the env file in the same shell. This **simulates only**:
 
 ```sh
+set -a; source ../../circuits/.env.development; set +a
 forge script script/DeploySsiatDrop.s.sol:DeploySsiatDrop \
-  --rpc-url https://sepolia-rpc.giwa.io \
-  --sender <deployer-address>
+  --rpc-url https://sepolia-rpc.giwa.io
 ```
 
-For the authorized deployment, sign with a Foundry keystore and add `--broadcast`:
-
-```sh
-forge script script/DeploySsiatDrop.s.sol:DeploySsiatDrop \
-  --rpc-url https://sepolia-rpc.giwa.io \
-  --account <keystore-name> --sender <deployer-address> \
-  --broadcast
-```
+For the authorized deployment, add `--broadcast` to the same command.
 
 The deployer needs GIWA Sepolia test ETH and nothing else; the transaction
-value is zero. Never put a private key in a file, in this README or in shell
-history. The script asserts the verifier, the 160-input layout, the claim
+value is zero. Never put a private key in a file, in this README, on a command
+line or in shell history. GIWA Sepolia RPC lag: see the vault section above. The script asserts the verifier, the 160-input layout, the claim
 amount, the token supply landing in the drop and the token metadata, and emits
 `SsiatDropDeployed(drop, token, scope, domainSeparator)`.
 

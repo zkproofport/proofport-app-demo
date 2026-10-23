@@ -21,7 +21,7 @@ interface IDojangPlaygroundVerifier {
 ///      The faucet wallet itself never appears on chain; only its per-drop nullifier does.
 contract SsiatDrop {
     uint256 public constant CHAIN_ID = 91342;
-    address public constant VERIFIER = 0x2d01C2fE3445B7DDE60118f956BB14E84Fd64724;
+    address public constant VERIFIER = 0xAD6C9bFA60F3ee618dee9DC2027a69C57f2aD816;
     uint256 public constant PUBLIC_INPUT_COUNT = 160;
     bytes32 private constant DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");

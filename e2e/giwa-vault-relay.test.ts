@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { CIRCUIT_IDS, ProofportSDK } from '@zkproofport-app/sdk';
 import { AbiCoder, Contract, hexlify, JsonRpcProvider, keccak256, randomBytes, TypedDataEncoder, Wallet } from 'ethers';
 import { buildGiwaDepositAction, GIWA_RPC, TOKEN_ADDRESS, VAULT_ABI, VAULT_ADDRESS, vaultErrorName } from '../lib/giwa-vault';
+import { verifierAddress } from '../lib/verifier-deployments';
 
 const relayUrl = process.env.RELAY_URL;
 if (!relayUrl) throw new Error('RELAY_URL is required: the relay the request is created on.');
@@ -105,8 +106,8 @@ describe('the deployed GIWA vault agrees with the SDK deposit action', () => {
       ]);
       expect(code).not.toBe('0x');
       expect(asset.toLowerCase()).toBe(TOKEN_ADDRESS.toLowerCase());
-      // The deployed vault's immutable VERIFIER predates the beta.19 verifier; it is not the demo's proof allowlist.
-      expect(verifier.toLowerCase()).toBe('0x5da234546874304f8c51bbeed00fc632938211c1');
+      // The vault's immutable VERIFIER must be the one the demo's proof allowlist names.
+      expect(verifier.toLowerCase()).toBe(verifierAddress(CIRCUIT_IDS.GIWA_ATTESTATION, 91342));
       const action = buildGiwaDepositAction(account, amount, nonce);
       expect(TypedDataEncoder.hashDomain(action.domain)).toBe(domainHash);
       expect(TypedDataEncoder.hashStruct(action.primaryType, action.types, action.message)).toBe(actionHash);

@@ -6,11 +6,11 @@ Start the parent workspace with `./scripts/dev.sh`, then open `http://localhost:
 
 - Operational wallet A: any connected Ethereum account on GIWA Sepolia
 - dKRW (6 decimals): `0x417573024528f3c9daD782eF5316E992F3029e81`
-- Vault v2: `0x0036B61dBFaB8f3CfEEF77dD5D45F7EFBFE2035c`
-- Verifier: `0x5Da234546874304F8c51BBEed00fC632938211c1`
+- Vault v2: `0x79e327731172EA4b522dD1c7Df6e61d1D3fB2620`
+- Verifier (beta.19): `0xF6Edb9d6114B2546B6E559997fdDE08CAeEA83b3`
 - GIWA Sepolia chain ID: `91342`
 
-Vault v2 was deployed in transaction `0xcac293988fbc00d30082db58beec4c1fdb396c1b5811c769364bd1d359cca0da` on 2026-09-23 KST. The old v1 vault `0x18F72bF293E96117AF2641F304B5F1f274864EC8` remains unchanged: its owner can withdraw existing demo deposits by calling its `withdraw(uint256)` through the GIWA explorer or contract tooling. The new screen uses v2; it does not migrate balances or allowances.
+The current vault was deployed in transaction `0xadb6093ebecd473bd9154f01e4c6e20cded2aacf045abe4ff1e6fad9a30df3c3` on 2026-10-23 KST, against the beta.19 GIWA verifier. The vault deployed on 2026-09-23 at `0x0036B61dBFaB8f3CfEEF77dD5D45F7EFBFE2035c` (transaction `0xcac293988fbc00d30082db58beec4c1fdb396c1b5811c769364bd1d359cca0da`) is retired: its verifier `0x5Da234546874304F8c51BBEed00fC632938211c1` is compiled in and refuses beta.19 proofs. Deposits in it stay withdrawable through its own `withdraw(uint256)`. The old v1 vault `0x18F72bF293E96117AF2641F304B5F1f274864EC8` remains unchanged: its owner can withdraw existing demo deposits by calling its `withdraw(uint256)` through the GIWA explorer or contract tooling. The new screen uses v2; it does not migrate balances or allowances.
 
 ## Recording sequence
 

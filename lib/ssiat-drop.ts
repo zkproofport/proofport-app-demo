@@ -12,11 +12,11 @@ import { verifierAddress } from './verifier-deployments';
  */
 
 /**
- * The deployed SsiatDrop on GIWA Sepolia (2026-10-14, see contracts/README.md).
+ * The deployed SsiatDrop on GIWA Sepolia (2026-10-23, beta.19 verifier; see contracts/README.md).
  * `ssiatDropAddress()` refuses an empty or malformed value, so the tab can never
  * read from or send to a placeholder.
  */
-export const SSIAT_DROP_ADDRESS: string = '0x3e10c391d5068DCc216dfA3A7ae2e27830204eBd';
+export const SSIAT_DROP_ADDRESS: string = '0xA7D93C4699e86AF9f60EcBe1A1D90297fcc57dFf';
 
 /** `dojang_playground` verifier: circuits/deployments/91342/DojangPlayground.json. */
 export const SSIAT_VERIFIER = verifierAddress(CIRCUIT_IDS.DOJANG_PLAYGROUND, GIWA_CHAIN_ID);

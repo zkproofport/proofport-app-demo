@@ -57,7 +57,7 @@ contract AdversarialAsset {
 
 contract GiwaDemoVaultTest {
     Vm constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-    address constant VERIFIER = 0x5Da234546874304F8c51BBEed00fC632938211c1;
+    address constant VERIFIER = 0xF6Edb9d6114B2546B6E559997fdDE08CAeEA83b3;
     address constant ALICE = address(0xA11CE);
     address constant BOB = address(0xB0B);
     uint256 constant AMOUNT = 10_000_000; // 10 dKRW

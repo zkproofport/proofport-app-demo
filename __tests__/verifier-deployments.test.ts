@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { DEMO_VERIFIERS } from '../lib/demo-policy';
-import { GIWA_VERIFIER } from '../lib/giwa-membership';
-import { SSIAT_VERIFIER } from '../lib/ssiat-drop';
+import { GIWA_PUBLIC_INPUT_COUNT, GIWA_VERIFIER } from '../lib/giwa-membership';
+import { SSIAT_PUBLIC_INPUT_COUNT, SSIAT_VERIFIER } from '../lib/ssiat-drop';
 import { VERIFIER_DEPLOYMENTS, verifierAddress } from '../lib/verifier-deployments';
 
 // The circuits repository is a sibling checkout. Its records are read from
@@ -46,6 +47,24 @@ describe('verifier table', () => {
     'throws for an unknown key %s/%s', (circuit, chain, message) => {
       expect(() => verifierAddress(circuit, chain)).toThrow(message);
     });
+});
+
+// The vault and the drop hold their verifier as an immutable constant. A contract
+// compiled against a retired verifier deploys fine and then refuses every new proof,
+// so the source must name the same verifier and layout the demo checks proofs against.
+function solidityConstant(file: string, name: string): string {
+  const match = readFileSync(`contracts/src/${file}`, 'utf8').match(new RegExp(`\\b${name}\\s*=\\s*(\\w+);`));
+  if (!match) throw new Error(`${name} not found in contracts/src/${file}.`);
+  return match[1];
+}
+describe('demo contracts are built against the table', () => {
+  it.each([
+    ['GiwaDemoVault.sol', 'giwa_attestation', GIWA_PUBLIC_INPUT_COUNT],
+    ['SsiatDrop.sol', 'dojang_playground', SSIAT_PUBLIC_INPUT_COUNT],
+  ] as const)('%s uses the %s verifier and its public-input count', (file, circuit, count) => {
+    expect(solidityConstant(file, 'VERIFIER').toLowerCase()).toBe(verifierAddress(circuit, 91342));
+    expect(Number(solidityConstant(file, 'PUBLIC_INPUT_COUNT'))).toBe(count);
+  });
 });
 
 // Visible skip, not a silent pass, when the circuits checkout is absent.

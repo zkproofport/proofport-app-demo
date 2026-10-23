@@ -59,7 +59,7 @@ contract AdversarialSeed {
 
 contract SsiatDropTest {
     Vm constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-    address constant VERIFIER = 0x2d01C2fE3445B7DDE60118f956BB14E84Fd64724;
+    address constant VERIFIER = 0xAD6C9bFA60F3ee618dee9DC2027a69C57f2aD816;
     address constant ALICE = address(0xA11CE);
     address constant BOB = address(0xB0B);
     bytes32 constant FAUCET_WALLET_1 = keccak256("faucet wallet 1 nullifier");

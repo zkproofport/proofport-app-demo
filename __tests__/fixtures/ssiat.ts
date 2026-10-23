@@ -3,7 +3,7 @@ import { keccak256, toUtf8Bytes, TypedDataEncoder } from 'ethers';
 
 export const SSIAT_TEST_DROP = '0x1111111111111111111111111111111111111111';
 export const SSIAT_TEST_RECIPIENT = '0x00000000000000000000000000000000000A11CE';
-export const SSIAT_TEST_VERIFIER = '0x2d01c2fe3445b7dde60118f956bb14e84fd64724';
+export const SSIAT_TEST_VERIFIER = '0xad6c9bfa60f3ee618dee9dc2027a69c57f2ad816';
 export const SSIAT_TEST_NULLIFIER = '0x' + 'ab'.repeat(32);
 const ZERO_WORD = '0x' + '00'.repeat(32);
 export const byteFields = (hex: string) => hex.slice(2).match(/../g)!.map(byte => `0x${byte.padStart(64, '0')}`);

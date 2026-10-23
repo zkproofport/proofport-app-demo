@@ -1,10 +1,11 @@
 import { CIRCUIT_IDS, validateTypedAction, type TypedAction, type ProofResponse, type RelayProofResult } from '@zkproofport-app/sdk';
 import { keccak256, toUtf8Bytes, TypedDataEncoder, ZeroHash } from 'ethers';
+import { verifierAddress } from './verifier-deployments';
 
 // CIP-4 PoC profile. Keep these aligned with the mobile app's giwaKyc.ts
 // and circuits/giwa-attestation. The response never chooses our trust anchor.
 export const GIWA_CHAIN_ID = 91342;
-export const GIWA_VERIFIER = '0x5da234546874304f8c51bbeed00fc632938211c1';
+export const GIWA_VERIFIER = verifierAddress(CIRCUIT_IDS.GIWA_ATTESTATION, GIWA_CHAIN_ID);
 export const GIWA_PUBLIC_INPUT_COUNT = 192;
 export const GIWA_SIGNER_ROOT = keccak256('0xEE099845CDfF93e73aDcBcB36A9B93578bcCed4b');
 export const GIWA_EXPLORER = `https://sepolia-explorer.giwa.io/address/${GIWA_VERIFIER}`;

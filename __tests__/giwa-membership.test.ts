@@ -15,7 +15,7 @@ describe('GIWA membership proof policy', () => {
 
   it('accepts the pinned verifier regardless of address casing', () => {
     const result = giwaResult(scope);
-    result.verifierAddress = '0x5Da234546874304F8c51BBEed00fC632938211c1';
+    result.verifierAddress = '0xF6Edb9d6114B2546B6E559997fdDE08CAeEA83b3';
     expect(prepareGiwaMembershipProof(result, requestId, scope).verifierAddress).toBe(GIWA_TEST_VERIFIER);
   });
 
@@ -24,6 +24,7 @@ describe('GIWA membership proof policy', () => {
     { circuit: CIRCUIT_IDS.COINBASE_ATTESTATION }, { chainId: 8453 }, { chainId: undefined },
     { verifierAddress: '0x' + '12'.repeat(20) }, { verifierAddress: undefined },
     { verifierAddress: '0xeb9eb5452790cfe549ff83ceb3dbe1c432231492' },
+    { verifierAddress: '0x5da234546874304f8c51bbeed00fc632938211c1' },
     { proof: '' }, { proof: '0xxyz' }, { proof: '0x1' }, { proof: '0x' },
     { publicInputs: null }, { publicInputs: undefined }, { publicInputs: [] },
   ])('rejects an unrelated, incomplete or malformed response: %j', patch => {

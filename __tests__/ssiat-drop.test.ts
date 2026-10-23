@@ -122,7 +122,7 @@ describe('a returned proof is checked against the requested claim', () => {
     ['another circuit', { circuit: 'giwa_attestation' }, /dojang_playground proof is required/],
     ['no circuit', { circuit: undefined }, /dojang_playground proof is required/],
     ['another chain', { chainId: 84532 }, /Dojang Playground verifier/],
-    ['another verifier', { verifierAddress: '0x5da234546874304f8c51bbeed00fc632938211c1' }, /Dojang Playground verifier/],
+    ['another verifier', { verifierAddress: '0x2d01c2fe3445b7dde60118f956bb14e84fd64724' }, /Dojang Playground verifier/],
     ['no public inputs', { publicInputs: undefined }, /public-input format/],
     ['159 public inputs', { publicInputs: Array(159).fill('0x00') }, /public-input format/],
     ['161 public inputs', { publicInputs: Array(161).fill('0x00') }, /public-input format/],

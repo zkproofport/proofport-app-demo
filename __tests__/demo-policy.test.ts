@@ -75,7 +75,7 @@ describe('Ssiat goes through its own claim policy, never the generic one', () =>
     expect(() => prepareDemoProof(response, { demo, requestId, scope, options: DEFAULT_OPTIONS, year })).toThrow(/prepareSsiatClaimProof/);
   });
   it('allowlists only the GIWA Sepolia Dojang Playground verifier', () => {
-    expect(DEMO_VERIFIERS.dojang_playground).toEqual({ 91342: '0x2d01c2fe3445b7dde60118f956bb14e84fd64724' });
+    expect(DEMO_VERIFIERS.dojang_playground).toEqual({ 91342: '0xad6c9bfa60f3ee618dee9dc2027a69c57f2ad816' });
   });
 });
 

@@ -1,7 +1,7 @@
 import { CIRCUIT_IDS, type RelayProofResult, type TypedAction } from '@zkproofport-app/sdk';
 import { keccak256, toUtf8Bytes, TypedDataEncoder } from 'ethers';
 
-export const GIWA_TEST_VERIFIER = '0x5da234546874304f8c51bbeed00fc632938211c1';
+export const GIWA_TEST_VERIFIER = '0xf6edb9d6114b2546b6e559997fdde08caeea83b3';
 export const GIWA_TEST_VAULT = '0x1111111111111111111111111111111111111111';
 export const GIWA_TEST_ACCOUNT = '0x2222222222222222222222222222222222222222';
 export const GIWA_TEST_TOKEN = '0x417573024528f3c9daD782eF5316E992F3029e81';

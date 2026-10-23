@@ -5,8 +5,9 @@ import {
 } from '@zkproofport-app/sdk';
 import { concat, keccak256, toUtf8Bytes } from 'ethers';
 import { type DemoCircuit, type DemoDefinition, REGIONS } from './demo-catalog';
-import { GIWA_CHAIN_ID, GIWA_VERIFIER, GIWA_PUBLIC_INPUT_COUNT, prepareGiwaMembershipProof } from './giwa-membership';
-import { SSIAT_PUBLIC_INPUT_COUNT, SSIAT_VERIFIER } from './ssiat-drop';
+import { GIWA_CHAIN_ID, GIWA_PUBLIC_INPUT_COUNT, prepareGiwaMembershipProof } from './giwa-membership';
+import { SSIAT_PUBLIC_INPUT_COUNT } from './ssiat-drop';
+import { VERIFIER_DEPLOYMENTS } from './verifier-deployments';
 
 export type DemoOptions = {
   countries: string; inclusion: boolean; domain: string; provider: 'google' | 'microsoft'; age: string; region: string;
@@ -17,16 +18,11 @@ export const DEFAULT_OPTIONS: DemoOptions = {
 
 // Allowlisted deployments from the mobile app's contracts.ts. Responses can
 // select an existing deployment, never supply an arbitrary verifier contract.
-export const DEMO_VERIFIERS: Record<DemoCircuit, Record<number, string>> = {
-  [CIRCUIT_IDS.GIWA_ATTESTATION]: { [GIWA_CHAIN_ID]: GIWA_VERIFIER },
-  [CIRCUIT_IDS.DOJANG_PLAYGROUND]: { [GIWA_CHAIN_ID]: SSIAT_VERIFIER },
-  [CIRCUIT_IDS.COINBASE_ATTESTATION]: { 8453: '0xf7ded73e7a7fc8fb030c35c5a88d40abe6865382', 84532: '0x0036b61dbfab8f3cfeef77dd5d45f7efbfe2035c' },
-  [CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION]: { 8453: '0xf3d5a09d2c85b28c52ef2905c1be3a852b609d0c', 84532: '0xdee363585926c3c28327efd1edd01cf4559738cf' },
-  [CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION]: { 8453: '0x9677ba46ad226ce8b3c4517d9c0143e4d458beae', 84532: '0x27afdea349f247cf698f97fdfab59e1bf8bd0550' },
-  [CIRCUIT_IDS.MDL_KR_OWNERSHIP]: { 84532: '0x7602d09d24e6e16eff5ab981646872886376763e' },
-  [CIRCUIT_IDS.MDL_KR_AGE]: { 84532: '0xcff90ff8ceadc98f625300dc976ed85a3aa943ba' },
-  [CIRCUIT_IDS.MDL_KR_REGION]: { 84532: '0x435f0448f02f5df9659d460181116bcaf37e518e' },
-};
+export const DEMO_VERIFIERS: Record<DemoCircuit, Record<number, string>> = Object.fromEntries(
+  Object.entries(VERIFIER_DEPLOYMENTS).map(([circuit, byChain]) => [
+    circuit, Object.fromEntries(Object.entries(byChain).map(([chain, row]) => [chain, row.address])),
+  ]),
+) as Record<DemoCircuit, Record<number, string>>;
 
 const signerLeaves = [
   '0x952f32128AF084422539C4Ff96df5C525322E564', '0x8844591D47F17bcA6F5dF8f6B64F4a739F1C0080',

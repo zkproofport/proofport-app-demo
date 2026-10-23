@@ -105,6 +105,7 @@ describe('the deployed GIWA vault agrees with the SDK deposit action', () => {
       ]);
       expect(code).not.toBe('0x');
       expect(asset.toLowerCase()).toBe(TOKEN_ADDRESS.toLowerCase());
+      // The deployed vault's immutable VERIFIER predates the beta.19 verifier; it is not the demo's proof allowlist.
       expect(verifier.toLowerCase()).toBe('0x5da234546874304f8c51bbeed00fc632938211c1');
       const action = buildGiwaDepositAction(account, amount, nonce);
       expect(TypedDataEncoder.hashDomain(action.domain)).toBe(domainHash);

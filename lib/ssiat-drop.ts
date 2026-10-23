@@ -4,6 +4,7 @@ import {
 } from '@zkproofport-app/sdk';
 import { AbiCoder, Interface, formatUnits, isAddress, keccak256, toBeHex, toUtf8Bytes, TypedDataEncoder, ZeroAddress, ZeroHash } from 'ethers';
 import { GIWA_CHAIN_ID } from './giwa-membership';
+import { verifierAddress } from './verifier-deployments';
 
 /**
  * Ssiat (씨앗, "seed"): a fictional seed drop for GIWA Sepolia Playground faucet
@@ -18,7 +19,7 @@ import { GIWA_CHAIN_ID } from './giwa-membership';
 export const SSIAT_DROP_ADDRESS: string = '0x3e10c391d5068DCc216dfA3A7ae2e27830204eBd';
 
 /** `dojang_playground` verifier: circuits/deployments/91342/DojangPlayground.json. */
-export const SSIAT_VERIFIER = '0x2d01c2fe3445b7dde60118f956bb14e84fd64724';
+export const SSIAT_VERIFIER = verifierAddress(CIRCUIT_IDS.DOJANG_PLAYGROUND, GIWA_CHAIN_ID);
 export const SSIAT_CIRCUIT = CIRCUIT_IDS.DOJANG_PLAYGROUND;
 export const SSIAT_PUBLIC_INPUT_COUNT = 160;
 export const SSIAT_TOKEN_DECIMALS = 18;

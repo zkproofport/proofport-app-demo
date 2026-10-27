@@ -13,7 +13,7 @@ const ids: DemoId[] = ['kyc', 'country', 'email', 'ownership', 'age', 'region'];
 
 /** Per demo: how many public inputs, and where `scope` starts. Keyed, so a demo with no row is an error. */
 const LAYOUT: Partial<Record<DemoId, { count: number; scopeAt: number }>> = {
-  kyc: { count: 128, scopeAt: 64 }, country: { count: 150, scopeAt: 86 }, email: { count: 148, scopeAt: 83 },
+  kyc: { count: 128, scopeAt: 64 }, country: { count: 150, scopeAt: 86 }, email: { count: 214, scopeAt: 83 },
   ownership: { count: 97, scopeAt: 0 }, age: { count: 66, scopeAt: 0 }, region: { count: 96, scopeAt: 0 },
 };
 
@@ -157,6 +157,12 @@ describe('predicate substitution', () => {
     const { response, context } = fixture('email');
     expect(() => prepareDemoProof(response, { ...context, options: { ...DEFAULT_OPTIONS, domain: 'another.com' } })).toThrow('domain and provider');
     expect(() => prepareDemoProof(response, { ...context, options: { ...DEFAULT_OPTIONS, provider: 'microsoft' } })).toThrow('domain and provider');
+  });
+  it('refuses a v1 (148-input) email proof: only the 214-input v2 circuit binds audience, nonce and time', () => {
+    const { response, context } = fixture('email');
+    expect(prepareDemoProof(response, context).publicInputs).toHaveLength(214);
+    expect(() => prepareDemoProof({ ...response, publicInputs: response.publicInputs!.slice(0, 148) }, context)).toThrow('unexpected public-input format');
+    expect(() => prepareDemoProof({ ...response, publicInputs: [...response.publicInputs!, field(0)] }, context)).toThrow('unexpected public-input format');
   });
   it('rejects a malformed domain length', () => {
     const { response, context } = fixture('email'); response.publicInputs![82] = field(65);

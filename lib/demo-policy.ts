@@ -3,7 +3,7 @@ import {
   MDL_KR_PUBLIC_INPUT_LAYOUT as MDL, OIDC_DOMAIN_ATTESTATION_PUBLIC_INPUT_LAYOUT as OIDC,
   type CircuitInputs, type ProofResponse, type RelayProofResult,
 } from '@zkproofport-app/sdk';
-import { COINBASE_SIGNER_SET } from '@zkproofport-app/core';
+import { COINBASE_SIGNER_SET, OIDC_PUBLIC_INPUT_COUNT } from '@zkproofport-app/core';
 import { keccak256, toUtf8Bytes } from 'ethers';
 import { type DemoCircuit, type DemoDefinition, REGIONS } from './demo-catalog';
 import { GIWA_CHAIN_ID, GIWA_PUBLIC_INPUT_COUNT, prepareGiwaMembershipProof } from './giwa-membership';
@@ -70,10 +70,12 @@ export function buildDemoInputs(demo: DemoDefinition, options: DemoOptions, scop
   }
 }
 
+// OIDC's count is core's: the v2 circuit has 214 public inputs, and a v1
+// (148) proof is refused here before the SDK refuses it by name.
 const PUBLIC_COUNTS: Record<DemoCircuit, number> = {
   [CIRCUIT_IDS.GIWA_ATTESTATION]: GIWA_PUBLIC_INPUT_COUNT, [CIRCUIT_IDS.DOJANG_PLAYGROUND]: SSIAT_PUBLIC_INPUT_COUNT,
   [CIRCUIT_IDS.COINBASE_ATTESTATION]: 128,
-  [CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION]: 150, [CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION]: 148,
+  [CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION]: 150, [CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION]: OIDC_PUBLIC_INPUT_COUNT,
   [CIRCUIT_IDS.MDL_KR_OWNERSHIP]: 97, [CIRCUIT_IDS.MDL_KR_AGE]: 66, [CIRCUIT_IDS.MDL_KR_REGION]: 96,
 };
 

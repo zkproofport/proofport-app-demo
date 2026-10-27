@@ -397,6 +397,14 @@ const emptyDemoState: DemoState = {
     setTimeout(() => setConfettiPieces([]), 5000);
   }, []);
 
+  /**
+   * The relay request id each card last created. Unlike the active ids, it is
+   * kept after the proof arrives: verification passes it with the card's scope
+   * so an OIDC proof's request-bound nonce is checked against the request this
+   * page made, including on the on-chain path, whose SDK never saw the request.
+   */
+  const madeRequestIdsRef = useRef<Record<DemoPrefix, string | null>>({ kyc: null, country: null, email: null, mdl: null, giwa: null });
+
   /* ── Show proof helpers ── */
   /** Clears the in-flight request id for one card. Same table reason as above. */
   const clearActiveRequestId = useCallback((prefix: DemoPrefix) => {
@@ -568,6 +576,7 @@ const emptyDemoState: DemoState = {
       console.log('[requestKycProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 
       activeKycRequestIdRef.current = result.requestId;
+      madeRequestIdsRef.current.kyc = result.requestId;
 
       const deepLink = result.deepLink;
       await showProofResult(deepLink, 'kyc');
@@ -619,6 +628,7 @@ const emptyDemoState: DemoState = {
       console.log('[requestCountryProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 
       activeCountryRequestIdRef.current = result.requestId;
+      madeRequestIdsRef.current.country = result.requestId;
 
       const deepLink = result.deepLink;
       await showProofResult(deepLink, 'country');
@@ -671,6 +681,7 @@ const emptyDemoState: DemoState = {
       console.log('[requestEmailProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 
       activeEmailRequestIdRef.current = result.requestId;
+      madeRequestIdsRef.current.email = result.requestId;
 
       const deepLink = result.deepLink;
       await showProofResult(deepLink, 'email');
@@ -759,6 +770,7 @@ const emptyDemoState: DemoState = {
       console.log('[requestMdlProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
 
       activeMdlRequestIdRef.current = result.requestId;
+      madeRequestIdsRef.current.mdl = result.requestId;
 
       const deepLink = result.deepLink;
       await showProofResult(deepLink, 'mdl');
@@ -822,6 +834,7 @@ const emptyDemoState: DemoState = {
         // No returnScheme — see the long note on the KYC request above.
       });
       activeGiwaRequestIdRef.current = result.requestId;
+      madeRequestIdsRef.current.giwa = result.requestId;
 
       const deepLink = result.deepLink;
       await showProofResult(deepLink, 'giwa');
@@ -877,10 +890,14 @@ const emptyDemoState: DemoState = {
       // On-chain checks run against core's pinned verifier for the proof's
       // chain (createVerifierSDK); the response's verifierAddress is only
       // compared with it, never used.
+      const madeRequestId = madeRequestIdsRef.current[prefix];
+      // The SDK refuses a request whose id is not the response's.
+      if (!madeRequestId) throw new Error('This proof does not answer a request this page made. Request a new proof.');
+      const request = { scope: liveSectionScope(proofResponse.circuit), requestId: madeRequestId };
       const result =
         type === 'onchain'
-          ? await createVerifierSDK(proofResponse).verifyResponseOnChain(proofResponse)
-          : await getSDK().verifyResponseOffChain(proofResponse);
+          ? await createVerifierSDK(proofResponse).verifyResponseOnChain(proofResponse, undefined, { request })
+          : await getSDK().verifyResponseOffChain(proofResponse, { request });
       if (result.valid) {
         setDemoState(prefix, (prev) => ({
           ...prev,

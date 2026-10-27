@@ -1,5 +1,6 @@
 import { CIRCUIT_IDS, validateTypedAction, type TypedAction, type ProofResponse, type RelayProofResult } from '@zkproofport-app/sdk';
 import { keccak256, toUtf8Bytes, TypedDataEncoder, ZeroHash } from 'ethers';
+import { GIWA_SIGNER_SET } from '@zkproofport-app/core';
 import { verifierAddress } from './verifier-deployments';
 
 // CIP-4 PoC profile. Keep these aligned with the mobile app's giwaKyc.ts
@@ -7,7 +8,8 @@ import { verifierAddress } from './verifier-deployments';
 export const GIWA_CHAIN_ID = 91342;
 export const GIWA_VERIFIER = verifierAddress(CIRCUIT_IDS.GIWA_ATTESTATION, GIWA_CHAIN_ID);
 export const GIWA_PUBLIC_INPUT_COUNT = 192;
-export const GIWA_SIGNER_ROOT = keccak256('0xEE099845CDfF93e73aDcBcB36A9B93578bcCed4b');
+/** The GIWA attester's signer-list root, from core (the set the SDK's verify functions check). */
+export const GIWA_SIGNER_ROOT = GIWA_SIGNER_SET.root;
 export const GIWA_EXPLORER = `https://sepolia-explorer.giwa.io/address/${GIWA_VERIFIER}`;
 
 function readBytes(inputs: string[], start: number): string {

@@ -7,8 +7,12 @@ import CircuitDemo from '../app/components/CircuitDemo';
 import { demoById } from '../lib/demo-catalog';
 import { COINBASE_SIGNER_ROOT, DEMO_VERIFIERS } from '../lib/demo-policy';
 
-const external = vi.hoisted(() => ({ create: vi.fn(), qr: vi.fn(), wait: vi.fn(), onchain: vi.fn(), offchain: vi.fn(), disconnect: vi.fn() }));
-vi.mock('../lib/sdk', () => ({ createSDK: () => ({ createRelayRequest: external.create, generateQRCode: external.qr, waitForProof: external.wait, verifyResponseOnChain: external.onchain, verifyResponseOffChain: external.offchain, disconnect: external.disconnect }) }));
+const external = vi.hoisted(() => ({ create: vi.fn(), qr: vi.fn(), wait: vi.fn(), onchain: vi.fn(), offchain: vi.fn(), disconnect: vi.fn(), unconfigured: vi.fn(), verifierFor: vi.fn() }));
+vi.mock('../lib/sdk', () => ({
+  createSDK: () => ({ createRelayRequest: external.create, generateQRCode: external.qr, waitForProof: external.wait, verifyResponseOnChain: external.unconfigured, verifyResponseOffChain: external.offchain, disconnect: external.disconnect }),
+  // On-chain verification must go through the pinned-verifier SDK, never the relay SDK.
+  createVerifierSDK: (proof: unknown) => { external.verifierFor(proof); return { verifyResponseOnChain: external.onchain }; },
+}));
 
 let host: HTMLDivElement;
 let root: Root;
@@ -62,6 +66,9 @@ describe('Markets access follows verification', () => {
     expect(host.textContent).toContain('Verifying access');
     await act(async () => { complete({ valid:true }); });
     expect(access()).toBe('unlocked');
+    expect(external.verifierFor).toHaveBeenCalledTimes(1);
+    expect(external.verifierFor).toHaveBeenCalledWith(expect.objectContaining({ circuit:'coinbase_attestation', chainId:84532 }));
+    expect(external.unconfigured).not.toHaveBeenCalled();
     expect(host.querySelectorAll('.market-lock .is-open')).toHaveLength(3);
     await click('Start a new demo');
     expect(access()).toBe('locked');

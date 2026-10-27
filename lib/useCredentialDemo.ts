@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { ProofResponse, ProofportSDK } from '@zkproofport-app/sdk';
-import { createSDK } from './sdk';
+import { createSDK, createVerifierSDK } from './sdk';
 import type { DemoDefinition } from './demo-catalog';
 import { buildDemoInputs, prepareDemoProof, type DemoOptions } from './demo-policy';
 import { cardScope } from './demo-scopes';
@@ -98,8 +98,8 @@ export function useCredentialDemo(demo: DemoDefinition) {
     const current = attempt.current;
     setPhase('verifying'); setError(''); setMethod(selectedMethod);
     try {
-      const sdk = sdkRef.current || createSDK();
-      const verification = selectedMethod === 'onchain' ? sdk.verifyResponseOnChain(proof) : sdk.verifyResponseOffChain(proof);
+      // On-chain: core's pinned verifier for the proof's chain (createVerifierSDK).
+      const verification = selectedMethod === 'onchain' ? createVerifierSDK(proof).verifyResponseOnChain(proof) : (sdkRef.current || createSDK()).verifyResponseOffChain(proof);
       const result = await deadline(verification, selectedMethod === 'onchain' ? 30000 : 90000, 'Verification timed out. Retry with the same proof.');
       if (current !== attempt.current) return;
       if (!result.valid) throw new Error(result.error || 'The proof did not pass verification.');

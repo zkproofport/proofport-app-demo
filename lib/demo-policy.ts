@@ -3,11 +3,12 @@ import {
   MDL_KR_PUBLIC_INPUT_LAYOUT as MDL, OIDC_DOMAIN_ATTESTATION_PUBLIC_INPUT_LAYOUT as OIDC,
   type CircuitInputs, type ProofResponse, type RelayProofResult,
 } from '@zkproofport-app/sdk';
-import { concat, keccak256, toUtf8Bytes } from 'ethers';
+import { COINBASE_SIGNER_SET } from '@zkproofport-app/core';
+import { keccak256, toUtf8Bytes } from 'ethers';
 import { type DemoCircuit, type DemoDefinition, REGIONS } from './demo-catalog';
 import { GIWA_CHAIN_ID, GIWA_PUBLIC_INPUT_COUNT, prepareGiwaMembershipProof } from './giwa-membership';
 import { SSIAT_PUBLIC_INPUT_COUNT } from './ssiat-drop';
-import { VERIFIER_DEPLOYMENTS } from './verifier-deployments';
+import { VERIFIER_DEPLOYMENTS, verifierAddress } from './verifier-deployments';
 
 export type DemoOptions = {
   countries: string; inclusion: boolean; domain: string; provider: 'google' | 'microsoft'; age: string; region: string;
@@ -16,21 +17,21 @@ export const DEFAULT_OPTIONS: DemoOptions = {
   countries: 'US, KR, JP', inclusion: true, domain: 'zkproofport.com', provider: 'google', age: '19', region: REGIONS[0].value,
 };
 
-// Allowlisted deployments from the mobile app's contracts.ts. Responses can
-// select an existing deployment, never supply an arbitrary verifier contract.
+// The allowlisted (circuit, chain) pairs, each resolved to core's pinned
+// verifier. Responses can select an allowlisted deployment, never supply an
+// arbitrary verifier contract.
 export const DEMO_VERIFIERS: Record<DemoCircuit, Record<number, string>> = Object.fromEntries(
   Object.entries(VERIFIER_DEPLOYMENTS).map(([circuit, byChain]) => [
-    circuit, Object.fromEntries(Object.entries(byChain).map(([chain, row]) => [chain, row.address])),
+    circuit, Object.fromEntries(Object.keys(byChain).map(chain => [chain, verifierAddress(circuit, Number(chain))])),
   ]),
 ) as Record<DemoCircuit, Record<number, string>>;
 
-const signerLeaves = [
-  '0x952f32128AF084422539C4Ff96df5C525322E564', '0x8844591D47F17bcA6F5dF8f6B64F4a739F1C0080',
-  '0x88fe64ea2e121f49bb77abea6c0a45e93638c3c5', '0x44ace9abb148e8412ac4492e9a1ae6bd88226803',
-].map(address => keccak256(address));
-export const COINBASE_SIGNER_ROOT = keccak256(concat([
-  keccak256(concat(signerLeaves.slice(0, 2))), keccak256(concat(signerLeaves.slice(2, 4))),
-]));
+/**
+ * The Coinbase signer-list root a KYC or Country proof must carry. Taken from
+ * core, which derives it from the provers' own signer lists and which the SDK's
+ * verify functions also check; the demo used to rebuild the tree by hand here.
+ */
+export const COINBASE_SIGNER_ROOT = COINBASE_SIGNER_SET.root;
 
 export function buildDemoInputs(demo: DemoDefinition, options: DemoOptions, scope: string): CircuitInputs {
   switch (demo.id) {

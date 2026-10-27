@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { createSDK } from '@/lib/sdk';
+import { createSDK, createVerifierSDK } from '@/lib/sdk';
 import { isMobileDevice } from '@/lib/device';
 import type {
   ProofportSDK as ProofportSDKType,
@@ -860,7 +860,6 @@ const emptyDemoState: DemoState = {
     }));
 
     try {
-      const sdk = getSDK();
       const proofResponse: ProofResponse = {
         requestId: proof.requestId,
         circuit: proof.circuit as ProofResponse['circuit'],
@@ -875,10 +874,13 @@ const emptyDemoState: DemoState = {
       // Verification Passed!" was printed by an onchain verification — true
       // answer, wrong claim, and identical timings that made the two look the
       // same to anyone watching. It was that way from this page's first commit.
+      // On-chain checks run against core's pinned verifier for the proof's
+      // chain (createVerifierSDK); the response's verifierAddress is only
+      // compared with it, never used.
       const result =
         type === 'onchain'
-          ? await sdk.verifyResponseOnChain(proofResponse)
-          : await sdk.verifyResponseOffChain(proofResponse);
+          ? await createVerifierSDK(proofResponse).verifyResponseOnChain(proofResponse)
+          : await getSDK().verifyResponseOffChain(proofResponse);
       if (result.valid) {
         setDemoState(prefix, (prev) => ({
           ...prev,

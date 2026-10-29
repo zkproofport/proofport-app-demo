@@ -65,3 +65,19 @@ official GIWA airdrop.
 - `app/components/SsiatLogo.tsx`: theme-aware inline SVG mark and wordmark.
 
 Palette: forest `#1f3a2a`, hanji paper `#f6f1e6`, sprout `#5f9b4c`, seed ochre `#c8923a`.
+
+### CU × KProof (2026-10-29)
+
+- `cu-symbol.svg`: original vector geometry extracted from page 4 of
+  `B_Brand_ColorGuide.pdf`, in the official CU BI archive:
+  https://cu.bgfretail.com/brand_info/data/CU_BI.zip.
+  Three original logo paths and their official colors are preserved. The logo
+  is not a traced bitmap or a typeset imitation. Rendered and checked against
+  the original PDF. CU marks belong to BGF Retail.
+- `../demo-assets/cu/cass-fresh.png`: unchanged official Cass Fresh product
+  photograph from https://www.cass.co.kr/_nuxt/kv_target.DUAbvSPF.png,
+  referenced by https://www.cass.co.kr/product_fresh. Rights belong to OB/Cass.
+- `kproof-wordmark.svg`: from `kproof/demo/public/brand/wordmark-color.svg`
+  (KProof brand kit v1.0). Original branding rights are retained.
+- `PretendardVariable.woff2`: from the KProof demo, licensed under SIL OFL;
+  see `Pretendard-OFL.txt`.

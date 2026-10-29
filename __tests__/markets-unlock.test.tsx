@@ -33,7 +33,7 @@ beforeEach(async () => {
   external.qr.mockResolvedValue('data:image/png;base64,test');
   host = document.createElement('div'); document.body.appendChild(host);
   root = createRoot(host);
-  await act(async () => { root.render(<CircuitDemo demo={demo} onSelect={() => {}} />); });
+  await act(async () => { root.render(<CircuitDemo demo={demo} />); });
 });
 afterEach(async () => {
   await act(async () => { root.unmount(); }); host.remove(); vi.unstubAllGlobals();

@@ -1,5 +1,4 @@
 import type { DemoDefinition } from '@/lib/demo-catalog';
-import { REGIONS } from '@/lib/demo-catalog';
 import type { DemoOptions } from '@/lib/demo-policy';
 
 type Props = { demo: DemoDefinition; options: DemoOptions; onChange: (options: DemoOptions) => void; disabled: boolean };
@@ -23,18 +22,5 @@ export default function DemoFields({ demo, options, onChange, disabled }: Props)
         <option value="google">Google Workspace</option><option value="microsoft">Microsoft 365</option>
       </select>
     </>}
-    {demo.id === 'age' && <>
-      <label htmlFor="age-threshold">Minimum age</label>
-      <div className="age-input"><input id="age-threshold" type="number" min="1" max="150" step="1" required value={options.age} onChange={event => update({ age: event.target.value })} aria-describedby="age-help" /><span>years</span></div>
-      <p id="age-help" className="field-help">Checks birth year against the current year.</p>
-    </>}
-    {demo.id === 'region' && <>
-      <label htmlFor="residency-region">Resident region</label>
-      <select id="residency-region" value={options.region} onChange={event => update({ region: event.target.value })} aria-describedby="region-help">
-        {REGIONS.map(region => <option key={region.value} value={region.value}>{region.label}</option>)}
-      </select>
-      <p id="region-help" className="field-help">Your street address stays private.</p>
-    </>}
-    {demo.id === 'ownership' && <div className="anonymous-setting"><span>Personal field disclosure</span><strong>None selected</strong><p>Name, birth date, sex and phone number stay private.</p></div>}
   </fieldset>;
 }

@@ -2,40 +2,15 @@
 
 import { useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUpRight, Check, Fingerprint, GlobeHemisphereWest, IdentificationCard, LockKey, ChatCircle, Prohibit } from '@phosphor-icons/react';
-import type { DemoDefinition, DemoId } from '@/lib/demo-catalog';
+import type { DemoDefinition } from '@/lib/demo-catalog';
 import type { DemoOptions } from '@/lib/demo-policy';
 import MadangBenefits from './MadangBenefits';
 import AccessLock from './AccessLock';
 import type { DemoPhase } from '@/lib/useCredentialDemo';
 
-type Props = { demo: DemoDefinition; options: DemoOptions; panel: ReactNode; onSelect: (id: DemoId) => void; verified: boolean; phase?: DemoPhase };
+type Props = { demo: DemoDefinition; options: DemoOptions; panel: ReactNode; verified: boolean; phase?: DemoPhase };
 
-/**
- * What the Korean mobile ID screen says, per demo.
- *
- * Keyed rather than chained, so a demo nobody wrote wording for is an error
- * with its name in it. The chain this replaced ended on the ownership wording,
- * which meant a new predicate silently described itself as "Holds a mobile ID."
- */
-const KOREAN_ID_WORDING: Partial<Record<DemoId, { variant: string; learns: (options: DemoOptions) => string; example: string }>> = {
-  age: {
-    variant: 'Age check',
-    learns: options => `Meets the ${options.age || '19'}+ condition.`,
-    example: 'For example, an adult-purchase check at a convenience store. The birth date is never sent.',
-  },
-  region: {
-    variant: 'Region',
-    learns: () => 'Lives in the selected region.',
-    example: 'For example, access to a residents-only benefit. The full address is never sent.',
-  },
-  ownership: {
-    variant: 'Ownership',
-    learns: () => 'Holds a mobile ID.',
-    example: 'Confirm possession with personal field disclosure switched off.',
-  },
-};
-
-export default function DemoExperience({ demo, options, panel, onSelect, verified, phase = 'idle' }: Props) {
+export default function DemoExperience({ demo, options, panel, verified, phase = 'idle' }: Props) {
   const [market, setMarket] = useState('Supply');
   const [topic, setTopic] = useState('Engineering');
   const header = <header className="experience-masthead"><div className="experience-wordmark">{demo.brand}{demo.id === 'email' && <span className="blind-period">.</span>}</div><span>{demo.category}</span><span className="experience-demo-label">{demo.experimental ? 'Experimental demo' : 'Example dApp'}</span></header>;
@@ -73,28 +48,13 @@ export default function DemoExperience({ demo, options, panel, onSelect, verifie
   </>;
 
   /*
-   * Korea Mobile ID — named, not a fallthrough.
-   *
-   * This `return` used to be unconditional, so any circuit that matched none of
-   * the branches above rendered the Korean mobile ID screen. That happened on
-   * 2026-09-12: a new tab opened on "Your Korean ID. Only the answer." with
-   * name, date of birth and street address listed beside a deposit form.
+   * No fallthrough screen. The last `return` here used to be unconditional, so
+   * any demo that matched none of the branches above rendered whichever screen
+   * sat at the bottom. That happened on 2026-09-12: a new tab opened on another
+   * demo's identity screen, beside a deposit form.
    */
-  if (demo.id !== 'ownership' && demo.id !== 'age' && demo.id !== 'region') {
-    throw new Error(
-      `No demo screen for '${demo.id}'. Add a branch in DemoExperience -- the ` +
-        'Korea Mobile ID screen used to be the fallthrough and silently claimed ' +
-        'every circuit nobody had written a screen for.',
-    );
-  }
-
-  const wording = KOREAN_ID_WORDING[demo.id];
-  if (!wording) throw new Error(`No Korean mobile ID wording for '${demo.id}'. Known: ${Object.keys(KOREAN_ID_WORDING).join(', ')}.`);
-
-  return <>
-    {header}
-    <section className="identity-opening"><div><h1>Your Korean ID.<br /><span>Only the answer.</span></h1><p>Prove what matters, without handing over your identity.</p></div><div className="identity-seal"><Fingerprint size={80} weight="thin" /><span>Powered by<br /><strong>zero knowledge</strong></span></div></section>
-    <div className="identity-select" role="group" aria-label="Mobile ID proof type">{[{id:'ownership',label:'Ownership',desc:'Do you hold a mobile ID?'},{id:'age',label:'Age check',desc:'Do you meet the age requirement?'},{id:'region',label:'Region',desc:'Do you live in this region?'}].map(item => <button key={item.id} aria-pressed={demo.id === item.id} onClick={() => onSelect(item.id as DemoId)}><span>{item.label}</span><small>{item.desc}</small><ArrowUpRight size={24} /></button>)}</div>
-    <div className="identity-workspace"><section className="identity-explanation"><div className="identity-source"><IdentificationCard size={36} weight="light" /><div><span>The source</span><h2>Korean mobile ID</h2></div><span className="identity-private">Stays on your phone</span></div><div className="identity-redactions"><span>Name <b>Not shared</b></span><span>Date of birth <b>Not shared</b></span><span>Street address <b>Not shared</b></span></div><div className="identity-transform"><ArrowDown size={24} /><span>ZKProofport generates a private proof</span></div><div className="identity-answer"><span>{wording.variant}: the service learns</span><h2>{wording.learns(options)}</h2><p>{wording.example}</p></div><p className="identity-experimental">Experimental predicate demo. Credential issuer authentication is not yet enforced by the circuit.{demo.id === 'age' && ' Age uses current year minus birth year.'}</p></section>{panel}</div>
-  </>;
+  throw new Error(
+    `No demo screen for '${demo.id}'. Known: giwa, kyc, country, email. Add a branch in DemoExperience, ` +
+      'or list the demo in DEDICATED_SCREENS if it has a screen of its own.',
+  );
 }

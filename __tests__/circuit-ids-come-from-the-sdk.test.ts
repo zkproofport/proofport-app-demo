@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { ALL_CIRCUIT_IDS, CIRCUIT_IDS, CIRCUIT_SUPPORT_STATUS } from '@zkproofport-app/sdk';
 
-/** `mdl_kr_age` -> `MDL_KR_AGE`, the key the page writes. */
+/** `giwa_attestation` -> `GIWA_ATTESTATION`, the key the page writes. */
 const idConstantName = (id: string) => id.toUpperCase();
 
 /** vitest runs with the package root as cwd. */
@@ -47,9 +47,7 @@ describe('circuit ids in the demo come from the SDK', () => {
     const calls = page.match(/createRelayRequest\(\s*([^,]+),/g) || [];
     expect(calls.length).toBeGreaterThan(0);
     for (const call of calls) {
-      // Either the constant directly, or a variable that was assigned from it
-      // (the mDL variant ternary does that).
-      expect(call).toMatch(/CIRCUIT_IDS\.|createRelayRequest\(\s*circuit\s*,/);
+      expect(call).toMatch(/createRelayRequest\(\s*CIRCUIT_IDS\./);
     }
   });
 
@@ -57,7 +55,7 @@ describe('circuit ids in the demo come from the SDK', () => {
     // The demo puts a badge on each circuit card. Saying LIVE for a circuit the
     // SDK still calls `planned` promises a stability it does not have — the
     // input shape and public-input layout can change without a major version.
-    // The Korea Mobile ID card said LIVE until 2026-09-04.
+    // An experimental card said LIVE until 2026-09-04.
     //
     // Counts, not positions: the badge markup is far from the id in the file,
     // so this pins how many of each there are and leaves the pairing to review.
@@ -77,9 +75,7 @@ describe('circuit ids in the demo come from the SDK', () => {
       id => CIRCUIT_SUPPORT_STATUS[id] === 'supported' && page.includes(idConstantName(id)),
     );
 
-    // The three mDL variants share one card, so cards are counted by family.
-    const notLiveFamilies = new Set(notLiveInUse.map(id => id.replace(/_(ownership|age|region)$/, '')));
-    expect(experimental).toBe(notLiveFamilies.size);
+    expect(experimental).toBe(notLiveInUse.length);
     expect(live).toBe(supportedInUse.length);
   });
 

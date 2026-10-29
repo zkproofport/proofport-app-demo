@@ -19,9 +19,6 @@ export const CARD_SCOPES: Record<DemoId, string> = {
   kyc: 'zkproofport-demo:common:kyc',
   country: 'zkproofport-demo:borderless:country',
   email: 'zkproofport-demo:zk-blind:email',
-  ownership: 'zkproofport-demo:korean-mobile-id:ownership',
-  age: 'zkproofport-demo:korean-mobile-id:age',
-  region: 'zkproofport-demo:korean-mobile-id:region',
 };
 
 /** The "Try it live." section further down, by the circuit each panel requests. */
@@ -29,9 +26,6 @@ export const LIVE_SECTION_SCOPES = {
   [CIRCUIT_IDS.COINBASE_ATTESTATION]: 'zkproofport-demo:try-it-live:kyc',
   [CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION]: 'zkproofport-demo:try-it-live:country',
   [CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION]: 'zkproofport-demo:try-it-live:email',
-  [CIRCUIT_IDS.MDL_KR_OWNERSHIP]: 'zkproofport-demo:try-it-live:mdl-ownership',
-  [CIRCUIT_IDS.MDL_KR_AGE]: 'zkproofport-demo:try-it-live:mdl-age',
-  [CIRCUIT_IDS.MDL_KR_REGION]: 'zkproofport-demo:try-it-live:mdl-region',
   [CIRCUIT_IDS.GIWA_ATTESTATION]: 'zkproofport-demo:try-it-live:giwa',
 } as const;
 

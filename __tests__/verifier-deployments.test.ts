@@ -52,7 +52,7 @@ describe('verifier table', () => {
     // Core pins these, but the demo does not accept them: the allowlist decides, not core's reach.
     ['coinbase_attestation', 1, /No coinbase_attestation verifier on chain 1\. Known chains: 8453, 84532/],
     ['coinbase_attestation', 11155111, /No coinbase_attestation verifier on chain 11155111/],
-    ['mdl_kr_age', 8453, /No mdl_kr_age verifier on chain 8453/],
+    ['mdl_kr_age', 84532, /No verifier table for circuit 'mdl_kr_age'\. Known: giwa_attestation, dojang_playground, coinbase_attestation, coinbase_country_attestation, oidc_domain_attestation\.$/],
     ['__proto__', 84532, /No verifier table for circuit '__proto__'/],
     ['constructor', 84532, /No verifier table for circuit 'constructor'/],
     ['코인베이스', 84532, /No verifier table for circuit '코인베이스'/],

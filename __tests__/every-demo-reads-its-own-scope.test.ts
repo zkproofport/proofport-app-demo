@@ -9,7 +9,7 @@ import { DEMOS } from '../lib/demo-catalog';
  * different place in every circuit's public inputs.
  *
  * The demo used to choose that place with a chain of `demo.id === …` whose last
- * branch was the Korean mobile ID offset. Every circuit the chain did not name
+ * branch was one circuit's offset, byte 0. Every circuit the chain did not name
  * fell into it, so a correct proof had its scope read from byte 0 and came back
  * as "This proof does not match the requested session" — the app had done
  * everything right. Asking the SDK, which keys the offsets per circuit and
@@ -33,7 +33,7 @@ function kycResult(at: number) {
   };
 }
 
-const context = { demo: kyc, requestId: 'req-1', scope, options: DEFAULT_OPTIONS, year: 2026 };
+const context = { demo: kyc, requestId: 'req-1', scope, options: DEFAULT_OPTIONS };
 
 describe('every demo reads the scope where its own circuit keeps it', () => {
   it('accepts a Coinbase KYC proof whose scope sits at byte 64', () => {
@@ -43,8 +43,9 @@ describe('every demo reads the scope where its own circuit keeps it', () => {
   });
 
   it('refuses the same proof when the scope sits where another circuit keeps it', () => {
-    // Byte 0 is the Korean mobile ID offset, and byte 86 the Coinbase Country one.
-    for (const wrong of [0, 86]) {
+    // Byte 0 is where the old chain's last branch read, 83 the email
+    // circuit's offset and 86 the Coinbase Country one.
+    for (const wrong of [0, 83, 86]) {
       expect(() => prepareDemoProof(kycResult(wrong), context)).toThrow(/does not match the requested session/);
     }
   });
@@ -52,8 +53,8 @@ describe('every demo reads the scope where its own circuit keeps it', () => {
   it('asks the SDK for the offset, which knows one per circuit', () => {
     const inputs = kycResult(64).publicInputs;
     expect(extractScopeFromPublicInputs(inputs, kyc.circuit)).toBe(keccak256(toUtf8Bytes(scope)));
-    // The same bytes read as a Korean mobile ID proof land somewhere else entirely.
-    expect(extractScopeFromPublicInputs(inputs, 'mdl_kr_ownership')).not.toBe(keccak256(toUtf8Bytes(scope)));
+    // The same bytes read as a Coinbase Country proof land somewhere else entirely.
+    expect(extractScopeFromPublicInputs(inputs, 'coinbase_country_attestation')).not.toBe(keccak256(toUtf8Bytes(scope)));
   });
 
   it('refuses a circuit the SDK has no offset for, rather than picking one', () => {

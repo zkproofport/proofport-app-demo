@@ -1,20 +1,20 @@
 import {
   CIRCUIT_IDS, extractScopeFromPublicInputs, COINBASE_COUNTRY_PUBLIC_INPUT_LAYOUT as COUNTRY,
-  MDL_KR_PUBLIC_INPUT_LAYOUT as MDL, OIDC_DOMAIN_ATTESTATION_PUBLIC_INPUT_LAYOUT as OIDC,
+  OIDC_DOMAIN_ATTESTATION_PUBLIC_INPUT_LAYOUT as OIDC,
   type CircuitInputs, type ProofResponse, type RelayProofResult,
 } from '@zkproofport-app/sdk';
 import { COINBASE_SIGNER_SET, OIDC_PUBLIC_INPUT_COUNT } from '@zkproofport-app/core';
 import { keccak256, toUtf8Bytes } from 'ethers';
-import { type DemoCircuit, type DemoDefinition, REGIONS } from './demo-catalog';
+import { type DemoCircuit, type DemoDefinition } from './demo-catalog';
 import { GIWA_CHAIN_ID, GIWA_PUBLIC_INPUT_COUNT, prepareGiwaMembershipProof } from './giwa-membership';
 import { SSIAT_PUBLIC_INPUT_COUNT } from './ssiat-drop';
 import { VERIFIER_DEPLOYMENTS, verifierAddress } from './verifier-deployments';
 
 export type DemoOptions = {
-  countries: string; inclusion: boolean; domain: string; provider: 'google' | 'microsoft'; age: string; region: string;
+  countries: string; inclusion: boolean; domain: string; provider: 'google' | 'microsoft';
 };
 export const DEFAULT_OPTIONS: DemoOptions = {
-  countries: 'US, KR, JP', inclusion: true, domain: 'zkproofport.com', provider: 'google', age: '19', region: REGIONS[0].value,
+  countries: 'US, KR, JP', inclusion: true, domain: 'zkproofport.com', provider: 'google',
 };
 
 // The allowlisted (circuit, chain) pairs, each resolved to core's pinned
@@ -50,15 +50,6 @@ export function buildDemoInputs(demo: DemoDefinition, options: DemoOptions, scop
       if (!['google', 'microsoft'].includes(options.provider)) throw new Error('Select a supported sign-in provider.');
       return { scope, domain, provider: options.provider };
     }
-    case 'age': {
-      const ageThreshold = Number(options.age);
-      if (!Number.isInteger(ageThreshold) || ageThreshold < 1 || ageThreshold > 150) throw new Error('Enter a whole-number age between 1 and 150.');
-      return { scope, ageThreshold };
-    }
-    case 'region':
-      if (!REGIONS.some(region => region.value === options.region)) throw new Error('Select a region from the list.');
-      return { scope, targetRegion: options.region };
-    case 'ownership': return { scope, discloseFlags: 0 };
     // These requests carry only the scope. The Gotgan deposit flow builds its
     // action-bound request in lib/useGiwaVault.ts, and the Ssiat claim builds
     // its Claim(recipient) request in lib/useSsiatDrop.ts, not here.
@@ -76,7 +67,6 @@ const PUBLIC_COUNTS: Record<DemoCircuit, number> = {
   [CIRCUIT_IDS.GIWA_ATTESTATION]: GIWA_PUBLIC_INPUT_COUNT, [CIRCUIT_IDS.DOJANG_PLAYGROUND]: SSIAT_PUBLIC_INPUT_COUNT,
   [CIRCUIT_IDS.COINBASE_ATTESTATION]: 128,
   [CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION]: 150, [CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION]: OIDC_PUBLIC_INPUT_COUNT,
-  [CIRCUIT_IDS.MDL_KR_OWNERSHIP]: 97, [CIRCUIT_IDS.MDL_KR_AGE]: 66, [CIRCUIT_IDS.MDL_KR_REGION]: 96,
 };
 
 function bytes(inputs: string[], start: number, length = 32): Uint8Array {
@@ -92,11 +82,11 @@ function equalHash(inputs: string[], start: number, expected: string, name: stri
   if (actual !== expected.toLowerCase()) throw new Error(`This proof does not match the requested ${name}.`);
 }
 
-export type DemoRequestContext = { demo: DemoDefinition; requestId: string; scope: string; options: DemoOptions; year: number };
+export type DemoRequestContext = { demo: DemoDefinition; requestId: string; scope: string; options: DemoOptions };
 
 /** Check the request and public predicate, before cryptographic verification. */
 export function prepareDemoProof(result: RelayProofResult, context: DemoRequestContext): ProofResponse {
-  const { demo, requestId, scope, options, year } = context;
+  const { demo, requestId, scope, options } = context;
   if (demo.id === 'giwa') return prepareGiwaMembershipProof(result, requestId, scope);
   // A claim proof is only meaningful with its Claim(recipient) action, which this
   // generic path does not know. prepareSsiatClaimProof in lib/ssiat-drop.ts checks it.
@@ -111,9 +101,9 @@ export function prepareDemoProof(result: RelayProofResult, context: DemoRequestC
   }
   const requested = buildDemoInputs(demo, options, scope);
   // Where the scope sits differs per circuit, so the SDK is asked rather than
-  // guessed at here. A chain of `demo.id === …` used to end in the Korean
-  // mobile ID offset, which meant every circuit it did not name had its scope
-  // read from byte 0 and every returned proof refused.
+  // guessed at here. A chain of `demo.id === …` used to end in one circuit's
+  // offset, which meant every circuit it did not name had its scope read from
+  // byte 0 and every returned proof refused.
   const provenScope = extractScopeFromPublicInputs(inputs, demo.circuit);
   if (!provenScope) throw new Error('The proof carries no scope for this circuit.');
   if (provenScope.toLowerCase() !== keccak256(toUtf8Bytes(scope))) {
@@ -121,9 +111,10 @@ export function prepareDemoProof(result: RelayProofResult, context: DemoRequestC
     // value above 255 as zero — so a malformed input reaches here looking like
     // an ordinary mismatch. Ask the SDK again with those values changed: if the
     // scope it returns moves, the bad value is inside the scope and this is not
-    // a proof at all. Not every wide value is malformed — an age threshold and
-    // a year are wider than a byte on purpose — which is why the question is
-    // asked about the scope's own bytes and not about the array.
+    // a proof at all. Not every wide value is malformed — an email proof's
+    // RSA modulus limbs and its timestamp are wider than a byte on purpose —
+    // which is why the question is asked about the scope's own bytes and not
+    // about the array.
     const repaired = inputs.map(value => (BigInt(value) > BigInt(255) ? '0x01' : value));
     if (extractScopeFromPublicInputs(repaired, demo.circuit) !== provenScope) {
       throw new Error('The proof contains an invalid byte value.');
@@ -144,13 +135,6 @@ export function prepareDemoProof(result: RelayProofResult, context: DemoRequestC
     if (length < 1 || length > 64) throw new Error('The domain proof has an invalid length.');
     const domain = new TextDecoder().decode(bytes(inputs, OIDC.DOMAIN_STORAGE_START, length));
     if (domain !== requested.domain || BigInt(inputs[OIDC.PROVIDER]) !== BigInt(options.provider === 'microsoft' ? 1 : 0)) throw new Error('The proof does not match the selected email domain and provider.');
-  }
-  if (demo.id === 'ownership' && BigInt(inputs[MDL.OWNERSHIP_DISCLOSE_FLAGS]) !== BigInt(0)) throw new Error('This reader pass requires anonymous disclosure settings.');
-  if (demo.id === 'age' && (BigInt(inputs[MDL.AGE_THRESHOLD]) !== BigInt(options.age) || BigInt(inputs[MDL.AGE_CURRENT_YEAR]) !== BigInt(year))) throw new Error('The proof does not match the requested age threshold and year.');
-  if (demo.id === 'region') {
-    const paddedRegion = new Uint8Array(64);
-    paddedRegion.set(toUtf8Bytes(options.region));
-    equalHash(inputs, MDL.REGION_CODE_START, keccak256(paddedRegion), 'region');
   }
   return { requestId, circuit: demo.circuit, status: 'completed', proof: result.proof, publicInputs: inputs, chainId: result.chainId, verifierAddress: verifier };
 }

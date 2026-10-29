@@ -7,12 +7,12 @@ import { DEDICATED_SCREENS } from '../app/components/DemoTabs';
 /**
  * Every demo has a screen of its own. None inherits another circuit's.
  *
- * The screen component ended with an unconditional `return` that rendered the
- * Korea Mobile ID layout, so any circuit matching none of the branches above it
- * got that screen. On 2026-09-12 a new tab did: it opened on "Your Korean ID.
- * Only the answer.", listed name, date of birth and street address as the
- * fields being withheld, and offered Ownership / Age check / Region buttons —
- * beside a form asking for a deposit amount.
+ * The screen component ended with an unconditional `return` that rendered one
+ * demo's identity layout, so any circuit matching none of the branches above it
+ * got that screen. On 2026-09-12 a new tab did: it opened on another product's
+ * headline, listed name, date of birth and street address as the fields being
+ * withheld, and offered that product's predicate buttons — beside a form asking
+ * for a deposit amount.
  *
  * Nothing failed. The page rendered, the proof request worked, and the words
  * were about a different product.
@@ -29,21 +29,20 @@ describe('every demo has its own screen', () => {
     const missing = DEMOS.map(demo => demo.id).filter(
       id => !source.includes(`demo.id === '${id}'`) && !DEDICATED_SCREENS[id],
     );
-    // The three Korea Mobile ID variants share one screen, named together in
-    // its guard rather than each getting a branch.
-    const shared = ['ownership', 'age', 'region'];
-    expect(missing.filter(id => !shared.includes(id))).toEqual([]);
-    for (const id of shared) {
-      expect(source).toContain(`demo.id !== '${id}'`);
-    }
+    expect(missing).toEqual([]);
   });
 
-  it('has no unconditional return that would catch an unmatched circuit', () => {
-    // A bare `return <>` at the end is the shape that gave a new tab the Korean ID screen.
-    const guarded = source.indexOf("if (demo.id !== 'ownership'");
-    const lastReturn = source.lastIndexOf('  return <>');
-    expect(guarded).toBeGreaterThan(-1);
-    expect(lastReturn).toBeGreaterThan(guarded);
+  it('ends in an error, not an unconditional return that would catch an unmatched circuit', () => {
+    // A bare `return <>` at the end is the shape that gave a new tab another demo's screen.
+    const refusal = source.lastIndexOf('No demo screen for');
+    const lastReturn = source.lastIndexOf(' return <>');
+    expect(refusal).toBeGreaterThan(-1);
+    expect(lastReturn).toBeGreaterThan(-1);
+    expect(refusal).toBeGreaterThan(lastReturn);
+    // Every `return <>` is the body of an `if (demo.id === …)`.
+    const returns = source.match(/^ {2}(?:if \(demo\.id === '\w+'\) )?return <>/gm) ?? [];
+    expect(returns.length).toBeGreaterThan(0);
+    for (const line of returns) expect(line).toMatch(/if \(demo\.id === '\w+'\) return <>/);
   });
 
   it('refuses a circuit with no screen instead of showing another one', () => {

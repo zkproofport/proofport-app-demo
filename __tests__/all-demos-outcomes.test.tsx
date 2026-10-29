@@ -8,7 +8,7 @@ import LandingPage from '../app/page';
 import { DECLINED_MESSAGE, DEMO_PROOF_WAIT_MS, EXPIRED_MESSAGE, NO_RELAY_ANSWER_MESSAGE } from '../lib/relay-outcome';
 
 /**
- * The "All demos" page (app/page.tsx) has its own five request handlers. Each
+ * The "All demos" page (app/page.tsx) has its own four request handlers. Each
  * one used to handle only `completed` and `failed`, so an `error`, `cancelled`
  * or `expired` answer left the modal on "Waiting for proof..." forever.
  */
@@ -37,8 +37,8 @@ async function unmount() {
   await act(async () => { root.unmount(); }); host.remove(); vi.unstubAllGlobals();
 }
 
-type Card = 'kyc' | 'country' | 'email' | 'mdl' | 'giwa';
-const CARDS: Card[] = ['kyc', 'country', 'email', 'mdl', 'giwa'];
+type Card = 'kyc' | 'country' | 'email' | 'giwa';
+const CARDS: Card[] = ['kyc', 'country', 'email', 'giwa'];
 
 async function request(card: Card) {
   const button = [...host.querySelectorAll(`#demo-${card} button`)].find(b => b.textContent?.includes('Request Proof') || b.textContent?.includes('Request')) as HTMLButtonElement;
@@ -116,17 +116,6 @@ describe('every card on the All demos page ends on the relay’s answer', () => 
     expect(ending()!.textContent).toContain('Relay refused the request');
   });
 
-  it.each([['0'], ['151'], ['1.5'], [''], ['   ']])('an mDL age threshold of %j fails before any request, with no request panel', async (value) => {
-    const input = host.querySelector('#demo-mdl input[type="number"], #demo-mdl input') as HTMLInputElement;
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-    await act(async () => { setter.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })); });
-    await request('mdl');
-    expect(external.create).not.toHaveBeenCalled();
-    expect(ending()!.getAttribute('data-ending')).toBe('error');
-    expect(ending()!.textContent).toContain('Age threshold must be an integer between 1 and 150.');
-    expect(host.textContent).not.toContain('Request Generated');
-  });
-
   it('a new request clears the previous request’s QR', async () => {
     external.wait.mockResolvedValue({ requestId: 'req-all', status: 'cancelled' });
     await request('kyc');
@@ -170,8 +159,8 @@ describe('source: every wait goes through the shared handler', () => {
   it('each waitForProof in app/page.tsx is handed to applyRelayResult', () => {
     const page = sources[0][1];
     const waits = page.match(/= await sdk\.waitForProof\(result\.requestId, \{ timeoutMs: DEMO_PROOF_WAIT_MS \}\);\n\s*applyRelayResult\('\w+', finalResult\);/g) ?? [];
-    expect(waits).toHaveLength(5);
+    expect(waits).toHaveLength(CARDS.length);
     // The visitor snippet is the only other mention.
-    expect(page.match(/sdk\.waitForProof\(/g)).toHaveLength(5);
+    expect(page.match(/sdk\.waitForProof\(/g)).toHaveLength(CARDS.length);
   });
 });

@@ -16,8 +16,8 @@
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
-    "@zkproofport-app/core": "0.3.0",
-    "@zkproofport-app/sdk": "0.5.0-beta.3",
+    "@zkproofport-app/core": "0.4.0-beta.0",
+    "@zkproofport-app/sdk": "0.5.0-beta.4",
     "ethers": "^6.16.0",
     "next": "^15.3.2",
     "react": "^19.1.0",

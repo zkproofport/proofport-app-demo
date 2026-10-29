@@ -18,7 +18,6 @@ const tabs: { id: Tab; label: string; status?: 'Live' | 'PoC' }[] = [
   { id: 'kyc', label: 'Markets', status: 'Live' },
   { id: 'country', label: 'Borderless', status: 'Live' },
   { id: 'email', label: 'zk blind', status: 'Live' },
-  { id: 'ownership', label: 'Korean ID', status: 'PoC' },
   { id: 'giwa', label: 'Gotgan', status: 'PoC' },
   { id: 'ssiat', label: 'Ssiat', status: 'PoC' },
   { id: 'all', label: 'All demos' },
@@ -67,8 +66,6 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
     return () => { cancelAnimationFrame(frame); icon.remove(); };
   }, [tab]);
 
-  const navTab = tab === 'age' || tab === 'region' ? 'ownership' : tab;
-
   function select(next: Tab) {
     setTab(next);
     setVisited(previous => new Set([...previous, next]));
@@ -93,7 +90,7 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
     <nav className="demo-switcher" aria-label="ZKProofport demos">
       <button className="demo-switcher-brand" onClick={() => select(DEFAULT_TAB)} aria-label="ZKProofport demo home"><img src={ZKPROOFPORT_SYMBOL} alt="" width={32} height={32} /><span><ZKProofportWordmark /><small>Live demos</small></span></button>
       <div role="tablist" aria-label="Choose a demo">
-        {tabs.map((item, index) => <button key={item.id} id={`demo-tab-${item.id}`} role="tab" aria-selected={navTab === item.id} aria-controls={`demo-panel-${item.id === 'ownership' && ['age', 'region'].includes(tab) ? tab : item.id}`} tabIndex={navTab === item.id ? 0 : -1} onClick={() => select(item.id)} onKeyDown={event => navigate(event, index)}>
+        {tabs.map((item, index) => <button key={item.id} id={`demo-tab-${item.id}`} role="tab" aria-selected={tab === item.id} aria-controls={`demo-panel-${item.id}`} tabIndex={tab === item.id ? 0 : -1} onClick={() => select(item.id)} onKeyDown={event => navigate(event, index)}>
           {item.label}
           {item.status && <span className="demo-status-badge" data-status={item.status}>{item.status}</span>}
         </button>)}
@@ -101,13 +98,13 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
       <label className="theme-control"><CircleHalf size={18} /><span className="sr-only">Color theme</span><select aria-label="Color theme" value={theme} onChange={event => changeTheme(event.target.value as Theme)}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
     </nav>
     {tab !== 'all' && <AppDownloads />}
-    {DEMOS.map(demo => <div key={demo.id} id={`demo-panel-${demo.id}`} role="tabpanel" aria-labelledby={`demo-tab-${['age', 'region'].includes(demo.id) ? 'ownership' : demo.id}`} hidden={tab !== demo.id}>{visited.has(demo.id) && <DemoScreen demo={demo} onSelect={select} />}</div>)}
+    {DEMOS.map(demo => <div key={demo.id} id={`demo-panel-${demo.id}`} role="tabpanel" aria-labelledby={`demo-tab-${demo.id}`} hidden={tab !== demo.id}>{visited.has(demo.id) && <DemoScreen demo={demo} />}</div>)}
     <div id="demo-panel-all" className="explorer-panel" role="tabpanel" aria-labelledby="demo-tab-all" tabIndex={-1} hidden={tab !== 'all'}>{children}</div>
   </div>;
 }
 
-function DemoScreen({ demo, onSelect }: { demo: DemoDefinition; onSelect: (id: DemoId) => void }) {
+function DemoScreen({ demo }: { demo: DemoDefinition }) {
   const dedicated = DEDICATED_SCREENS[demo.id];
   if (dedicated) return <dedicated.Screen />;
-  return <CircuitDemo demo={demo} onSelect={onSelect} />;
+  return <CircuitDemo demo={demo} />;
 }

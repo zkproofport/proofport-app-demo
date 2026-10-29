@@ -7,7 +7,7 @@ import { CIRCUIT_IDS, type CircuitId } from '@zkproofport-app/sdk';
  */
 export const DEMO_CIRCUITS = [
   CIRCUIT_IDS.GIWA_ATTESTATION, CIRCUIT_IDS.DOJANG_PLAYGROUND, CIRCUIT_IDS.COINBASE_ATTESTATION, CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION,
-  CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION, CIRCUIT_IDS.MDL_KR_OWNERSHIP, CIRCUIT_IDS.MDL_KR_AGE, CIRCUIT_IDS.MDL_KR_REGION,
+  CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION,
 ] as const;
 export type DemoCircuit = (typeof DEMO_CIRCUITS)[number];
 
@@ -20,7 +20,7 @@ export type DemoCircuit = (typeof DEMO_CIRCUITS)[number];
  */
 export const SDK_CIRCUITS_WITHOUT_A_DEMO: readonly CircuitId[] = [];
 
-export type DemoId = 'giwa' | 'ssiat' | 'kyc' | 'country' | 'email' | 'ownership' | 'age' | 'region';
+export type DemoId = 'giwa' | 'ssiat' | 'kyc' | 'country' | 'email';
 export type DemoDefinition = {
   id: DemoId; circuit: DemoCircuit; tab: string; brand: string; category: string;
   headline: string; description: string; image: number; imageAlt: string;
@@ -162,106 +162,7 @@ export const DEMOS: readonly DemoDefinition[] = [
   ],
   "note": "Independent fictional workplace-community demo, not affiliated with Blind. Sample discussions are illustrative. Production integrations must separately enforce provider-key trust and token freshness.",
   "experimental": false
-},
-{
-  circuit: CIRCUIT_IDS.MDL_KR_OWNERSHIP,
-  "id": "ownership",
-  "tab": "Mobile ID",
-  "brand": "Korean Mobile ID",
-  "category": "From identity to a private answer.",
-  "headline": "Your ID. Less revealed.",
-  "description": "Turn a Korean mobile ID into a proof of only what a service needs.",
-  "image": 4,
-  "imageAlt": "",
-  "actionTitle": "Prove ID ownership",
-  "actionDescription": "Demonstrate mobile ID ownership with all personal disclosure fields switched off.",
-  "credential": "Mobile ID ownership",
-  "hides": "Name, birth date, sex and phone number",
-  "outcomeTitle": "Ownership proof verified.",
-  "outcomeDescription": "Your experimental ownership proof passed with personal disclosure switched off.",
-  "outcomeItems": [
-    {
-      "title": "Verified condition",
-      "description": "Mobile ID ownership"
-    },
-    {
-      "title": "Private information",
-      "description": "Name, birth date, sex and phone number stay private."
-    }
-  ],
-  "note": "Experimental mobile ID predicate on Base Sepolia. The current circuit does not cryptographically authenticate the credential issuer.",
-  "experimental": true
-},
-{
-  circuit: CIRCUIT_IDS.MDL_KR_AGE,
-  "id": "age",
-  "tab": "Age",
-  "brand": "Korean Mobile ID",
-  "category": "From identity to a private answer.",
-  "headline": "Your ID. Less revealed.",
-  "description": "Turn a Korean mobile ID into a proof of only what a service needs.",
-  "image": 5,
-  "imageAlt": "",
-  "actionTitle": "Prove the age condition",
-  "actionDescription": "Check an adult-purchase requirement without sharing your birth date.",
-  "credential": "Age is above the requested threshold",
-  "hides": "Your birth date and identity",
-  "outcomeTitle": "Age condition verified.",
-  "outcomeDescription": "Your proof passed the requested threshold check. Your birth date remains private.",
-  "outcomeItems": [
-    {
-      "title": "Verified condition",
-      "description": "Age is above the requested threshold"
-    },
-    {
-      "title": "Private information",
-      "description": "Your birth date and identity stay private."
-    }
-  ],
-  "note": "Experimental Base Sepolia demo. Age uses current year minus birth year, not exact birthday age. Issuer authentication is not circuit-enforced.",
-  "experimental": true
-},
-{
-  circuit: CIRCUIT_IDS.MDL_KR_REGION,
-  "id": "region",
-  "tab": "Region",
-  "brand": "Korean Mobile ID",
-  "category": "From identity to a private answer.",
-  "headline": "Your ID. Less revealed.",
-  "description": "Turn a Korean mobile ID into a proof of only what a service needs.",
-  "image": 6,
-  "imageAlt": "",
-  "actionTitle": "Prove your region",
-  "actionDescription": "Check eligibility for local benefits without sharing your street address.",
-  "credential": "Residence in the selected region",
-  "hides": "Your street address and identity",
-  "outcomeTitle": "Region condition verified.",
-  "outcomeDescription": "Your proof matches the selected region. Your full address stays private.",
-  "outcomeItems": [
-    {
-      "title": "Verified condition",
-      "description": "Residence in the selected region"
-    },
-    {
-      "title": "Private information",
-      "description": "Your street address and identity stay private."
-    }
-  ],
-  "note": "Experimental region predicate on Base Sepolia. The selected region is public. Credential issuer authentication is not circuit-enforced.",
-  "experimental": true
 }
 ];
-
-export const REGIONS = [
-  { label: 'Seoul', value: '서울특별시' }, { label: 'Gyeonggi', value: '경기도' },
-  { label: 'Busan', value: '부산광역시' }, { label: 'Incheon', value: '인천광역시' },
-  { label: 'Daegu', value: '대구광역시' }, { label: 'Daejeon', value: '대전광역시' },
-  { label: 'Gwangju', value: '광주광역시' }, { label: 'Ulsan', value: '울산광역시' },
-  { label: 'Sejong', value: '세종특별자치시' }, { label: 'Gangwon', value: '강원특별자치도' },
-  { label: 'North Chungcheong', value: '충청북도' }, { label: 'South Chungcheong', value: '충청남도' },
-  { label: 'North Jeolla', value: '전북특별자치도' }, { label: 'South Jeolla', value: '전라남도' },
-  { label: 'North Gyeongsang', value: '경상북도' }, { label: 'South Gyeongsang', value: '경상남도' },
-  { label: 'Jeju', value: '제주특별자치도' },
-] as const;
 
 export const demoById = (id: string) => DEMOS.find(demo => demo.id === id);

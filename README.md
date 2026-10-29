@@ -195,8 +195,7 @@ DEMO_API_KEY=your-api-key
 ### Dedicated circuit demos
 
 Each circuit has an English proof flow. GIWA, KYC, country and work email use
-distinct example dApp layouts. The three Korean mobile ID predicates share
-one educational screen, with an Ownership / Age check / Region selector. Markets opens by default. **All demos** retains the original explorer and its
+distinct example dApp layouts. Markets opens by default. **All demos** retains the original explorer and its
 request code. Switching tabs keeps form values and ongoing requests in memory;
 refreshing the page clears in-memory proof sessions.
 
@@ -208,15 +207,11 @@ Markets shows the received proof's byte count, abbreviated bytes and public-inpu
 | KYC | Common: Coinbase KYC DeFi interface | `/?tab=kyc` | `coinbase_attestation` |
 | Country | Borderless: country blocklist exclusion | `/?tab=country` | `coinbase_country_attestation` |
 | Work email | zk blind: anonymous workplace community | `/?tab=email` | `oidc_domain_attestation` |
-| Mobile ID | Korean ID: private ownership proof | `/?tab=ownership` | `mdl_kr_ownership` |
-| Age | Korean ID: age condition | `/?tab=age` | `mdl_kr_age` |
-| Region | Korean ID: region condition | `/?tab=region` | `mdl_kr_region` |
 | All demos | Original circuit explorer | `/?tab=all` | All circuits |
 
 The dedicated screens follow the local Hallmark redesign guidance recorded in
 `DESIGN.md`. They support system, light and dark themes, keyboard tab navigation,
-and mobile layouts. All demos keeps its existing dark design. Region labels are
-English; Korean region names remain the protocol values sent to the mobile app.
+and mobile layouts. All demos keeps its existing dark design.
 
 For a local preview that uses the deployed relay, set this in `.env.local`:
 
@@ -242,9 +237,8 @@ Gotgan uses SDK 0.3.3 to bind a `Deposit` action to the connected operational ac
 
 
 Country proofs must match the entire inclusion/exclusion policy. Email proofs
-must match the domain and provider. Mobile ID proofs match anonymous disclosure
-settings, age threshold and year, or the selected region. Experimental circuit
-limitations remain available in each page's About section.
+must match the domain and provider. Experimental circuit limitations remain
+available in each page's About section.
 
 Recording requires a ZKProofport mobile build with GIWA support and a wallet
 with a matching test attestation. This models the Upbit KYC → GIWA EAS flow using

@@ -73,7 +73,7 @@ describe('every demo card sends its own scope, the same one each time', () => {
   const cards = DEMOS.filter(demo => demo.id !== 'giwa' && demo.id !== 'ssiat');
   it.each(cards.map(demo => demo.id))('%s', async id => {
     const demo = demoById(id)!;
-    await render(<CircuitDemo demo={demo} onSelect={() => {}} />);
+    await render(<CircuitDemo demo={demo} />);
     for (let i = 0; i < 2; i++) {
       await act(async () => { host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
     }
@@ -99,17 +99,6 @@ describe('every panel of the live section sends its own scope', () => {
   ] as const)('%s', async (panel, circuit) => {
     await render(<LandingPage />);
     await press(panel);
-    expect(sent()).toEqual([{ circuit, scope: LIVE_SECTION_SCOPES[circuit] }]);
-  });
-
-  it.each([
-    ['Ownership', CIRCUIT_IDS.MDL_KR_OWNERSHIP],
-    ['Age', CIRCUIT_IDS.MDL_KR_AGE],
-    ['Region', CIRCUIT_IDS.MDL_KR_REGION],
-  ] as const)('Korea Mobile ID, %s', async (variant, circuit) => {
-    await render(<LandingPage />);
-    await press('mdl', variant);
-    await press('mdl', 'Request Proof');
     expect(sent()).toEqual([{ circuit, scope: LIVE_SECTION_SCOPES[circuit] }]);
   });
 });

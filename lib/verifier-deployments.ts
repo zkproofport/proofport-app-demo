@@ -35,15 +35,6 @@ export const VERIFIER_DEPLOYMENTS: Record<string, Record<number, { record: strin
     8453: { record: 'broadcast/DeployOidcDomainAttestation.s.sol/8453/run-latest.json' },
     84532: { record: 'deployments/84532/OidcDomainAttestation.json' },
   },
-  [CIRCUIT_IDS.MDL_KR_OWNERSHIP]: {
-    84532: { record: 'deployments/84532/MdlKrOwnership.json' },
-  },
-  [CIRCUIT_IDS.MDL_KR_AGE]: {
-    84532: { record: 'deployments/84532/MdlKrAge.json' },
-  },
-  [CIRCUIT_IDS.MDL_KR_REGION]: {
-    84532: { record: 'deployments/84532/MdlKrRegion.json' },
-  },
 };
 
 const own = (table: object, key: PropertyKey) => Object.prototype.hasOwnProperty.call(table, key);

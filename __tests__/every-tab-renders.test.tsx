@@ -9,9 +9,9 @@ import { DEMOS } from '../lib/demo-catalog';
 /**
  * Open every tab, for real.
  *
- * Twice in one day a new tab crashed or showed the Korean mobile ID screen —
+ * Twice in one day a new tab crashed or showed another demo's screen —
  * once because the screen chooser ended in an unconditional return, once
- * because a wording lookup that belongs inside the Korean ID branch sat above
+ * because a wording lookup that belonged inside one demo's branch sat above
  * every branch and threw for the new tab. Both were invisible to tests that
  * read source text. This renders each tab and reads what comes out.
  */
@@ -29,7 +29,7 @@ describe('every tab renders its own screen', () => {
       const html = renderToStaticMarkup(
         dedicated
           ? <dedicated.Screen />
-          : <DemoExperience demo={demo} options={DEFAULT_OPTIONS} panel={<p>panel</p>} onSelect={() => {}} verified={false} />,
+          : <DemoExperience demo={demo} options={DEFAULT_OPTIONS} panel={<p>panel</p>} verified={false} />,
       );
       expect(html).toContain(demo.brand);
       expect(html).toContain(SCREEN_MARKERS[demo.id] ?? 'panel');
@@ -53,7 +53,7 @@ describe('every tab renders its own screen', () => {
   it('says which demo has no screen rather than showing another one', () => {
     const invented = { ...DEMOS[0], id: 'not-a-demo' as never, brand: 'Nobody' };
     expect(() => renderToStaticMarkup(
-      <DemoExperience demo={invented} options={DEFAULT_OPTIONS} panel={<p>panel</p>} onSelect={() => {}} verified={false} />,
+      <DemoExperience demo={invented} options={DEFAULT_OPTIONS} panel={<p>panel</p>} verified={false} />,
     )).toThrow(/No demo screen for 'not-a-demo'/);
   });
 });

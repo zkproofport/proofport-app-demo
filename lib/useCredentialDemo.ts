@@ -63,7 +63,6 @@ export function useCredentialDemo(demo: DemoDefinition) {
       const inputs = buildDemoInputs(demo, snapshot, scope);
       sdkRef.current?.disconnect();
       sdk = createSDK(); sdkRef.current = sdk;
-      const year = new Date().getFullYear();
       const pending = await deadline(sdk.createRelayRequest(demo.circuit, inputs, {
         dappName: demo.brand,
         dappIcon: 'https://demo.zkproofport.app/icon.png',
@@ -80,7 +79,7 @@ export function useCredentialDemo(demo: DemoDefinition) {
       if (current !== attempt.current) return;
       const outcome = settleRelayResult(result);
       if (outcome.kind === 'proof') {
-        setProof(prepareDemoProof(outcome.result, { demo, requestId: pending.requestId, scope, options: snapshot, year }));
+        setProof(prepareDemoProof(outcome.result, { demo, requestId: pending.requestId, scope, options: snapshot }));
         setPhase('received');
       } else if (outcome.kind === 'error') {
         setError(outcome.message); setErrorCode(outcome.errorCode ?? ''); setPhase('error');

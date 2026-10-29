@@ -14,13 +14,11 @@ Retain Geist, Phosphor, native CSS, the proof hooks and the original All demos.
   Requests use exclusion mode, not inclusion. No claim of legal sanctions coverage.
 - zk blind: topic sidebar, illustrative anonymous discussions and domain proof.
   No affiliation with Blind. No fabricated user counts or real posts.
-- Korean ID: one explanatory screen with Ownership, Age check and Region choices.
-  Every underlying circuit keeps its own request state and direct query URL.
 - One persistent demo selector, edge-aligned service mastheads, simple footer.
 - Display 52–112px desktop / 43–68px mobile; body 18–22px, form labels and helper
   text 16px. Readability takes priority over putting all content above the fold.
 - Named theme tokens: courtyard greens, DeFi blue, blocklist rust, workplace
-  charcoal, identity indigo. Light, dark and system modes are supported.
+  charcoal. Light, dark and system modes are supported.
 - Restrained press and hover feedback, immediate focus rings, reduced motion.
 
 ## Assets

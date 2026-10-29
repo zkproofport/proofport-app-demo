@@ -122,8 +122,8 @@ describe('every verification call passes the request', () => {
   it('app/page.tsx records the request id of every card it creates a relay request for', () => {
     const source = readFileSync('app/page.tsx', 'utf8');
     const created = source.match(/sdk\.createRelayRequest\(/g) ?? [];
-    const recorded = source.match(/madeRequestIdsRef\.current\.(kyc|country|email|mdl|giwa) = result\.requestId;/g) ?? [];
-    expect(created.length).toBe(5);
+    const recorded = source.match(/madeRequestIdsRef\.current\.(kyc|country|email|giwa) = result\.requestId;/g) ?? [];
+    expect(created.length).toBe(4);
     expect(new Set(recorded).size).toBe(created.length);
   });
 });

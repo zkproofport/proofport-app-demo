@@ -7,14 +7,12 @@ import { depositAction, giwaResult } from './fixtures/giwa';
 
 const requestId = 'request-for-this-tab';
 const scope = 'unique-example-session';
-const year = 2026;
 const field = (value: number) => `0x${value.toString(16).padStart(64, '0')}`;
-const ids: DemoId[] = ['kyc', 'country', 'email', 'ownership', 'age', 'region'];
+const ids: DemoId[] = ['kyc', 'country', 'email'];
 
 /** Per demo: how many public inputs, and where `scope` starts. Keyed, so a demo with no row is an error. */
 const LAYOUT: Partial<Record<DemoId, { count: number; scopeAt: number }>> = {
   kyc: { count: 128, scopeAt: 64 }, country: { count: 150, scopeAt: 86 }, email: { count: 214, scopeAt: 83 },
-  ownership: { count: 97, scopeAt: 0 }, age: { count: 66, scopeAt: 0 }, region: { count: 96, scopeAt: 0 },
 };
 
 // Public-input fixtures test the dApp's requested conditions. They deliberately
@@ -39,16 +37,11 @@ function fixture(id: DemoId, options: DemoOptions = DEFAULT_OPTIONS) {
     put(18, domain); publicInputs[82] = field(domain.length);
     publicInputs[147] = field(options.provider === 'microsoft' ? 1 : 0);
   }
-  if (id === 'age') { publicInputs[64] = field(Number(options.age)); publicInputs[65] = field(year); }
-  if (id === 'region') {
-    const region = new Uint8Array(64); region.set(toUtf8Bytes(options.region));
-    put(64, getBytes(keccak256(region)));
-  }
   const response: RelayProofResult = {
     requestId, circuit: demo.circuit, status: 'completed', proof: '0x1234', publicInputs,
     chainId: 84532, verifierAddress: DEMO_VERIFIERS[demo.circuit][84532],
   };
-  return { response, context: { demo, requestId, scope, options: { ...options }, year } };
+  return { response, context: { demo, requestId, scope, options: { ...options } } };
 }
 
 describe('dedicated circuit coverage', () => {
@@ -72,7 +65,7 @@ describe('Ssiat goes through its own claim policy, never the generic one', () =>
   it('refuses to accept a Ssiat proof through prepareDemoProof, which does not know the claim action', () => {
     const demo = demoById('ssiat')!;
     const response: RelayProofResult = { requestId, circuit: demo.circuit, status: 'completed', proof: '0x1234', publicInputs: Array(160).fill(field(0)), chainId: 91342, verifierAddress: DEMO_VERIFIERS[demo.circuit][91342] };
-    expect(() => prepareDemoProof(response, { demo, requestId, scope, options: DEFAULT_OPTIONS, year })).toThrow(/prepareSsiatClaimProof/);
+    expect(() => prepareDemoProof(response, { demo, requestId, scope, options: DEFAULT_OPTIONS })).toThrow(/prepareSsiatClaimProof/);
   });
   it('allowlists only the GIWA Sepolia Dojang Playground verifier', () => {
     expect(DEMO_VERIFIERS.dojang_playground).toEqual({ 91342: '0xad6c9bfa60f3ee618dee9dc2027a69c57f2ad816' });
@@ -80,7 +73,7 @@ describe('Ssiat goes through its own claim policy, never the generic one', () =>
 });
 
 describe('GIWA generic identity policy uses the current SDK layout', () => {
-  const context = { demo: demoById('giwa')!, requestId: 'current-request', scope, options: DEFAULT_OPTIONS, year };
+  const context = { demo: demoById('giwa')!, requestId: 'current-request', scope, options: DEFAULT_OPTIONS };
   it('accepts identity membership with scope at byte 128', () => {
     expect(prepareDemoProof(giwaResult(scope), context).publicInputs).toHaveLength(192);
   });
@@ -96,15 +89,18 @@ describe('requested inputs', () => {
   it('normalizes the domain and retains provider choice', () => {
     expect(buildDemoInputs(demoById('email')!, { ...DEFAULT_OPTIONS, domain: ' Example.COM ', provider: 'microsoft' }, scope)).toEqual({ scope, domain: 'example.com', provider: 'microsoft' });
   });
-  it('requests no personal disclosure for ownership', () => {
-    expect(buildDemoInputs(demoById('ownership')!, DEFAULT_OPTIONS, scope)).toEqual({ scope, discloseFlags: 0 });
+  it.each(['kyc', 'giwa', 'ssiat'] as DemoId[])('requests only the scope for %s', id => {
+    expect(buildDemoInputs(demoById(id)!, DEFAULT_OPTIONS, scope)).toEqual({ scope });
+  });
+  it('refuses a demo it has no inputs for, naming it', () => {
+    const invented = { ...demoById('kyc')!, id: 'age' as DemoId };
+    expect(() => buildDemoInputs(invented, DEFAULT_OPTIONS, scope)).toThrow("No inputs are defined for demo 'age'.");
   });
   it.each([
     ['country', { countries: '' }], ['country', { countries: 'USA' }], ['country', { countries: 'US,KR,' }],
     ['country', { countries: 'US,KR,JP,GB,DE,FR,IT,CA,AU,ES,NZ' }],
     ['email', { domain: 'person@example.com' }], ['email', { domain: 'https://example.com' }],
-    ['email', { domain: '-bad.example' }], ['age', { age: '0' }], ['age', { age: '19.5' }],
-    ['age', { age: '151' }], ['region', { region: 'not-a-region' }],
+    ['email', { domain: '-bad.example' }], ['email', { provider: 'apple' as DemoOptions['provider'] }],
   ] as [DemoId, Partial<DemoOptions>][])('rejects invalid %s requirements: %j', (id, patch) => {
     expect(() => buildDemoInputs(demoById(id)!, { ...DEFAULT_OPTIONS, ...patch }, scope)).toThrow();
   });
@@ -168,21 +164,9 @@ describe('predicate substitution', () => {
     const { response, context } = fixture('email'); response.publicInputs![82] = field(65);
     expect(() => prepareDemoProof(response, context)).toThrow('invalid length');
   });
-  it('does not accept disclosed personal fields for the anonymous pass', () => {
-    const { response, context } = fixture('ownership'); response.publicInputs![64] = field(1);
-    expect(() => prepareDemoProof(response, context)).toThrow('anonymous');
-  });
-  it('binds both threshold and current year', () => {
-    const { response, context } = fixture('age');
-    expect(() => prepareDemoProof(response, { ...context, options: { ...DEFAULT_OPTIONS, age: '21' } })).toThrow('threshold and year');
-    expect(() => prepareDemoProof(response, { ...context, year: year + 1 })).toThrow('threshold and year');
-  });
-  it('matches the padded UTF-8 region hash, not just any residency proof', () => {
-    const { response, context } = fixture('region');
-    expect(() => prepareDemoProof(response, { ...context, options: { ...DEFAULT_OPTIONS, region: '부산광역시' } })).toThrow('region');
-  });
   it('rejects a field masquerading as a byte', () => {
-    const { response, context } = fixture('region'); response.publicInputs![0] = field(256);
+    // Byte 64 is the first scope byte of a Coinbase KYC proof.
+    const { response, context } = fixture('kyc'); response.publicInputs![64] = field(256);
     expect(() => prepareDemoProof(response, context)).toThrow('invalid byte');
   });
 });

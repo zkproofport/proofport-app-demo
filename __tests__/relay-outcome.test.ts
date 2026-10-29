@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ProofportSDK, RELAY_TERMINAL_STATUSES, type RelayProofResult } from '@zkproofport-app/sdk';
+import { DEFAULT_RELAY_WAIT_MS, ProofportSDK, RELAY_TERMINAL_STATUSES, type RelayProofResult } from '@zkproofport-app/sdk';
 import {
   DECLINED_MESSAGE, DEMO_PROOF_WAIT_MS, EXPIRED_MESSAGE, describeFailure, isPendingRelayStatus, isWaitTimeout, settleRelayResult,
 } from '../lib/relay-outcome';
@@ -110,6 +110,10 @@ describe('the wait outlasts the relay', () => {
   it('waits longer than the relay deadline, so the relay answers expired first', () => {
     expect(DEMO_PROOF_WAIT_MS).toBeGreaterThan(RELAY_DEADLINE_MS);
     expect(DEMO_PROOF_WAIT_MS).toBe(600_000);
+  });
+
+  it('is the SDK\'s own default wait, so the two cannot drift apart', () => {
+    expect(DEMO_PROOF_WAIT_MS).toBe(DEFAULT_RELAY_WAIT_MS);
   });
 });
 

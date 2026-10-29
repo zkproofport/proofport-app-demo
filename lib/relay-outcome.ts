@@ -1,4 +1,4 @@
-import { RELAY_TERMINAL_STATUSES, isTerminalRelayStatus, type RelayProofResult, type RelayProofStatus, type RelayTerminalStatus } from '@zkproofport-app/sdk';
+import { DEFAULT_RELAY_WAIT_MS, RELAY_TERMINAL_STATUSES, isTerminalRelayStatus, type RelayProofResult, type RelayProofStatus, type RelayTerminalStatus } from '@zkproofport-app/sdk';
 
 /**
  * How long the demo waits for a relay answer.
@@ -7,13 +7,14 @@ import { RELAY_TERMINAL_STATUSES, isTerminalRelayStatus, type RelayProofResult, 
  * result, delivered over the socket and to polling. Waiting longer than that is
  * what lets the relay's answer arrive first; the SDK's own timeout (this value)
  * is then only the fallback for a relay or socket that has stopped answering.
- * 600 000 ms is also the SDK's default (SDK 0.5.0 and later; it was 300 000
- * before, while the relay's deadline was 280 s).
+ * The value is the SDK's own default wait (600 000 ms), taken from the SDK so
+ * the two cannot drift apart; `__tests__/relay-outcome.test.ts` pins it above
+ * the relay's deadline.
  *
  * It used to be 180 000 at six call sites, so the demo gave up 100 s before the
  * relay would have told it what happened.
  */
-export const DEMO_PROOF_WAIT_MS = 600_000;
+export const DEMO_PROOF_WAIT_MS = DEFAULT_RELAY_WAIT_MS;
 
 /** What a finished relay request means for the page. */
 export type RelayOutcome =

@@ -7,10 +7,6 @@ import type {
   ProofportSDK as ProofportSDKType,
   RelayProofResult,
   ProofResponse,
-  CircuitType,
-  MdlKrOwnershipInputs,
-  MdlKrAgeInputs,
-  MdlKrRegionInputs,
 } from '@zkproofport-app/sdk';
 // A value, not a type — the SDK's circuit-id constants. Keeping it out of
 // the `import type` block above matters: TypeScript erases that block.
@@ -189,18 +185,18 @@ export default function LandingPage() {
  *
  * This union used to be typed out at every call site, and each dispatch on it
  * ended in a bare `else` — so a prefix nobody had handled yet silently became
- * the mDL card. Adding GIWA is what surfaced it.
+ * whichever card that `else` held. Adding GIWA is what surfaced it.
  */
-type DemoPrefix = 'kyc' | 'country' | 'email' | 'mdl' | 'giwa';
+type DemoPrefix = 'kyc' | 'country' | 'email' | 'giwa';
 
 /**
  * What the proof-request window says, per circuit.
  *
  * A TABLE, NOT A CHAIN OF `?:`. The chain this replaced ended in a bare else
- * holding the Korea Mobile ID wording, so asking for a GIWA proof opened a
- * window titled "🇰🇷 Korea Mobile ID" telling the person to prove their Korean
- * mobile ID. Nothing failed; it just said the wrong thing, and it kept saying
- * it until someone read the screen.
+ * holding another card's wording, so asking for a GIWA proof opened a window
+ * titled after that card and asking for its credential. Nothing failed; it
+ * just said the wrong thing, and it kept saying it until someone read the
+ * screen.
  *
  * `Record<DemoPrefix, …>` is the point: adding a circuit to DemoPrefix without
  * adding its wording here does not build. The failure moves from "a person
@@ -220,10 +216,6 @@ const MODAL_COPY: Record<DemoPrefix, {title: string; instruction: string}> = {
   email: {
     title: '📧 Email Domain',
     instruction: 'Scan the QR code with ZKProofport app to prove email domain affiliation.',
-  },
-  mdl: {
-    title: '🇰🇷 Korea Mobile ID',
-    instruction: 'Scan the QR code with ZKProofport app to prove your Korean mobile ID.',
   },
   giwa: {
     title: 'GIWA Account',
@@ -294,13 +286,6 @@ const emptyDemoState: DemoState = {
   /* ── GIWA KYC form ── */
   const [giwaState, setGiwaState] = useState<DemoState>({ ...emptyDemoState });
   const activeGiwaRequestIdRef = useRef<string | null>(null);
-
-  /* ── Korea Mobile ID (mDL) form ── */
-  const [mdlState, setMdlState] = useState<DemoState>({ ...emptyDemoState });
-  const activeMdlRequestIdRef = useRef<string | null>(null);
-  const [mdlVariant, setMdlVariant] = useState<'ownership' | 'age' | 'region'>('age');
-  const [mdlAgeThreshold, setMdlAgeThreshold] = useState('19');
-  const [mdlTargetRegion, setMdlTargetRegion] = useState('경기도');
 
   /* ── Proof modal ── */
   const [proofModalOpen, setProofModalOpen] = useState(false);
@@ -403,7 +388,7 @@ const emptyDemoState: DemoState = {
    * so an OIDC proof's request-bound nonce is checked against the request this
    * page made, including on the on-chain path, whose SDK never saw the request.
    */
-  const madeRequestIdsRef = useRef<Record<DemoPrefix, string | null>>({ kyc: null, country: null, email: null, mdl: null, giwa: null });
+  const madeRequestIdsRef = useRef<Record<DemoPrefix, string | null>>({ kyc: null, country: null, email: null, giwa: null });
 
   /* ── Show proof helpers ── */
   /** Clears the in-flight request id for one card. Same table reason as above. */
@@ -412,20 +397,18 @@ const emptyDemoState: DemoState = {
       kyc: activeKycRequestIdRef,
       country: activeCountryRequestIdRef,
       email: activeEmailRequestIdRef,
-      mdl: activeMdlRequestIdRef,
       giwa: activeGiwaRequestIdRef,
     };
     refs[prefix].current = null;
   }, []);
 
   const setDemoState = useCallback((prefix: DemoPrefix, updater: (prev: DemoState) => DemoState) => {
-    // A table, not an if/else ending in `else setMdlState`. Miss a prefix here
-    // and TypeScript says so; the old shape sent it to the mDL card instead.
+    // A table, not an if/else ending in a bare `else`. Miss a prefix here and
+    // TypeScript says so; the old shape sent it to the last card instead.
     const setters: Record<DemoPrefix, typeof setKycState> = {
       kyc: setKycState,
       country: setCountryState,
       email: setEmailState,
-      mdl: setMdlState,
       giwa: setGiwaState,
     };
     setters[prefix](updater);
@@ -697,107 +680,18 @@ const emptyDemoState: DemoState = {
     }
   }, [signerReady, emailDomain, emailProvider, getSDK, showProofResult, showProofFailed, applyRelayResult, applyWaitFailure, handleGenerateWallet]);
 
-  /* ── Korea Mobile ID (mDL) request ── */
-  const requestMdlProof = useCallback(async () => {
-    console.log('[requestMdlProof] called, variant=', mdlVariant, 'signerReady=', signerReady);
-    if (!signerReady) {
-      handleGenerateWallet();
-      return;
-    }
-
-    const circuit: CircuitType =
-      mdlVariant === 'ownership' ? CIRCUIT_IDS.MDL_KR_OWNERSHIP
-      : mdlVariant === 'age' ? CIRCUIT_IDS.MDL_KR_AGE
-      : CIRCUIT_IDS.MDL_KR_REGION;
-
-    let inputs: MdlKrOwnershipInputs | MdlKrAgeInputs | MdlKrRegionInputs;
-    let message: string;
-    if (mdlVariant === 'ownership') {
-      inputs = { scope: liveSectionScope(circuit), discloseFlags: 0 }; // anonymous ownership proof
-      message = 'Prove Korean mobile ID ownership';
-    } else if (mdlVariant === 'age') {
-      const ageThreshold = Number(mdlAgeThreshold);
-      if (!Number.isInteger(ageThreshold) || ageThreshold < 1 || ageThreshold > 150) {
-        showProofFailed('mdl', 'Age threshold must be an integer between 1 and 150.');
-        setProofModalPrefix('mdl');
-        setProofModalOpen(true);
-        proofModalOpenRef.current = true;
-        // No request was made, so no result panel: the failure shows on its own.
-        setMdlState((prev) => ({ ...prev, showResult: false, qrHtml: '', deepLink: '' }));
-        return;
-      }
-      inputs = { scope: liveSectionScope(circuit), ageThreshold };
-      message = `Prove you are ${ageThreshold}+ years old`;
-    } else {
-      const targetRegion = mdlTargetRegion.trim();
-      if (!targetRegion) {
-        showProofFailed('mdl', 'Target region is required (e.g., 경기도).');
-        setProofModalPrefix('mdl');
-        setProofModalOpen(true);
-        proofModalOpenRef.current = true;
-        // No request was made, so no result panel: the failure shows on its own.
-        setMdlState((prev) => ({ ...prev, showResult: false, qrHtml: '', deepLink: '' }));
-        return;
-      }
-      inputs = { scope: liveSectionScope(circuit), targetRegion };
-      message = `Prove residency in ${targetRegion}`;
-    }
-
-    setProofModalPrefix('mdl');
-    setProofModalOpen(true);
-    proofModalOpenRef.current = true;
-    setMdlState((prev) => ({
-      ...prev,
-      // A new request: nothing from the previous one (its QR included) stays on screen.
-      showResult: false,
-      qrHtml: '',
-      deepLink: '',
-      showReceived: false,
-      showWaiting: false,
-      showFailed: false,
-      showVerifyResult: false,
-    }));
-
-    try {
-      const sdk = getSDK();
-      const result = await sdk.createRelayRequest(circuit, inputs, {
-        dappName: 'ZKProofport Demo',
-        dappIcon: 'https://demo.zkproofport.app/icon.png',
-        message,
-        // No `returnScheme` — see the note on the KYC request above. A web
-        // page has no app to hand control back to; the SDK decides.
-      });
-      console.log('[requestMdlProof] relay request created, requestId=', result.requestId, 'deepLink=', result.deepLink);
-
-      activeMdlRequestIdRef.current = result.requestId;
-      madeRequestIdsRef.current.mdl = result.requestId;
-
-      const deepLink = result.deepLink;
-      await showProofResult(deepLink, 'mdl');
-      setMdlState((prev) => ({ ...prev, showResult: true, showWaiting: true }));
-
-      const finalResult = await sdk.waitForProof(result.requestId, { timeoutMs: DEMO_PROOF_WAIT_MS });
-      applyRelayResult('mdl', finalResult);
-    } catch (err) {
-      console.log('[requestMdlProof] error:', (err as Error).message, 'modalOpen=', proofModalOpenRef.current);
-      if (!proofModalOpenRef.current) return; // user closed modal, suppress
-      console.error('[mdl] proof request failed:', (err as Error).message);
-      applyWaitFailure('mdl', err);
-    }
-  }, [signerReady, mdlVariant, mdlAgeThreshold, mdlTargetRegion, getSDK, showProofResult, showProofFailed, applyRelayResult, applyWaitFailure, handleGenerateWallet]);
-
   /**
    * The state object behind one card. Was three separate ternary chains, each
-   * ending in `: mdlState` — so a prefix nobody had wired read the mDL card's
-   * proof. Exhaustive by type now.
+   * ending in the last card's state — so a prefix nobody had wired read that
+   * card's proof. Exhaustive by type now.
    */
   const stateOf = useCallback((prefix: DemoPrefix): DemoState => {
     const states: Record<DemoPrefix, DemoState> = {
       kyc: kycState, country: countryState, email: emailState,
-      mdl: mdlState, giwa: giwaState,
+      giwa: giwaState,
     };
     return states[prefix];
-  }, [kycState, countryState, emailState, mdlState, giwaState]);
+  }, [kycState, countryState, emailState, giwaState]);
 
   /* ── GIWA KYC request ── */
   /**
@@ -858,7 +752,7 @@ const emptyDemoState: DemoState = {
         }, 2000);
       });
     }
-  }, [kycState.proofData, countryState.proofData, emailState.proofData, mdlState.proofData, setDemoState]);
+  }, [kycState.proofData, countryState.proofData, emailState.proofData, setDemoState]);
 
   /* ── Verify proof ── */
   const handleVerifyProof = useCallback(async (prefix: DemoPrefix, type: 'onchain' | 'offchain') => {
@@ -923,7 +817,7 @@ const emptyDemoState: DemoState = {
     // added, so verifying a GIWA proof could read whatever proof this callback
     // was built with — and a stale proof verifies as someone else's answer
     // rather than failing.
-  }, [kycState.proofObject, countryState.proofObject, emailState.proofObject, mdlState.proofObject, giwaState.proofObject, getSDK, setDemoState, launchConfetti]);
+  }, [kycState.proofObject, countryState.proofObject, emailState.proofObject, giwaState.proofObject, getSDK, setDemoState, launchConfetti]);
 
   /* ── Smooth scroll ── */
   const scrollTo = useCallback((id: string) => {
@@ -961,7 +855,7 @@ const emptyDemoState: DemoState = {
       border: ending.border,
     };
     const retry: Record<DemoPrefix, () => void> = {
-      kyc: requestKycProof, country: requestCountryProof, email: requestEmailProof, mdl: requestMdlProof, giwa: requestGiwaProof,
+      kyc: requestKycProof, country: requestCountryProof, email: requestEmailProof, giwa: requestGiwaProof,
     };
 
     const receivedStyle: React.CSSProperties = {
@@ -1727,194 +1621,6 @@ const emptyDemoState: DemoState = {
 
             </div>
 
-            {/* ── Korea Mobile ID (mDL) Demo Card ── */}
-            <div
-              id="demo-mdl"
-              onMouseEnter={() => setHoveredDemoCard('mdl')}
-              onMouseLeave={() => setHoveredDemoCard(null)}
-              style={{
-                flex: '2 1 0',
-                background: hoveredDemoCard === 'mdl' ? C.bgCardHover : C.bgCard,
-                border: `1.5px solid ${C.goldLine}`,
-                borderRadius: 0,
-                padding: 36,
-                transition: 'all 0.3s',
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div style={{ fontSize: 36, filter: 'drop-shadow(0 4px 12px rgba(214, 177, 92, 0.3))' }}>
-                  {'🇰🇷'}
-                </div>
-                {/* The Korea Mobile ID circuits are `planned` in the SDK's own
-                    support table, not `supported`: their input shape and
-                    public-input layout can still change without a major
-                    version. Saying LIVE here promised a stability the circuits
-                    do not have yet. */}
-                <span style={{
-                  fontFamily: FONT.mono, fontSize: '1rem', fontWeight: 700, letterSpacing: '0.08em',
-                  padding: '4px 10px', borderRadius: 4,
-                  background: 'rgba(251,191,36,0.15)', color: '#fbbf24',
-                }}>EXPERIMENTAL</span>
-              </div>
-              <h3 style={{ fontFamily: FONT.serif, fontSize: '2rem', fontWeight: 400, marginBottom: 10, color: C.cream }}>Korea Mobile ID</h3>
-              <p style={{ color: C.muted, marginBottom: 20, fontFamily: FONT.mono, fontSize: '1.2rem', lineHeight: 1.6, flex: 1 }}>
-                Prove license ownership, age, or region from a Korean mobile ID — the license data never leaves the device.
-              </p>
-              <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: '1.1rem', fontFamily: FONT.mono }}>
-                <div style={{ flex: 1 }}>
-                  <strong style={{ color: C.gold2, display: 'block', marginBottom: 4, fontSize: '1rem', letterSpacing: '0.05em' }}>PROVE</strong>
-                  <span style={{ color: C.muted }}>
-                    {mdlVariant === 'ownership' ? 'Valid license' : mdlVariant === 'age' ? 'Minimum age' : 'Region residency'}
-                  </span>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <strong style={{ color: C.gold2, display: 'block', marginBottom: 4, fontSize: '1rem', letterSpacing: '0.05em' }}>HIDE</strong>
-                  <span style={{ color: C.muted }}>
-                    {mdlVariant === 'ownership' ? 'Identity details' : mdlVariant === 'age' ? 'Birth date' : 'Full address'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Predicate selector */}
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', marginBottom: 6, fontSize: '1.1rem', fontWeight: 500, fontFamily: FONT.mono, color: C.ink }}>
-                  Predicate
-                </label>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {([
-                    { key: 'ownership', label: 'Ownership' },
-                    { key: 'age', label: 'Age' },
-                    { key: 'region', label: 'Region' },
-                  ] as const).map((opt) => (
-                    <button
-                      key={opt.key}
-                      onClick={() => setMdlVariant(opt.key)}
-                      style={{
-                        flex: '1 1 0',
-                        padding: '6px 8px',
-                        background: mdlVariant === opt.key ? C.gold : 'rgba(255, 255, 255, 0.05)',
-                        border: `1px solid ${mdlVariant === opt.key ? C.gold : 'rgba(255, 255, 255, 0.1)'}`,
-                        borderRadius: 6,
-                        color: mdlVariant === opt.key ? '#1a222c' : C.muted,
-                        fontSize: '0.9rem',
-                        fontFamily: FONT.mono,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Per-predicate input */}
-              {mdlVariant === 'age' && (
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', marginBottom: 6, fontSize: '1.1rem', fontWeight: 500, fontFamily: FONT.mono, color: C.ink }}>
-                    Minimum Age
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={150}
-                    value={mdlAgeThreshold}
-                    onChange={(e) => setMdlAgeThreshold(e.target.value)}
-                    placeholder="19"
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      borderRadius: 8,
-                      color: C.white,
-                      fontSize: '1.2rem',
-                      fontFamily: FONT.mono,
-                      transition: 'all 0.2s',
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = C.gold;
-                      e.target.style.background = 'rgba(255, 255, 255, 0.08)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                      e.target.style.background = 'rgba(255, 255, 255, 0.05)';
-                    }}
-                  />
-                </div>
-              )}
-              {mdlVariant === 'region' && (
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', marginBottom: 6, fontSize: '1.1rem', fontWeight: 500, fontFamily: FONT.mono, color: C.ink }}>
-                    Target Region (si/do)
-                  </label>
-                  <input
-                    type="text"
-                    value={mdlTargetRegion}
-                    onChange={(e) => setMdlTargetRegion(e.target.value)}
-                    placeholder="경기도"
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      borderRadius: 8,
-                      color: C.white,
-                      fontSize: '1.2rem',
-                      fontFamily: FONT.mono,
-                      transition: 'all 0.2s',
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = C.gold;
-                      e.target.style.background = 'rgba(255, 255, 255, 0.08)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                      e.target.style.background = 'rgba(255, 255, 255, 0.05)';
-                    }}
-                  />
-                </div>
-              )}
-              {mdlVariant === 'ownership' && (
-                <div style={{ marginBottom: 16, fontFamily: FONT.mono, fontSize: '1rem', color: C.muted }}>
-                  Anonymous mode — proves a valid license without disclosing any attribute.
-                </div>
-              )}
-
-              <button
-                onClick={requestMdlProof}
-                onMouseEnter={() => setHoveredBtn('mdl-request')}
-                onMouseLeave={() => setHoveredBtn(null)}
-                style={{
-                  width: '100%',
-                  padding: '12px 20px',
-                  fontSize: '1.2rem',
-                  fontWeight: 700,
-                  fontFamily: FONT.mono,
-                  border: 'none',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  transition: 'all 0.25s',
-                  background: `linear-gradient(180deg, ${C.gold}, ${C.gold2})`,
-                  color: '#1a222c',
-                  boxShadow: hoveredBtn === 'mdl-request'
-                    ? '0 10px 28px rgba(214, 177, 92, 0.5), inset 0 1px 0 rgba(255,255,255,.8)'
-                    : '0 6px 18px rgba(214, 177, 92, 0.3), inset 0 1px 0 rgba(255,255,255,.6)',
-                  transform: hoveredBtn === 'mdl-request' ? 'translateY(-1px)' : 'none',
-                }}
-              >
-                Request Proof
-              </button>
-
-            </div>
-
             {/* ── GIWA KYC Demo Card ── */}
             {/* GIWA is `planned` in the SDK's support table, and it always talks
                 to GIWA Sepolia whatever the build environment — the app pins the
@@ -1939,9 +1645,7 @@ const emptyDemoState: DemoState = {
                     dark, so it is inverted rather than re-drawn.
 
                     The mark, not a flag: GIWA is a chain and its attestations
-                    are open to anyone on it. The one card on this page that DOES
-                    carry 🇰🇷 is Korea Mobile ID, where the credential itself is
-                    issued by one country. */}
+                    are open to anyone on it. */}
                 <img
                   src="/giwa-logo.jpg"
                   alt="GIWA"

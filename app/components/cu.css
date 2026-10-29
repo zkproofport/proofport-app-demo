@@ -65,6 +65,7 @@
   flex-shrink: 0;
 }
 .cu-header {
+  position: relative;
   max-width: 1360px;
   margin: auto;
   padding: 26px 48px;
@@ -121,7 +122,7 @@
   position: absolute;
   left: 0;
   right: 0;
-  margin-top: 102px;
+  bottom: 0;
   height: 1px;
   background: var(--cu-line);
   pointer-events: none;
@@ -219,7 +220,7 @@
   color: #ffffff80;
   z-index: 0;
 }
-.cu-cass-product {
+.cu-beer-product {
   position: absolute;
   height: 610px;
   width: auto;
@@ -746,7 +747,7 @@
   align-items: center;
   gap: 8px;
 }
-.cu-receipt-top > button {
+.cu-receipt-tools > button {
   display: grid;
   place-items: center;
   border: 0;
@@ -984,7 +985,7 @@
   .cu-stage-copy h1 {
     font-size: 62px;
   }
-  .cu-cass-product {
+  .cu-beer-product {
     height: 640px;
     right: -28px;
   }
@@ -1032,7 +1033,7 @@
   .cu-stage-copy h1 {
     font-size: 48px;
   }
-  .cu-cass-product {
+  .cu-beer-product {
     right: -95px;
     top: 89px;
     height: 555px;
@@ -1071,9 +1072,6 @@
 @media (max-width: 780px) {
   .cu-header {
     padding: 21px 22px;
-  }
-  .cu-header:after {
-    margin-top: 92px;
   }
   .cu-brand > img {
     width: 68px;
@@ -1788,7 +1786,7 @@
   white-space: nowrap;
 }
 .cu-primary > svg,
-.cu-receipt-top > button,
+.cu-receipt-tools > button,
 .cu-minimal-disclosure svg {
   flex-shrink: 0;
 }
@@ -1895,7 +1893,7 @@
   .cu-checkout-panel {
     padding-inline: 30px;
   }
-  .cu-cass-product {
+  .cu-beer-product {
     right: 0;
     top: 70px;
   }
@@ -1922,7 +1920,7 @@
   .cu-stage-copy {
     right: 24px;
   }
-  .cu-cass-product {
+  .cu-beer-product {
     top: 155px;
     right: -45px;
     height: 470px;
@@ -1969,7 +1967,7 @@
   .cu-product-stage {
     min-height: 600px;
   }
-  .cu-cass-product {
+  .cu-beer-product {
     height: 430px;
     top: 175px;
     right: -65px;
@@ -2033,4 +2031,75 @@
 .demo-suite[data-active='cu'] .theme-control select {
   font-size: 18px;
   max-width: 110px;
+}
+
+/* Page-scoped language controls stay available inside the receipt dialog. */
+.cu-language {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--cu-line, #dfd7e4);
+  border-radius: 999px;
+  background: var(--cu-paper, #fff);
+  letter-spacing: 0;
+}
+.cu-language > button {
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--cu-muted, #756780);
+  background: transparent;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.cu-language > button[aria-pressed='true'] {
+  color: #fff;
+  background: #713c97;
+}
+.cu-language > button:focus-visible {
+  outline: 3px solid #a8ce55;
+  outline-offset: 2px;
+}
+.cu-receipt-tools {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+.cu-receipt-top {
+  flex-wrap: wrap;
+}
+.cu-demo[lang='en'] .cu-stage-copy h1 {
+  font-size: clamp(38px, 4vw, 52px);
+  line-height: 1.2;
+}
+.cu-demo[lang='en'] .cu-age-seal {
+  font-size: 12px;
+}
+.cu-demo[lang='en'] .cu-receipt-heading h2 {
+  line-height: 1.2;
+}
+@media (max-width: 1200px) {
+  .cu-header-right > span {
+    display: none;
+  }
+}
+@media (max-width: 780px) {
+  .cu-header {
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+  .cu-header-right {
+    flex: 1;
+    justify-content: space-between;
+    gap: 20px;
+  }
+  .cu-receipt-tools {
+    width: 100%;
+    justify-content: space-between;
+  }
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { translateCu, type CuLanguage } from './cu-i18n';
 import { toDataURL } from 'qrcode';
 import { NETWORKS } from './kproof/circuits';
 import { buildInputs } from './kproof/requests';
@@ -133,7 +134,7 @@ export function useCuProof() {
     }
   }, []);
 
-  const request = useCallback(async (method: VerificationMethod = 'onchain') => {
+  const request = useCallback(async (method: VerificationMethod = 'onchain', language: CuLanguage = 'ko') => {
     if (busy.current) return;
     cleanup.current();
     const generation = ++run.current;
@@ -182,7 +183,7 @@ export function useCuProof() {
       const created = await relay.createRequest(
         'mdl_kr_age',
         inputs,
-        method === 'onchain' ? 'CU 성인인증 및 dKRW 결제' : 'CU 성인인증'
+        translateCu(language, method === 'onchain' ? 'CU 성인인증 및 dKRW 결제' : 'CU 성인인증')
       );
       if (!current()) return;
       const link = new URL(created.deepLink);

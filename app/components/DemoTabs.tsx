@@ -58,7 +58,8 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
   useEffect(() => {
     const dedicated = tab === 'all' || tab === 'cu' ? undefined : DEDICATED_SCREENS[tab];
     const title = tab === 'cu' ? 'CU × KProof — 성인인증 및 결제' : tab === 'all' ? 'All demos | ZKProofport' : dedicated ? dedicated.title : `${DEMOS.find(demo => demo.id === tab)?.brand} | ZKProofport demos`;
-    const syncTitle = () => { if (document.title !== title) document.title = title; };
+    // CU owns its localized title; other demos use the shared title.
+    const syncTitle = () => { if (tab !== 'cu' && document.title !== title) document.title = title; };
     syncTitle();
     const frame = requestAnimationFrame(syncTitle);
     const icon = document.createElement('link');

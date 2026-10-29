@@ -528,8 +528,12 @@ If GitHub Actions is unavailable, the parent workspace's `scripts/deploy-cloudru
 ## CU x KProof checkout
 
 Open `/?tab=cu` for the CU checkout using the KProof staging app. The page uses
-local CU vector artwork, Cass Fresh product photography and Pretendard typography;
+local CU vector artwork, Budweiser product photography and Pretendard typography;
 asset provenance and font licensing are in `public/brand/README.md`.
+
+Use the 한국어 / English switch in the page header or proof receipt to change
+languages without resetting the order or proof. The selection is saved locally
+and applies only to CU. Copy is maintained in `lib/cu-i18n.ts`.
 
 1. Select a quantity and either on-chain authentication with dKRW checkout or
    off-chain authentication. Each item is displayed as **3,000 dKRW**.

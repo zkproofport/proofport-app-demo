@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CuDemo from '../app/components/CuDemo';
+import { CU_LANGUAGE_STORAGE_KEY } from '../lib/cu-i18n';
 import { CU_RECEIPT_DELAY_MS, CU_VERIFY_MS, CU_WAIT_MS } from '../lib/useCuProof';
 import { scopeHash, verifyAnswer } from '../lib/kproof/verify';
 import type { RequestStatus } from '../lib/kproof/relay';
@@ -54,6 +55,7 @@ const modal = () => host.querySelector('dialog')!;
 const status = () => modal().querySelector('[role="status"]')!.textContent;
 
 beforeEach(async () => {
+  localStorage.clear();
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-10-29T03:00:00Z'));
   vi.resetAllMocks();
@@ -382,4 +384,103 @@ describe('CU optional proof verification', () => {
     await click('오프체인 검증하기');
     expect(modal().querySelector('[aria-label="결제 영수증"]')!.textContent).toBe(receipt);
   });
+});
+
+describe('CU language selection', () => {
+  async function language(value: 'ko' | 'en') {
+    const surface = modal()?.hasAttribute('open') ? modal() : host;
+    await act(async () =>
+      surface.querySelector<HTMLButtonElement>(`.cu-language button[lang="${value}"]`)!.click()
+    );
+  }
+  function expectEnglish(surface: Element = host) {
+    const copy = surface.cloneNode(true) as Element;
+    copy.querySelectorAll('.cu-language, pre').forEach((node) => node.remove());
+    expect(copy.textContent).not.toMatch(/[가-힣]/);
+  }
+  it('uses Budweiser and persists the page language across mounts', async () => {
+    expect(host.querySelector('main')!.lang).toBe('ko');
+    expect(host.querySelector('.cu-beer-product')?.getAttribute('src')).toBe('/demo-assets/cu/budweiser.png');
+    expect(host.textContent).toContain('버드와이저');
+    await language('en');
+    expect(host.textContent).toContain('Budweiser');
+    expectEnglish();
+    expect(localStorage.getItem(CU_LANGUAGE_STORAGE_KEY)).toBe('en');
+    await act(async () => root.render(null));
+    await act(async () => root.render(<CuDemo />));
+    expect(host.querySelector('main')!.lang).toBe('en');
+    expectEnglish();
+    await language('ko');
+    expect(host.textContent).toContain('성인인증 및 결제 시작');
+  });
+  it('retains the order and pending proof when switching languages, including inside the receipt', async () => {
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="맥주 수량 늘리기"]')!.click());
+    await click('성인인증 및 결제 시작');
+    await language('en');
+    expectEnglish();
+    const result = answer(external.create.mock.calls[0][1].scope);
+    await act(async () => update(result));
+    await act(async () => vi.advanceTimersByTime(1_000));
+    await language('ko');
+    expect(modal()).toBeNull();
+    await language('en');
+    await act(async () => vi.advanceTimersByTime(1_000));
+    expectEnglish();
+    expect(modal().hasAttribute('open')).toBe(true);
+    expect(external.create).toHaveBeenCalledTimes(1);
+    expect(external.watch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(modal().querySelector('pre')!.textContent!)).toEqual(result);
+    await click('Verify on-chain & pay now');
+    expectEnglish();
+    expect(modal().querySelector('[aria-label="Payment receipt"]')!.textContent).toContain('6,000 dKRW');
+    expect(modal().textContent).toContain('Budweiser × 2');
+    await language('ko');
+    expect(modal().hasAttribute('open')).toBe(true);
+    expect(modal().querySelector('[aria-label="결제 영수증"]')!.textContent).toContain('버드와이저 × 2');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(external.create).toHaveBeenCalledTimes(1);
+  });
+  it('localizes new request labels and off-chain verification without a payment receipt', async () => {
+    await language('en');
+    await click('Off-chain');
+    await click('Start age verification');
+    expect(external.create.mock.calls[0][2]).toBe('CU age verification');
+    expectEnglish();
+    await deliver(answer(external.create.mock.calls[0][1].scope));
+    await click('Verify off-chain');
+    expectEnglish();
+    expect(status()).toContain('Verified · 19+ requirement met');
+    expect(host.querySelector('[aria-label="Payment receipt"]')).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it('translates verifier failures and retries the same proof', async () => {
+    await language('en');
+    await click('Start verification & payment');
+    expect(external.create.mock.calls[0][2]).toBe('CU age verification & dKRW payment');
+    await deliver(answer(external.create.mock.calls[0][1].scope));
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ result: '0x00' }) } as Response);
+    await click('Verify on-chain & pay now');
+    expectEnglish();
+    expect(status()).toContain('Verification failed');
+    await language('ko');
+    expect(status()).toContain('검증 실패');
+    await language('en');
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ result: '0x01' }) } as Response);
+    await click('Retry on-chain verification & payment');
+    expectEnglish();
+    expect(modal().querySelector('[aria-label="Payment receipt"]')).not.toBeNull();
+    expect(external.create).toHaveBeenCalledTimes(1);
+  });
+  it.each(['cancelled', 'expired', 'error'] as const)(
+    'translates relay %s and lets the user retry',
+    async (state) => {
+      await language('en');
+      await click('Start verification & payment');
+      await act(async () => update({ requestId: 'cu-request', status: state }));
+      expectEnglish();
+      expect(host.textContent).toContain('Try verification again');
+      await language('ko');
+      expect(host.textContent).toContain('다시 인증하기');
+    }
+  );
 });

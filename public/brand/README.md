@@ -74,9 +74,10 @@ Palette: forest `#1f3a2a`, hanji paper `#f6f1e6`, sprout `#5f9b4c`, seed ochre `
   Three original logo paths and their official colors are preserved. The logo
   is not a traced bitmap or a typeset imitation. Rendered and checked against
   the original PDF. CU marks belong to BGF Retail.
-- `../demo-assets/cu/cass-fresh.png`: unchanged official Cass Fresh product
-  photograph from https://www.cass.co.kr/_nuxt/kv_target.DUAbvSPF.png,
-  referenced by https://www.cass.co.kr/product_fresh. Rights belong to OB/Cass.
+- `../demo-assets/cu/budweiser.png`: unchanged official Budweiser product
+  photograph from https://api.budweiser.com/sites/g/files/wnfebl5966/files/BUDWEISER2.png,
+  referenced by https://api.budweiser.com/en/company/products/budweiser.
+  Rights belong to Budweiser/AB InBev.
 - `kproof-wordmark.svg`: from `kproof/demo/public/brand/wordmark-color.svg`
   (KProof brand kit v1.0). Original branding rights are retained.
 - `PretendardVariable.woff2`: from the KProof demo, licensed under SIL OFL;

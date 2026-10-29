@@ -3,16 +3,17 @@ import { RELAY_TERMINAL_STATUSES, isTerminalRelayStatus, type RelayProofResult, 
 /**
  * How long the demo waits for a relay answer.
  *
- * The relay ends every unanswered request itself at 280 s with an `expired`
+ * The relay ends every unanswered request itself at 540 s with an `expired`
  * result, delivered over the socket and to polling. Waiting longer than that is
  * what lets the relay's answer arrive first; the SDK's own timeout (this value)
  * is then only the fallback for a relay or socket that has stopped answering.
- * 300 000 ms is also the SDK's default.
+ * 600 000 ms is also the SDK's default (SDK 0.5.0 and later; it was 300 000
+ * before, while the relay's deadline was 280 s).
  *
  * It used to be 180 000 at six call sites, so the demo gave up 100 s before the
  * relay would have told it what happened.
  */
-export const DEMO_PROOF_WAIT_MS = 300_000;
+export const DEMO_PROOF_WAIT_MS = 600_000;
 
 /** What a finished relay request means for the page. */
 export type RelayOutcome =

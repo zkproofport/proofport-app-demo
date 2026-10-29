@@ -5,7 +5,7 @@ import {
 } from '../lib/relay-outcome';
 
 /** The relay's own deadline (proofport-relay REQUEST_DEADLINE_MS). Not exported by the SDK, so stated here. */
-const RELAY_DEADLINE_MS = 280_000;
+const RELAY_DEADLINE_MS = 540_000;
 
 const base = { requestId: 'req-1', circuit: 'coinbase_attestation' };
 const result = (fields: Record<string, unknown>) => ({ ...base, ...fields }) as unknown as RelayProofResult;
@@ -109,7 +109,7 @@ describe('describeFailure', () => {
 describe('the wait outlasts the relay', () => {
   it('waits longer than the relay deadline, so the relay answers expired first', () => {
     expect(DEMO_PROOF_WAIT_MS).toBeGreaterThan(RELAY_DEADLINE_MS);
-    expect(DEMO_PROOF_WAIT_MS).toBe(300_000);
+    expect(DEMO_PROOF_WAIT_MS).toBe(600_000);
   });
 });
 
@@ -124,7 +124,7 @@ describe('isWaitTimeout recognises the SDK’s own timeout, from the real SDK', 
   });
 
   it('matches the socket path message and nothing else', () => {
-    expect(isWaitTimeout(new Error('Waiting for proof timed out after 300000ms'))).toBe(true);
+    expect(isWaitTimeout(new Error('Waiting for proof timed out after 600000ms'))).toBe(true);
     expect(isWaitTimeout(new Error('connect ECONNREFUSED'))).toBe(false);
     expect(isWaitTimeout(new Error('timeout'))).toBe(false);
     expect(isWaitTimeout('Waiting for proof timed out after 1ms')).toBe(false);

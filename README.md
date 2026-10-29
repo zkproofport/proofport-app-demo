@@ -338,9 +338,9 @@ const qrHtml = await sdk.generateQRCode(relay.deepLink);
 
 // 5. Wait for the relay's answer over Socket.IO (polling fallback).
 //    The relay ends every request with exactly one terminal status and
-//    answers `expired` itself about 280 s in, so keep timeoutMs above that
-//    (300000 is the SDK default) or the SDK's own timer fires first.
-const result = await sdk.waitForProof(relay.requestId, { timeoutMs: 300000 });
+//    answers `expired` itself about 540 s in, so keep timeoutMs above that
+//    (600000 is the SDK default) or the SDK's own timer fires first.
+const result = await sdk.waitForProof(relay.requestId, { timeoutMs: 600000 });
 
 // 6. Branch on every outcome, not only success
 switch (result.status) {

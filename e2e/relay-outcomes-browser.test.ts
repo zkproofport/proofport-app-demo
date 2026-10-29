@@ -23,7 +23,7 @@
  * X-Forwarded-For, so every run from one machine shares the relay's limit of
  * 10 requests a minute: run one E2E file at a time there.
  *
- * DEMO_E2E_EXPIRY=1 also waits for the relay's own deadline (about 280 s) and
+ * DEMO_E2E_EXPIRY=1 also waits for the relay's own deadline (about 540 s) and
  * checks the page shows the expired ending. Off by default because of the wait.
  *
  * Screenshots go to a fresh temporary directory, printed at the end; set
@@ -193,11 +193,11 @@ describe(`the demo shows how a relay request ended (demo ${demoUrl}, relay ${rel
     const { context, page, pageErrors } = await startOnMarkets();
     try {
       const panel = page.locator('#demo-panel-kyc .proof-panel[data-phase="expired"]');
-      await panel.waitFor({ timeout: 300_000 });
+      await panel.waitFor({ timeout: 600_000 });
       await page.screenshot({ path: path.join(shots, 'markets-expired.png'), fullPage: false });
       // The relay's message, not the demo's no-answer fallback.
       expect(await panel.locator('.proof-notice').textContent()).toBe(EXPIRED_MESSAGE);
       expect(pageErrors).toEqual([]);
     } finally { await context.close(); }
-  }, 330_000);
+  }, 630_000);
 });

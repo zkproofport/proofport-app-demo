@@ -6,13 +6,12 @@ import { DEMOS, type DemoDefinition, type DemoId } from '@/lib/demo-catalog';
 import CircuitDemo from './CircuitDemo';
 import GiwaDemo from './GiwaDemo';
 import SsiatDemo from './SsiatDemo';
-import CuDemo from './CuDemo';
 import AppDownloads from './AppDownloads';
 import './demos.css';
 import ZKProofportWordmark from './ZKProofportWordmark';
 import { ZKPROOFPORT_SYMBOL } from '@/lib/brand';
 
-type Tab = DemoId | 'cu' | 'all';
+type Tab = DemoId | 'all';
 type Theme = 'system' | 'light' | 'dark';
 const DEFAULT_TAB: Tab = 'kyc';
 const tabs: { id: Tab; label: string; status?: 'Live' | 'PoC' }[] = [
@@ -21,7 +20,6 @@ const tabs: { id: Tab; label: string; status?: 'Live' | 'PoC' }[] = [
   { id: 'email', label: 'zk blind', status: 'Live' },
   { id: 'giwa', label: 'Gotgan', status: 'PoC' },
   { id: 'ssiat', label: 'Ssiat', status: 'PoC' },
-  { id: 'cu', label: 'CU × KProof' },
   { id: 'all', label: 'All demos' },
 ];
 
@@ -43,7 +41,7 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
   useEffect(() => {
     const sync = () => {
       const value = new URLSearchParams(window.location.search).get('tab');
-      const next: Tab = value === 'all' || value === 'cu' ? value : DEMOS.find(item => item.id === value)?.id ?? DEFAULT_TAB;
+      const next: Tab = value === 'all' ? 'all' : DEMOS.find(item => item.id === value)?.id ?? DEFAULT_TAB;
       setTab(next);
       setVisited(previous => new Set([...previous, next]));
     };
@@ -56,14 +54,13 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('popstate', sync);
   }, []);
   useEffect(() => {
-    const dedicated = tab === 'all' || tab === 'cu' ? undefined : DEDICATED_SCREENS[tab];
-    const title = tab === 'cu' ? 'CU × KProof — 성인인증 및 결제' : tab === 'all' ? 'All demos | ZKProofport' : dedicated ? dedicated.title : `${DEMOS.find(demo => demo.id === tab)?.brand} | ZKProofport demos`;
-    // CU owns its localized title; other demos use the shared title.
-    const syncTitle = () => { if (tab !== 'cu' && document.title !== title) document.title = title; };
+    const dedicated = tab === 'all' ? undefined : DEDICATED_SCREENS[tab];
+    const title = tab === 'all' ? 'All demos | ZKProofport' : dedicated ? dedicated.title : `${DEMOS.find(demo => demo.id === tab)?.brand} | ZKProofport demos`;
+    const syncTitle = () => { if (document.title !== title) document.title = title; };
     syncTitle();
     const frame = requestAnimationFrame(syncTitle);
     const icon = document.createElement('link');
-    const { href, type } = tab === 'cu' ? { href: '/brand/cu-symbol.svg', type: 'image/svg+xml' } : dedicated ? dedicated.icon : SHARED_ICON;
+    const { href, type } = dedicated ? dedicated.icon : SHARED_ICON;
     icon.rel = 'icon'; icon.type = type; icon.href = href; icon.sizes.add('any');
     document.head.appendChild(icon);
     return () => { cancelAnimationFrame(frame); icon.remove(); };
@@ -100,9 +97,8 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
       </div>
       <label className="theme-control"><CircleHalf size={18} /><span className="sr-only">Color theme</span><select aria-label="Color theme" value={theme} onChange={event => changeTheme(event.target.value as Theme)}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
     </nav>
-    {tab !== 'all' && tab !== 'cu' && <AppDownloads />}
+    {tab !== 'all' && <AppDownloads />}
     {DEMOS.map(demo => <div key={demo.id} id={`demo-panel-${demo.id}`} role="tabpanel" aria-labelledby={`demo-tab-${demo.id}`} hidden={tab !== demo.id}>{visited.has(demo.id) && <DemoScreen demo={demo} />}</div>)}
-    <div id="demo-panel-cu" role="tabpanel" aria-labelledby="demo-tab-cu" hidden={tab !== 'cu'}>{visited.has('cu') && <CuDemo isActive={tab === 'cu'} />}</div>
     <div id="demo-panel-all" className="explorer-panel" role="tabpanel" aria-labelledby="demo-tab-all" tabIndex={-1} hidden={tab !== 'all'}>{children}</div>
   </div>;
 }

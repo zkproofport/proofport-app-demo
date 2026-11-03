@@ -42,6 +42,18 @@ async function click(text: string) {
   await act(async () => { button!.click(); });
 }
 
+function board() {
+  const reply = host.querySelector('#passport-reply') as HTMLTextAreaElement;
+  const post = [...host.querySelectorAll('.passport-board button')].find(b => b.textContent?.trim() === 'Post reply') as HTMLButtonElement;
+  expect(reply, '#passport-reply').toBeTruthy();
+  expect(post, 'Post reply').toBeTruthy();
+  return { reply, post };
+}
+async function typeReply(value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+  await act(async () => { setter.call(board().reply, value); board().reply.dispatchEvent(new Event('input', { bubbles: true })); });
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -67,12 +79,22 @@ describe('Townhall: a Human Passport score threshold', () => {
   it('shows its own screen and the threshold field, with the default bar', async () => {
     await render('passport');
     expect(host.querySelector('.experience-wordmark')?.textContent).toBe('Townhall');
-    expect(host.textContent).toContain('One person.');
+    expect(host.textContent).toContain('Real people.');
     expect((host.querySelector('#passport-min-score') as HTMLInputElement).value).toBe('20');
     expect(host.textContent).toContain('My Human Passport score ≥ 20');
-    // Voting stays closed until a proof passes.
-    const votes = [...host.querySelectorAll('.passport-ballot button')] as HTMLButtonElement[];
-    expect(votes.map(b => b.disabled)).toEqual([true, true]);
+    // The board stays closed until a proof passes.
+    expect(board().reply.disabled).toBe(true);
+    expect(board().post.disabled).toBe(true);
+    expect(host.textContent).toContain('Posting opens after your proof passes.');
+  });
+
+  it('says nothing about counting people, voting once or duplicates', async () => {
+    await render('passport');
+    const demo = demoById('passport')!;
+    const copy = [host.textContent, JSON.stringify(demo)].join(' ');
+    for (const banned of [/one vote/i, /\bvot(e|ing|es)\b/i, /one person/i, /per person/i, /choose once/i, /counts? people/i, /nullifier/i, /sybil/i, /duplicate/i, /\bonce\b/i, /ballot/i]) {
+      expect(copy, String(banned)).not.toMatch(banned);
+    }
   });
 
   it('requests human_passport_score with its scope and the typed threshold, nothing else', async () => {
@@ -107,10 +129,21 @@ describe('Townhall: a Human Passport score threshold', () => {
     expect(call).toEqual({ request: { scope: cardScope('passport'), requestId: REQUEST_ID }, minScore: 30 });
     expect(host.textContent).toContain('Proof accepted.');
     expect(host.textContent).toContain('Above the threshold.');
-    const votes = [...host.querySelectorAll('.passport-ballot button')] as HTMLButtonElement[];
-    expect(votes.every(b => !b.disabled)).toBe(true);
-    await act(async () => { votes[0].click(); });
-    expect(host.textContent).toContain('You chose Yes.');
+    expect(board().reply.disabled).toBe(false);
+    // Empty and whitespace-only replies cannot be posted.
+    expect(board().post.disabled).toBe(true);
+    await typeReply('   ');
+    expect(board().post.disabled).toBe(true);
+    // A reply is shown as text, never as markup.
+    await typeReply('  <img src=x onerror=alert(1)> 좋아요 🌱  ');
+    expect(board().post.disabled).toBe(false);
+    await act(async () => { board().post.click(); });
+    const replies = [...host.querySelectorAll('.passport-replies li')];
+    expect(replies).toHaveLength(3);
+    expect(replies[2].textContent).toBe('You<img src=x onerror=alert(1)> 좋아요 🌱');
+    expect(host.querySelector('.passport-replies img')).toBeNull();
+    expect(board().reply.value).toBe('');
+    expect(host.textContent).toContain('Your reply is on this example board.');
   });
 
   it('a proof made for a lower threshold than asked is refused before any verify button', async () => {
@@ -124,13 +157,15 @@ describe('Townhall: a Human Passport score threshold', () => {
     expect([...host.querySelectorAll('button')].some(b => b.textContent?.trim() === 'Verify proof')).toBe(false);
   });
 
-  it('a verification the SDK refuses keeps the vote closed and offers a retry', async () => {
+  it('a verification the SDK refuses keeps the board closed and offers a retry', async () => {
     await render('passport');
     await submit();
     external.onchain.mockResolvedValue({ valid: false, error: 'The proof is stale.' });
     await click('Verify proof');
     expect(host.textContent).toContain('The proof is stale.');
     expect(host.textContent).not.toContain('Proof accepted.');
+    expect(board().reply.disabled).toBe(true);
+    expect(board().post.disabled).toBe(true);
   });
 });
 

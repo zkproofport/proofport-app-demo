@@ -168,22 +168,22 @@ export const DEMOS: readonly DemoDefinition[] = [
   "id": "passport",
   "tab": "Townhall",
   "brand": "Townhall",
-  "category": "One person, one vote",
-  "headline": "One person. One vote.",
-  "description": "A community vote open to people, not bots. Prove your Human Passport score clears the bar.",
+  "category": "Human-only discussion",
+  "headline": "Real people. Real talk.",
+  "description": "A discussion board for people, not bots. Prove your Human Passport score clears the bar to post.",
   "image": 4,
   "imageAlt": "",
-  "actionTitle": "Join the vote",
-  "actionDescription": "Prove your Human Passport score meets this vote's threshold.",
+  "actionTitle": "Join the conversation",
+  "actionDescription": "Prove your Human Passport score meets this board's threshold.",
   "credential": "Human Passport score at or above the threshold",
   "hides": "Your wallet address and your exact score",
-  "outcomeTitle": "You can vote.",
+  "outcomeTitle": "You can post.",
   "outcomeDescription": "Your proof shows your Human Passport score meets the threshold. Your wallet and exact score stay private.",
   "outcomeItems": [
     { "title": "Verified condition", "description": "Human Passport score at or above the threshold" },
     { "title": "Private information", "description": "Your wallet address and your exact score are not included in the proof." }
   ],
-  "note": "Fictional community vote. No ballot is recorded and no tokens are distributed. The threshold is a demo setting; the proof shows the score met it, not the score itself.",
+  "note": "Fictional community board. Replies stay on this page and are not published. The threshold is a demo setting; the proof shows the score met it, not the score itself.",
   "experimental": false
 }
 ];

@@ -8,6 +8,7 @@ import type {
   RelayProofResult,
   ProofResponse,
 } from '@zkproofport-app/sdk';
+import type { CountryCondition } from '@zkproofport-app/core';
 // A value, not a type — the SDK's circuit-id constants. Keeping it out of
 // the `import type` block above matters: TypeScript erases that block.
 import { CIRCUIT_IDS } from '@zkproofport-app/sdk';
@@ -389,6 +390,12 @@ const emptyDemoState: DemoState = {
    * page made, including on the on-chain path, whose SDK never saw the request.
    */
   const madeRequestIdsRef = useRef<Record<DemoPrefix, string | null>>({ kyc: null, country: null, email: null, giwa: null });
+  /**
+   * The country list and direction the Country card last asked for. The proof
+   * carries them as public inputs the prover chose, and the on-chain SDK never
+   * saw the request, so verification is told what was asked.
+   */
+  const madeCountryConditionRef = useRef<CountryCondition | null>(null);
 
   /* ── Show proof helpers ── */
   /** Clears the in-flight request id for one card. Same table reason as above. */
@@ -612,6 +619,7 @@ const emptyDemoState: DemoState = {
 
       activeCountryRequestIdRef.current = result.requestId;
       madeRequestIdsRef.current.country = result.requestId;
+      madeCountryConditionRef.current = { countryList: countries, isIncluded };
 
       const deepLink = result.deepLink;
       await showProofResult(deepLink, 'country');
@@ -775,6 +783,7 @@ const emptyDemoState: DemoState = {
         publicInputs: proof.publicInputs,
         verifierAddress: proof.verifierAddress,
         chainId: proof.chainId,
+        ...(proof.signerVariant !== undefined && { signerVariant: proof.signerVariant }),
       };
       // Two buttons, two different checks. Until 2026-09-04 both called
       // verifyResponseOnChain and only the label changed, so "Off-Chain
@@ -788,10 +797,13 @@ const emptyDemoState: DemoState = {
       // The SDK refuses a request whose id is not the response's.
       if (!madeRequestId) throw new Error('This proof does not answer a request this page made. Request a new proof.');
       const request = { scope: liveSectionScope(proofResponse.circuit), requestId: madeRequestId };
+      const countryCondition = madeCountryConditionRef.current;
+      if (prefix === 'country' && !countryCondition) throw new Error('This proof does not answer a request this page made. Request a new proof.');
+      const conditions = prefix === 'country' && countryCondition ? { countryCondition } : {};
       const result =
         type === 'onchain'
-          ? await createVerifierSDK(proofResponse).verifyResponseOnChain(proofResponse, undefined, { request })
-          : await getSDK().verifyResponseOffChain(proofResponse, { request });
+          ? await createVerifierSDK(proofResponse).verifyResponseOnChain(proofResponse, undefined, { request, ...conditions })
+          : await getSDK().verifyResponseOffChain(proofResponse, { request, ...conditions });
       if (result.valid) {
         setDemoState(prefix, (prev) => ({
           ...prev,

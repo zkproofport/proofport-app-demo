@@ -2,10 +2,9 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getBytes, keccak256, toUtf8Bytes } from 'ethers';
 import CircuitDemo from '../app/components/CircuitDemo';
 import { demoById } from '../lib/demo-catalog';
-import { DEMO_VERIFIERS } from '../lib/demo-policy';
+import { cardResult } from './fixtures/card-proofs';
 import { cardScope } from '../lib/demo-scopes';
 
 // The relay answers only at the network boundary; the hook, the demo policy and
@@ -18,18 +17,10 @@ vi.mock('../lib/sdk', () => ({
 }));
 
 const REQUEST_ID = '0b6f4c1e-8f5a-4d2b-9c3e-7a1d2f3b4c5d';
-const field = (value: number) => `0x${value.toString(16).padStart(64, '0')}`;
 const demo = demoById('email')!;
 
 /** A 214-input response that passes the demo's own policy for the default domain and provider. */
-function emailResult(requestId: string, scope: string) {
-  const values = Array.from({ length: 214 }, () => field(0));
-  const put = (start: number, bytes: Uint8Array) => bytes.forEach((v, i) => { values[start + i] = field(v); });
-  const domain = toUtf8Bytes('zkproofport.com');
-  put(18, domain); values[82] = field(domain.length);
-  put(83, getBytes(keccak256(toUtf8Bytes(scope))));
-  return { requestId, circuit: demo.circuit, status: 'completed', proof: '0xabcd1234', publicInputs: values, chainId: 84532, verifierAddress: DEMO_VERIFIERS[demo.circuit][84532] };
-}
+const emailResult = (requestId: string, scope: string) => cardResult('email', requestId, scope);
 
 let host: HTMLDivElement;
 let root: Root;

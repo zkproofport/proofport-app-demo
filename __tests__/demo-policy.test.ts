@@ -1,47 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { ALL_CIRCUIT_IDS, isCircuitId, type RelayProofResult } from '@zkproofport-app/sdk';
-import { getBytes, keccak256, toUtf8Bytes } from 'ethers';
+import {
+  ALL_CIRCUIT_IDS, COINBASE_ATTESTATION_PUBLIC_INPUT_LAYOUT as KYC, COINBASE_COUNTRY_PUBLIC_INPUT_LAYOUT as COUNTRY,
+  HUMAN_PASSPORT_SCORE_PUBLIC_INPUT_LAYOUT as PASSPORT, OIDC_DOMAIN_ATTESTATION_PUBLIC_INPUT_LAYOUT as OIDC,
+  isCircuitId, type RelayProofResult,
+} from '@zkproofport-app/sdk';
 import { DEMO_CIRCUITS, DEMOS, SDK_CIRCUITS_WITHOUT_A_DEMO, demoById, type DemoId } from '../lib/demo-catalog';
-import { buildDemoInputs, COINBASE_SIGNER_ROOT, DEFAULT_OPTIONS, DEMO_VERIFIERS, prepareDemoProof, type DemoOptions } from '../lib/demo-policy';
+import { buildDemoInputs, DEFAULT_OPTIONS, DEMO_VERIFIERS, parseMinScore, prepareDemoProof, verificationConditions, type DemoOptions } from '../lib/demo-policy';
+import { variantVerifierAddress } from '../lib/verifier-deployments';
 import { depositAction, giwaResult } from './fixtures/giwa';
+import { cardResult, field, proofHex, type CardDemo } from './fixtures/card-proofs';
 
 const requestId = 'request-for-this-tab';
 const scope = 'unique-example-session';
-const field = (value: number) => `0x${value.toString(16).padStart(64, '0')}`;
-const ids: DemoId[] = ['kyc', 'country', 'email'];
+const ids: CardDemo[] = ['kyc', 'country', 'email', 'passport'];
 
-/** Per demo: how many public inputs, and where `scope` starts. Keyed, so a demo with no row is an error. */
-const LAYOUT: Partial<Record<DemoId, { count: number; scopeAt: number }>> = {
-  kyc: { count: 128, scopeAt: 64 }, country: { count: 150, scopeAt: 86 }, email: { count: 214, scopeAt: 83 },
-};
-
-// Public-input fixtures test the dApp's requested conditions. They deliberately
-// contain no valid proof, and must still pass SDK cryptographic verification.
-function fixture(id: DemoId, options: DemoOptions = DEFAULT_OPTIONS) {
+function fixture(id: CardDemo, options: DemoOptions = DEFAULT_OPTIONS) {
   const demo = demoById(id)!;
-  const layout = LAYOUT[id];
-  if (!layout) throw new Error(`No public-input layout for '${id}'. Known: ${Object.keys(LAYOUT).join(', ')}.`);
-  const count = layout.count;
-  const publicInputs = Array.from({ length: count }, () => field(0));
-  function put(start: number, bytes: Uint8Array) { bytes.forEach((value, index) => { publicInputs[start + index] = field(value); }); }
-  put(layout.scopeAt, getBytes(keccak256(toUtf8Bytes(scope))));
-  if (id === 'kyc' || id === 'country') put(32, getBytes(COINBASE_SIGNER_ROOT));
-  if (id === 'country') {
-    const countries = options.countries.split(',').map(value => value.trim().toUpperCase());
-    put(64, toUtf8Bytes(countries.join('')));
-    publicInputs[84] = field(countries.length);
-    publicInputs[85] = field(options.inclusion ? 1 : 0);
-  }
-  if (id === 'email') {
-    const domain = toUtf8Bytes(options.domain);
-    put(18, domain); publicInputs[82] = field(domain.length);
-    publicInputs[147] = field(options.provider === 'microsoft' ? 1 : 0);
-  }
-  const response: RelayProofResult = {
-    requestId, circuit: demo.circuit, status: 'completed', proof: '0x1234', publicInputs,
-    chainId: 84532, verifierAddress: DEMO_VERIFIERS[demo.circuit][84532],
-  };
-  return { response, context: { demo, requestId, scope, options: { ...options } } };
+  return { response: cardResult(id, requestId, scope, options), context: { demo, requestId, scope, options: { ...options } } };
 }
 
 describe('dedicated circuit coverage', () => {
@@ -64,7 +39,7 @@ describe('Ssiat goes through its own claim policy, never the generic one', () =>
   });
   it('refuses to accept a Ssiat proof through prepareDemoProof, which does not know the claim action', () => {
     const demo = demoById('ssiat')!;
-    const response: RelayProofResult = { requestId, circuit: demo.circuit, status: 'completed', proof: '0x1234', publicInputs: Array(160).fill(field(0)), chainId: 91342, verifierAddress: DEMO_VERIFIERS[demo.circuit][91342] };
+    const response: RelayProofResult = { requestId, circuit: demo.circuit, status: 'completed', proof: proofHex(demo.circuit), publicInputs: Array(160).fill(field(0)), chainId: 91342, verifierAddress: DEMO_VERIFIERS[demo.circuit][91342] };
     expect(() => prepareDemoProof(response, { demo, requestId, scope, options: DEFAULT_OPTIONS })).toThrow(/prepareSsiatClaimProof/);
   });
   it('allowlists only the GIWA Sepolia Dojang Playground verifier', () => {
@@ -89,6 +64,9 @@ describe('requested inputs', () => {
   it('normalizes the domain and retains provider choice', () => {
     expect(buildDemoInputs(demoById('email')!, { ...DEFAULT_OPTIONS, domain: ' Example.COM ', provider: 'microsoft' }, scope)).toEqual({ scope, domain: 'example.com', provider: 'microsoft' });
   });
+  it('asks for the typed score threshold for passport, as a number of points', () => {
+    expect(buildDemoInputs(demoById('passport')!, { ...DEFAULT_OPTIONS, minScore: ' 20.5 ' }, scope)).toEqual({ scope, minScore: 20.5 });
+  });
   it.each(['kyc', 'giwa', 'ssiat'] as DemoId[])('requests only the scope for %s', id => {
     expect(buildDemoInputs(demoById(id)!, DEFAULT_OPTIONS, scope)).toEqual({ scope });
   });
@@ -101,6 +79,7 @@ describe('requested inputs', () => {
     ['country', { countries: 'US,KR,JP,GB,DE,FR,IT,CA,AU,ES,NZ' }],
     ['email', { domain: 'person@example.com' }], ['email', { domain: 'https://example.com' }],
     ['email', { domain: '-bad.example' }], ['email', { provider: 'apple' as DemoOptions['provider'] }],
+    ['passport', { minScore: '' }], ['passport', { minScore: '   ' }], ['passport', { minScore: '0' }], ['passport', { minScore: '0.00001' }],
   ] as [DemoId, Partial<DemoOptions>][])('rejects invalid %s requirements: %j', (id, patch) => {
     expect(() => buildDemoInputs(demoById(id)!, { ...DEFAULT_OPTIONS, ...patch }, scope)).toThrow();
   });
@@ -134,9 +113,9 @@ describe.each(ids)('%s response policy', id => {
 });
 
 describe('predicate substitution', () => {
-  it.each(['kyc', 'country'] as DemoId[])('rejects a different attester for %s', id => {
-    const { response, context } = fixture(id); response.publicInputs![32] = field(0);
-    expect(() => prepareDemoProof(response, context)).toThrow('attester');
+  it.each([['kyc', KYC.MERKLE_ROOT_START, 'attester'], ['country', COUNTRY.MERKLE_ROOT_START, 'attester'], ['passport', PASSPORT.MERKLE_ROOT_START, 'issuer']] as [CardDemo, number, string][])('rejects a different signer root for %s', (id, at, name) => {
+    const { response, context } = fixture(id); response.publicInputs![at] = field(0);
+    expect(() => prepareDemoProof(response, context)).toThrow(name);
   });
   it('accepts an exclusion proof only for the matching exclusion request', () => {
     const { response, context } = fixture('country', { ...DEFAULT_OPTIONS, inclusion: false });
@@ -144,9 +123,9 @@ describe('predicate substitution', () => {
     expect(() => prepareDemoProof(response, { ...context, options: DEFAULT_OPTIONS })).toThrow('country policy');
   });
   it('checks every country and the list length', () => {
-    const { response, context } = fixture('country'); response.publicInputs![65] = field(65);
+    const { response, context } = fixture('country'); response.publicInputs![COUNTRY.COUNTRY_LIST_START + 1] = field(65);
     expect(() => prepareDemoProof(response, context)).toThrow('different country list');
-    response.publicInputs![84] = field(2);
+    response.publicInputs![COUNTRY.COUNTRY_LIST_LENGTH] = field(2);
     expect(() => prepareDemoProof(response, context)).toThrow('country policy');
   });
   it('matches both the domain and the provider', () => {
@@ -161,12 +140,80 @@ describe('predicate substitution', () => {
     expect(() => prepareDemoProof({ ...response, publicInputs: [...response.publicInputs!, field(0)] }, context)).toThrow('unexpected public-input format');
   });
   it('rejects a malformed domain length', () => {
-    const { response, context } = fixture('email'); response.publicInputs![82] = field(65);
+    const { response, context } = fixture('email'); response.publicInputs![OIDC.DOMAIN_LEN] = field(65);
     expect(() => prepareDemoProof(response, context)).toThrow('invalid length');
   });
   it('rejects a field masquerading as a byte', () => {
-    // Byte 64 is the first scope byte of a Coinbase KYC proof.
-    const { response, context } = fixture('kyc'); response.publicInputs![64] = field(256);
+    const { response, context } = fixture('kyc'); response.publicInputs![KYC.SCOPE_START] = field(256);
     expect(() => prepareDemoProof(response, context)).toThrow('invalid byte');
+  });
+});
+
+describe('Human Passport score threshold, as typed', () => {
+  it.each([['20', 20], [' 20.5 ', 20.5], ['0.0001', 0.0001], ['429496.7295', 429496.7295], ['007', 7], ['20\n', 20], ['\t15', 15]] as const)('accepts %j as %s points', (text, points) => {
+    expect(parseMinScore(text)).toBe(points);
+  });
+  it.each([
+    '', '   ', '\n', '0', '0.0', '0.0000', '-1', '+20', '20.12345', '429496.7296', '9999999', '1e3', '0x14', 'Infinity', 'NaN',
+    'abc', '20,5', '20.', '.5', '2 0', '2\n0', '２０', '20점', '스물', '🙂', '<script>alert(1)</script>', "20' OR '1'='1", '%', '_', '\\', '9'.repeat(10_000),
+  ])('refuses %j before any request is made', text => {
+    expect(() => parseMinScore(text)).toThrow(/score threshold/);
+  });
+  it('keeps the threshold out of the request when it is refused', () => {
+    expect(() => buildDemoInputs(demoById('passport')!, { ...DEFAULT_OPTIONS, minScore: '20.12345' }, scope)).toThrow(/four decimals/);
+  });
+});
+
+describe('Human Passport response policy', () => {
+  it('accepts a proof made for exactly the requested threshold', () => {
+    const { response, context } = fixture('passport', { ...DEFAULT_OPTIONS, minScore: '20.5' });
+    expect(prepareDemoProof(response, context).publicInputs).toHaveLength(195);
+  });
+  it.each([['19.9999'], ['20.0001'], ['0.0001'], ['2000']])('refuses a proof made for %s when 20 was asked', made => {
+    const { response, context } = fixture('passport', { ...DEFAULT_OPTIONS, minScore: made });
+    expect(() => prepareDemoProof(response, { ...context, options: DEFAULT_OPTIONS })).toThrow('score threshold');
+  });
+  it('refuses a zero threshold field, the cheapest one a prover could write', () => {
+    const { response, context } = fixture('passport'); response.publicInputs![PASSPORT.MIN_SCORE] = field(0);
+    expect(() => prepareDemoProof(response, context)).toThrow('score threshold');
+  });
+  it('is accepted on Base and Base Sepolia only, the chains the app verifies it on', () => {
+    const { response, context } = fixture('passport');
+    expect(prepareDemoProof({ ...response, chainId: 8453, verifierAddress: DEMO_VERIFIERS.human_passport_score[8453] }, context).chainId).toBe(8453);
+    for (const chainId of [1, 10, 42161, 59144, 534352, 324, 11155111]) {
+      expect(() => prepareDemoProof({ ...response, chainId }, context), String(chainId)).toThrow('configured verifier');
+    }
+  });
+  it('refuses a signer package the circuit does not have', () => {
+    const { response, context } = fixture('passport');
+    expect(() => prepareDemoProof({ ...response, signerVariant: 'android' }, context)).toThrow(/no "android" signer variant/);
+  });
+});
+
+describe('the package that made a proof picks its verifier', () => {
+  it.each(['kyc', 'country', 'email'] as CardDemo[])('accepts an Android-signed %s proof against the Android verifier', id => {
+    const demo = demoById(id)!;
+    const response = cardResult(id, requestId, scope, DEFAULT_OPTIONS, 'android');
+    const prepared = prepareDemoProof(response, { demo, requestId, scope, options: DEFAULT_OPTIONS });
+    expect(prepared.signerVariant).toBe('android');
+    expect(prepared.verifierAddress).toBe(variantVerifierAddress(demo.circuit, 84532, 'android'));
+  });
+  it('refuses an Android claim on a proof of the standard length, and the reverse', () => {
+    const { response, context } = fixture('kyc');
+    expect(() => prepareDemoProof({ ...response, signerVariant: 'android' }, context)).toThrow();
+    const android = cardResult('kyc', requestId, scope, DEFAULT_OPTIONS, 'android');
+    expect(() => prepareDemoProof({ ...android, signerVariant: undefined }, context)).toThrow();
+  });
+  it('refuses a standard proof that names the Android verifier', () => {
+    const { response, context } = fixture('kyc');
+    expect(() => prepareDemoProof({ ...response, verifierAddress: variantVerifierAddress(context.demo.circuit, 84532, 'android') }, context)).toThrow('configured verifier');
+  });
+});
+
+describe('what a fresh verifier SDK is told about the request', () => {
+  it('the threshold for passport, the list and direction for country, nothing for the rest', () => {
+    expect(verificationConditions(demoById('passport')!, { ...DEFAULT_OPTIONS, minScore: '25' }, scope)).toEqual({ minScore: 25 });
+    expect(verificationConditions(demoById('country')!, { ...DEFAULT_OPTIONS, countries: 'kp, ir', inclusion: false }, scope)).toEqual({ countryCondition: { countryList: ['KP', 'IR'], isIncluded: false } });
+    for (const id of ['kyc', 'email', 'giwa', 'ssiat'] as DemoId[]) expect(verificationConditions(demoById(id)!, DEFAULT_OPTIONS, scope), id).toEqual({});
   });
 });

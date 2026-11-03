@@ -1,7 +1,7 @@
-import { ProofportSDK, type ProofResponse } from '@zkproofport-app/sdk';
+import { ProofportSDK, type ProofResponse, type SDKEnvironment } from '@zkproofport-app/sdk';
 import { VERIFIER_ABI } from '@zkproofport-app/core';
 import { Wallet } from 'ethers';
-import { verifierAddress } from './verifier-deployments';
+import { proofSignerVariant, variantVerifierAddress, verifierAddress } from './verifier-deployments';
 
 export function createSDK(): ProofportSDK {
   let sdk: ProofportSDK;
@@ -29,9 +29,10 @@ export function createSDK(): ProofportSDK {
 
 /**
  * An SDK that verifies `proof` on-chain against core's pinned verifier for its
- * circuit, on the chain the proof names, provided the demo accepts that pair
- * (lib/verifier-deployments.ts). Throws, naming the key, for a proof with no
- * chain, an unknown circuit or a chain the demo does not accept.
+ * circuit, its package and the chain it names, provided the demo accepts that
+ * pair (lib/verifier-deployments.ts). Throws, naming the key, for a proof with
+ * no chain, an unknown circuit, a chain the demo does not accept, or a package
+ * claim the proof contradicts.
  *
  * Why not `createSDK()`: since SDK 0.5.0-beta.2 the SDK never uses the
  * verifierAddress a response carries. An SDK built from a relay URL alone --
@@ -39,12 +40,24 @@ export function createSDK(): ProofportSDK {
  * set NEXT_PUBLIC_RELAY_URL -- has no verifier and answers "No verifier
  * chosen" for every on-chain check. The verifier is configured here instead,
  * and the SDK still refuses a response whose verifierAddress differs from it.
+ *
+ * A configured verifier is the standard package's contract only. A proof from
+ * an Android signer's package is verified on its environment's chains instead,
+ * where the SDK picks that package's pinned verifier; the chain decides which
+ * environment, and an unlisted chain is an error.
  */
+const VARIANT_ENVIRONMENTS: Readonly<Record<number, SDKEnvironment>> = Object.freeze({ 8453: 'production', 84532: 'staging' });
+
 export function createVerifierSDK(proof: ProofResponse): ProofportSDK {
   const { circuit, chainId } = proof;
   if (chainId === undefined) throw new Error(`The ${circuit} proof names no chain, so there is no verifier to check it against.`);
   const address = verifierAddress(circuit, chainId);
-  return new ProofportSDK({ verifiers: { [circuit]: { address, chainId, abi: VERIFIER_ABI } } });
+  const variant = proofSignerVariant(circuit, proof.signerVariant, proof.proof);
+  if (variant === 'standard') return new ProofportSDK({ verifiers: { [circuit]: { address, chainId, abi: VERIFIER_ABI } } });
+  variantVerifierAddress(circuit, chainId, variant);
+  const environment = Object.hasOwn(VARIANT_ENVIRONMENTS, chainId) ? VARIANT_ENVIRONMENTS[chainId] : undefined;
+  if (!environment) throw new Error(`No environment verifies chain ${chainId}. Known: ${Object.keys(VARIANT_ENVIRONMENTS).join(', ')}.`);
+  return new ProofportSDK({ environment });
 }
 
 export { ProofportSDK };

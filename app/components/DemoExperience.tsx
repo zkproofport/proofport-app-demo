@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { ArrowDown, ArrowUpRight, Check, Fingerprint, GlobeHemisphereWest, IdentificationCard, LockKey, ChatCircle, Prohibit } from '@phosphor-icons/react';
+import { ArrowDown, ArrowUpRight, Check, Fingerprint, GlobeHemisphereWest, IdentificationCard, LockKey, ChatCircle, Prohibit, UsersThree } from '@phosphor-icons/react';
 import type { DemoDefinition } from '@/lib/demo-catalog';
 import type { DemoOptions } from '@/lib/demo-policy';
 import MadangBenefits from './MadangBenefits';
@@ -13,6 +13,7 @@ type Props = { demo: DemoDefinition; options: DemoOptions; panel: ReactNode; ver
 export default function DemoExperience({ demo, options, panel, verified, phase = 'idle' }: Props) {
   const [market, setMarket] = useState('Supply');
   const [topic, setTopic] = useState('Engineering');
+  const [vote, setVote] = useState<string | null>(null);
   const header = <header className="experience-masthead"><div className="experience-wordmark">{demo.brand}{demo.id === 'email' && <span className="blind-period">.</span>}</div><span>{demo.category}</span><span className="experience-demo-label">{demo.experimental ? 'Experimental demo' : 'Example dApp'}</span></header>;
 
   if (demo.id === 'giwa') return <MadangBenefits panel={panel} verified={verified} />;
@@ -47,6 +48,11 @@ export default function DemoExperience({ demo, options, panel, verified, phase =
     <div className="blind-workspace"><aside className="blind-sidebar"><strong>Off the record</strong><p>Example discussions</p>{['Engineering','Work culture','Career'].map(label => <button key={label} aria-pressed={topic === label} onClick={() => setTopic(label)}><ChatCircle size={20} />{label}</button>)}<div className="blind-sidebar-note"><LockKey size={22} /><p>Verified coworkers.<br />No email addresses.</p></div></aside><section className="blind-feed" aria-label="Example anonymous discussion feed"><div className="blind-feed-head"><h2>{topic}</h2><span>Preview</span></div>{(topic === 'Engineering' ? ['What makes a code review actually useful?','How much time should we protect for deep work?'] : topic === 'Work culture' ? ['Can a team be honest without being harsh?','What would you change about the Monday meeting?'] : ['What did you wish you knew before becoming a lead?','How do you decide what to learn next?']).map((title,index) => <article key={title}><div className="anonymous-author"><span>{index === 0 ? 'A' : 'B'}</span><div><strong>Anonymous colleague</strong><small>Illustrative post</small></div></div><h3>{title}</h3><p>{index === 0 ? 'A space to ask the question you might not ask in the company chat.' : 'Keep the discussion about the work, without attaching your identity.'}</p><div className="blind-locked"><LockKey size={16} />{verified ? 'Domain verified. Example space unlocked.' : 'Verify your work domain to enter.'}</div></article>)}</section><div className="blind-signin">{panel}<p className="blind-promise">Your email ends at the proof.<br /><strong>Your voice starts here.</strong></p></div></div>
   </>;
 
+  if (demo.id === 'passport') return <>
+    {header}
+    <div className="country-layout passport-layout"><section className="country-statement"><UsersThree size={56} weight="light" /><h1>One person.<br /><span>One vote.</span></h1><p>Townhall counts people, not wallets.<br />Your score clears the bar. Your wallet stays private.</p><div className="country-rule"><span>The condition you prove</span><strong>My Human Passport score <b>≥</b> {options.minScore.trim() || '…'}</strong></div><div className="passport-ballot"><span>Example proposal</span><strong>Fund a public reading room for the neighborhood?</strong><div className="scenario-switch" role="group" aria-label="Your vote">{['Yes', 'No'].map(label => <button key={label} type="button" disabled={!verified} aria-pressed={verified && vote === label} onClick={() => setVote(label)}>{label}</button>)}</div><p>{!verified ? 'Voting opens after your proof passes.' : vote ? `You chose ${vote}. One vote per person.` : 'Verified. Choose once.'}</p></div></section><div className="country-review"><div className="country-review-title"><span>Personhood check</span><span>{verified ? 'Passed' : 'Proof required'}</span></div>{panel}<div className="country-answer"><span>Townhall receives</span><strong>{verified ? 'Above the threshold.' : 'A yes-or-no answer.'}</strong><p>No wallet address. No exact score.</p></div></div></div>
+  </>;
+
   /*
    * No fallthrough screen. The last `return` here used to be unconditional, so
    * any demo that matched none of the branches above rendered whichever screen
@@ -54,7 +60,7 @@ export default function DemoExperience({ demo, options, panel, verified, phase =
    * demo's identity screen, beside a deposit form.
    */
   throw new Error(
-    `No demo screen for '${demo.id}'. Known: giwa, kyc, country, email. Add a branch in DemoExperience, ` +
+    `No demo screen for '${demo.id}'. Known: giwa, kyc, country, email, passport. Add a branch in DemoExperience, ` +
       'or list the demo in DEDICATED_SCREENS if it has a screen of its own.',
   );
 }

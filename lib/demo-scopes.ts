@@ -19,6 +19,7 @@ export const CARD_SCOPES: Record<DemoId, string> = {
   kyc: 'zkproofport-demo:common:kyc',
   country: 'zkproofport-demo:borderless:country',
   email: 'zkproofport-demo:zk-blind:email',
+  passport: 'zkproofport-demo:townhall:passport',
 };
 
 /** The "Try it live." section further down, by the circuit each panel requests. */

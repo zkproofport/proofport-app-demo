@@ -22,5 +22,10 @@ export default function DemoFields({ demo, options, onChange, disabled }: Props)
         <option value="google">Google Workspace</option><option value="microsoft">Microsoft 365</option>
       </select>
     </>}
+    {demo.id === 'passport' && <>
+      <label htmlFor="passport-min-score">Minimum Human Passport score</label>
+      <input id="passport-min-score" value={options.minScore} onChange={event => update({ minScore: event.target.value })} inputMode="decimal" autoComplete="off" spellCheck={false} required aria-describedby="passport-min-score-help" />
+      <p id="passport-min-score-help" className="field-help">The vote's bar. Your exact score stays private.</p>
+    </>}
   </fieldset>;
 }

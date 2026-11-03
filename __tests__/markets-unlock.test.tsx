@@ -2,10 +2,10 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getBytes, keccak256, toUtf8Bytes } from 'ethers';
 import CircuitDemo from '../app/components/CircuitDemo';
 import { demoById } from '../lib/demo-catalog';
-import { COINBASE_SIGNER_ROOT, DEMO_VERIFIERS } from '../lib/demo-policy';
+import { COINBASE_ATTESTATION_PUBLIC_INPUT_COUNT } from '@zkproofport-app/core';
+import { cardResult, proofHex } from './fixtures/card-proofs';
 
 const external = vi.hoisted(() => ({ create: vi.fn(), qr: vi.fn(), wait: vi.fn(), onchain: vi.fn(), offchain: vi.fn(), disconnect: vi.fn(), unconfigured: vi.fn(), verifierFor: vi.fn() }));
 vi.mock('../lib/sdk', () => ({
@@ -21,13 +21,9 @@ beforeEach(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const demo = demoById('kyc')!;
   external.create.mockImplementation(async (_circuit, inputs) => {
-    const values = new Array(128).fill('0x00');
-    const put = (start: number, hash: string) => getBytes(hash).forEach((v, i) => { values[start + i] = `0x${v.toString(16).padStart(2, '0')}`; });
-    put(32, COINBASE_SIGNER_ROOT);
-    put(64, keccak256(toUtf8Bytes(inputs.scope)));
     // Synthetic witness-shaped response: this test exercises the UI and request
     // policy, while replacing only relay and cryptographic verification boundaries.
-    external.wait.mockResolvedValue({ requestId:'market-test', circuit:demo.circuit, status:'completed', proof:'0xabcd1234', publicInputs:values, chainId:84532, verifierAddress:DEMO_VERIFIERS[demo.circuit][84532] });
+    external.wait.mockResolvedValue(cardResult('kyc', 'market-test', inputs.scope));
     return { requestId:'market-test', deepLink:'zkproofport://proof-request?test=1' };
   });
   external.qr.mockResolvedValue('data:image/png;base64,test');
@@ -55,8 +51,8 @@ describe('Markets access follows verification', () => {
     await receive();
     expect(access()).toBe('locked');
     const disclosure = host.querySelector('.markets-proof-disclosure')!;
-    expect(disclosure.textContent).toContain('4 bytes');
-    expect(disclosure.textContent).toContain('128 values');
+    expect(disclosure.textContent).toContain(`${((proofHex('coinbase_attestation').length - 2) / 2).toLocaleString('en-US')} bytes`);
+    expect(disclosure.textContent).toContain(`${COINBASE_ATTESTATION_PUBLIC_INPUT_COUNT} values`);
     expect(disclosure.textContent).toContain('Not included in this proof');
     expect(disclosure.textContent).toContain('does not guarantee wallet anonymity');
     let complete!: (result: { valid:boolean }) => void;

@@ -1,18 +1,25 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { getPinnedVerifier, type ProofResponse } from '@zkproofport-app/sdk';
+import { ALL_CIRCUIT_IDS, getPinnedVariantVerifier, getPinnedVerifier, HUMAN_PASSPORT_SCORE_PUBLIC_INPUT_COUNT, type ProofResponse } from '@zkproofport-app/sdk';
+import { COINBASE_ATTESTATION_PUBLIC_INPUT_COUNT } from '@zkproofport-app/core';
+import { proofHex } from './fixtures/card-proofs';
 import { getAddress, keccak256 } from 'ethers';
 import { COINBASE_SIGNER_ROOT } from '../lib/demo-policy';
 import { GIWA_SIGNER_ROOT } from '../lib/giwa-membership';
 import { createVerifierSDK } from '../lib/sdk';
 
 const field = (value: number) => `0x${value.toString(16).padStart(64, '0')}`;
+const known = (circuit: string) => (ALL_CIRCUIT_IDS as readonly string[]).includes(circuit);
+/** The address a response would name; none for a pair core does not pin, so the demo's own refusal is what the test sees. */
+function pinnedOrNone(circuit: string, chainId: number): string | undefined {
+  try { return getPinnedVerifier(circuit, chainId).address; } catch { return undefined; }
+}
 function proof(overrides: Partial<ProofResponse> = {}): ProofResponse {
   const circuit = overrides.circuit ?? 'coinbase_attestation';
   const chainId = 'chainId' in overrides ? overrides.chainId : 84532;
   return {
-    requestId: 'r', circuit, status: 'completed', proof: '0x1234', publicInputs: Array.from({ length: 128 }, () => field(0)),
-    chainId, verifierAddress: 'verifierAddress' in overrides || chainId === undefined ? overrides.verifierAddress : getPinnedVerifier(circuit, chainId).address, ...overrides,
+    requestId: 'r', circuit, status: 'completed', proof: known(circuit) ? proofHex(circuit) : '0x1234', publicInputs: Array.from({ length: COINBASE_ATTESTATION_PUBLIC_INPUT_COUNT }, () => field(0)),
+    chainId, verifierAddress: 'verifierAddress' in overrides || chainId === undefined ? overrides.verifierAddress : pinnedOrNone(circuit, chainId), ...overrides,
   };
 }
 
@@ -37,6 +44,8 @@ describe('createVerifierSDK: the on-chain verifier is core\'s pinned deployment'
     [{ chainId: 0 }, /on chain 0/],
     [{ chainId: '84532' as unknown as number }, /on chain 84532/],
     [{ circuit: 'no_such_circuit' as ProofResponse['circuit'], verifierAddress: undefined }, /No verifier table for circuit 'no_such_circuit'/],
+    [{ signerVariant: 'ios' }, /no "ios" signer variant/],
+    [{ signerVariant: 'android' }, /coinbase_attestation/],
   ] as const)('throws, naming the key, for %o', (overrides, message) => {
     expect(() => createVerifierSDK(proof(overrides as Partial<ProofResponse>))).toThrow(message);
   });
@@ -115,8 +124,8 @@ describe('every verification call passes the request', () => {
     const onchain = source.match(/\.verifyResponseOnChain\([^)]*\)/g) ?? [];
     const offchain = source.match(/\.verifyResponseOffChain\([^)]*\)/g) ?? [];
     expect(onchain.length + offchain.length).toBeGreaterThan(1);
-    for (const call of onchain) expect(call).toMatch(/^\.verifyResponseOnChain\(\w+, undefined, \{ request \}\)$/);
-    for (const call of offchain) expect(call).toMatch(/^\.verifyResponseOffChain\(\w+, \{ request \}\)$/);
+    for (const call of onchain) expect(call).toMatch(/^\.verifyResponseOnChain\(\w+, undefined, \{ request, \.\.\.conditions \}\)$/);
+    for (const call of offchain) expect(call).toMatch(/^\.verifyResponseOffChain\(\w+, \{ request, \.\.\.conditions \}\)$/);
   });
 
   it('app/page.tsx records the request id of every card it creates a relay request for', () => {
@@ -125,5 +134,48 @@ describe('every verification call passes the request', () => {
     const recorded = source.match(/madeRequestIdsRef\.current\.(kyc|country|email|giwa) = result\.requestId;/g) ?? [];
     expect(created.length).toBe(4);
     expect(new Set(recorded).size).toBe(created.length);
+  });
+});
+
+// Human Passport: the threshold is a public input the prover chose, so a fresh
+// SDK refuses to verify until it is told what was asked.
+describe('a Human Passport proof is verified against the threshold the request asked for', () => {
+  const passport = (chainId = 84532) => proof({
+    circuit: 'human_passport_score', chainId, publicInputs: Array.from({ length: HUMAN_PASSPORT_SCORE_PUBLIC_INPUT_COUNT }, () => field(0)),
+  });
+  it.each([[84532], [8453]])('configures the pinned Human Passport verifier on chain %s', chainId => {
+    expect(createVerifierSDK(passport(chainId)).getVerifierAddress('human_passport_score')).toBe(getPinnedVerifier('human_passport_score', chainId).address);
+  });
+  it('the published SDK refuses it without a threshold', async () => {
+    const result = await createVerifierSDK(passport()).verifyResponseOnChain(passport(), untouchable, { request: { scope: 's', requestId: 'r' } });
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/minScore/);
+  });
+  it('with the threshold, it reaches the issuer check (all-zero inputs: refused there, never at the chain)', async () => {
+    const result = await createVerifierSDK(passport()).verifyResponseOnChain(passport(), untouchable, { request: { scope: 's', requestId: 'r' }, minScore: 20 });
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/Human Passport/);
+    expect(result.error).not.toMatch(/minScore|provider touched/);
+  });
+});
+
+// An Android signer's proof has its own verifier, which a configured verifier
+// (standard package only) cannot be; the SDK picks it from the chain's environment.
+describe('an Android-signed proof is verified against its own package\'s verifier', () => {
+  const android = (chainId: number) => proof({
+    chainId, signerVariant: 'android', proof: proofHex('coinbase_attestation', 'android'),
+    verifierAddress: getPinnedVariantVerifier('coinbase_attestation', 'android', chainId).address,
+  });
+  it.each([[84532], [8453]])('on chain %s: the Android verifier is accepted, then the issuer check runs before the chain', async chainId => {
+    const result = await createVerifierSDK(android(chainId)).verifyResponseOnChain(android(chainId), untouchable);
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/Coinbase/);
+    expect(result.error).not.toMatch(/provider touched|verifies against/);
+  });
+  it('refuses an Android proof that names the standard verifier', async () => {
+    const tampered = { ...android(84532), verifierAddress: getPinnedVerifier('coinbase_attestation', 84532).address };
+    const result = await createVerifierSDK(tampered).verifyResponseOnChain(tampered, untouchable);
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/verifies against/);
   });
 });

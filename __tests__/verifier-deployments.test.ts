@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { DEMO_VERIFIERS } from '../lib/demo-policy';
 import { GIWA_PUBLIC_INPUT_COUNT, GIWA_VERIFIER } from '../lib/giwa-membership';
 import { SSIAT_PUBLIC_INPUT_COUNT, SSIAT_VERIFIER } from '../lib/ssiat-drop';
-import { PINNED_VERIFIERS } from '@zkproofport-app/sdk';
-import { VERIFIER_DEPLOYMENTS, verifierAddress } from '../lib/verifier-deployments';
+import { PINNED_VERIFIERS, getPinnedVariantVerifier, getPinnedVerifier, signerVariantsOf } from '@zkproofport-app/sdk';
+import { VERIFIER_DEPLOYMENTS, variantVerifierAddress, verifierAddress } from '../lib/verifier-deployments';
 
 // The circuits repository is a sibling checkout. Its records are read from
 // origin/main with `git show`, so the answer does not depend on which branch
@@ -31,8 +31,13 @@ function recordedAddress(path: string): string {
   return String(json.address).toLowerCase();
 }
 
-const rows = Object.entries(VERIFIER_DEPLOYMENTS).flatMap(([circuit, byChain]) =>
-  Object.entries(byChain).map(([chain, row]) => ({ circuit, chain: Number(chain), address: verifierAddress(circuit, Number(chain)), ...row })));
+const rows = Object.entries(VERIFIER_DEPLOYMENTS).flatMap(([circuit, chains]) =>
+  chains.map(chain => ({ circuit, chain, address: verifierAddress(circuit, chain), record: getPinnedVerifier(circuit, chain).record })));
+// Every other package (an Android signer's) of every accepted pair: its own verifier, its own record.
+const variantRows = Object.entries(VERIFIER_DEPLOYMENTS).flatMap(([circuit, chains]) =>
+  signerVariantsOf(circuit).filter(variant => variant !== 'standard').flatMap(variant => chains.map(chain => ({
+    circuit, chain, variant, address: variantVerifierAddress(circuit, chain, variant), record: getPinnedVariantVerifier(circuit, variant, chain).record,
+  }))));
 
 describe('verifier table', () => {
   it('lists lowercase 20-byte addresses, each exactly once', () => {
@@ -44,6 +49,13 @@ describe('verifier table', () => {
     expect(GIWA_VERIFIER).toBe(verifierAddress('giwa_attestation', 91342));
     expect(SSIAT_VERIFIER).toBe(verifierAddress('dojang_playground', 91342));
   });
+  it('has a distinct verifier for every other package of every accepted pair', () => {
+    expect(variantRows.length).toBeGreaterThan(0);
+    for (const r of variantRows) expect(r.address).toMatch(/^0x[0-9a-f]{40}$/);
+    expect(new Set([...rows, ...variantRows].map(r => r.address)).size).toBe(rows.length + variantRows.length);
+    expect(() => variantVerifierAddress('human_passport_score', 84532, 'android')).toThrow(/android/);
+    expect(() => variantVerifierAddress('coinbase_attestation', 11155111, 'android')).toThrow(/Known chains: 8453, 84532/);
+  });
   it('takes every address from core\'s pinned table, not a copy', () => {
     for (const r of rows) expect(r.address).toBe((PINNED_VERIFIERS as Record<string, Record<number, { address: string }>>)[r.circuit][r.chain].address);
   });
@@ -52,7 +64,10 @@ describe('verifier table', () => {
     // Core pins these, but the demo does not accept them: the allowlist decides, not core's reach.
     ['coinbase_attestation', 1, /No coinbase_attestation verifier on chain 1\. Known chains: 8453, 84532/],
     ['coinbase_attestation', 11155111, /No coinbase_attestation verifier on chain 11155111/],
-    ['mdl_kr_age', 84532, /No verifier table for circuit 'mdl_kr_age'\. Known: giwa_attestation, dojang_playground, coinbase_attestation, coinbase_country_attestation, oidc_domain_attestation\.$/],
+    ['mdl_kr_age', 84532, /No verifier table for circuit 'mdl_kr_age'\. Known: giwa_attestation, dojang_playground, coinbase_attestation, coinbase_country_attestation, oidc_domain_attestation, human_passport_score\.$/],
+    // Core pins Human Passport on Sepolia too; the app verifies it on Base and Base Sepolia only.
+    ['human_passport_score', 11155111, /No human_passport_score verifier on chain 11155111\. Known chains: 8453, 84532/],
+    ['human_passport_score', 10, /No human_passport_score verifier on chain 10\./],
     ['__proto__', 84532, /No verifier table for circuit '__proto__'/],
     ['constructor', 84532, /No verifier table for circuit 'constructor'/],
     ['코인베이스', 84532, /No verifier table for circuit '코인베이스'/],
@@ -88,6 +103,9 @@ describe('demo contracts are built against the table', () => {
 // Visible skip, not a silent pass, when the circuits checkout is absent.
 describe.skipIf(!available)(`verifier table matches the circuits deployment records (../circuits ${REF})`, () => {
   it.each(rows.map(r => [`${r.circuit} on ${r.chain}`, r] as const))('%s', (_name, r) => {
+    expect(r.address).toBe(recordedAddress(r.record));
+  });
+  it.each(variantRows.map(r => [`${r.circuit} (${r.variant}) on ${r.chain}`, r] as const))('%s', (_name, r) => {
     expect(r.address).toBe(recordedAddress(r.record));
   });
 });

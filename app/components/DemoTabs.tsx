@@ -18,6 +18,7 @@ const tabs: { id: Tab; label: string; status?: 'Live' | 'PoC' }[] = [
   { id: 'kyc', label: 'Markets', status: 'Live' },
   { id: 'country', label: 'Borderless', status: 'Live' },
   { id: 'email', label: 'zk blind', status: 'Live' },
+  { id: 'passport', label: 'Townhall', status: 'Live' },
   { id: 'giwa', label: 'Gotgan', status: 'PoC' },
   { id: 'ssiat', label: 'Ssiat', status: 'PoC' },
   { id: 'all', label: 'All demos' },

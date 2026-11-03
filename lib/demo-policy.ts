@@ -1,28 +1,47 @@
 import {
-  CIRCUIT_IDS, extractScopeFromPublicInputs, COINBASE_COUNTRY_PUBLIC_INPUT_LAYOUT as COUNTRY,
-  OIDC_DOMAIN_ATTESTATION_PUBLIC_INPUT_LAYOUT as OIDC,
+  CIRCUIT_IDS, extractScopeFromPublicInputs, COINBASE_ATTESTATION_PUBLIC_INPUT_LAYOUT as KYC,
+  COINBASE_COUNTRY_PUBLIC_INPUT_LAYOUT as COUNTRY, COINBASE_COUNTRY_PUBLIC_INPUT_COUNT,
+  HUMAN_PASSPORT_ISSUER_ROOT, HUMAN_PASSPORT_SCORE_PUBLIC_INPUT_COUNT, HUMAN_PASSPORT_SCORE_PUBLIC_INPUT_LAYOUT as PASSPORT,
+  humanPassportScoreUnits, OIDC_DOMAIN_ATTESTATION_PUBLIC_INPUT_LAYOUT as OIDC,
   type CircuitInputs, type ProofResponse, type RelayProofResult,
 } from '@zkproofport-app/sdk';
-import { COINBASE_SIGNER_SET, OIDC_PUBLIC_INPUT_COUNT } from '@zkproofport-app/core';
+import {
+  COINBASE_ATTESTATION_PUBLIC_INPUT_COUNT, COINBASE_SIGNER_SET, OIDC_PUBLIC_INPUT_COUNT, type CountryCondition,
+} from '@zkproofport-app/core';
 import { keccak256, toUtf8Bytes } from 'ethers';
 import { type DemoCircuit, type DemoDefinition } from './demo-catalog';
 import { GIWA_CHAIN_ID, GIWA_PUBLIC_INPUT_COUNT, prepareGiwaMembershipProof } from './giwa-membership';
 import { SSIAT_PUBLIC_INPUT_COUNT } from './ssiat-drop';
-import { VERIFIER_DEPLOYMENTS, verifierAddress } from './verifier-deployments';
+import { VERIFIER_DEPLOYMENTS, proofSignerVariant, variantVerifierAddress, verifierAddress } from './verifier-deployments';
 
 export type DemoOptions = {
   countries: string; inclusion: boolean; domain: string; provider: 'google' | 'microsoft';
+  /** The Human Passport score threshold as typed, in points (20 = 20.0). */
+  minScore: string;
 };
 export const DEFAULT_OPTIONS: DemoOptions = {
-  countries: 'US, KR, JP', inclusion: true, domain: 'zkproofport.com', provider: 'google',
+  countries: 'US, KR, JP', inclusion: true, domain: 'zkproofport.com', provider: 'google', minScore: '20',
 };
+
+/**
+ * A typed threshold as a number of Passport points: digits with at most four
+ * decimals, above zero, within what the circuit holds. The SDK's
+ * humanPassportScoreUnits decides the range, so this does not keep a copy.
+ */
+export function parseMinScore(text: string): number {
+  const trimmed = text.trim();
+  if (!/^\d{1,6}(?:\.\d{1,4})?$/.test(trimmed)) throw new Error('Enter a score threshold such as 20 or 20.5, with at most four decimals.');
+  const value = Number(trimmed);
+  try { humanPassportScoreUnits(value); } catch { throw new Error('Enter a score threshold above 0 and no higher than 429496.7295.'); }
+  return value;
+}
 
 // The allowlisted (circuit, chain) pairs, each resolved to core's pinned
 // verifier. Responses can select an allowlisted deployment, never supply an
 // arbitrary verifier contract.
 export const DEMO_VERIFIERS: Record<DemoCircuit, Record<number, string>> = Object.fromEntries(
-  Object.entries(VERIFIER_DEPLOYMENTS).map(([circuit, byChain]) => [
-    circuit, Object.fromEntries(Object.keys(byChain).map(chain => [chain, verifierAddress(circuit, Number(chain))])),
+  Object.entries(VERIFIER_DEPLOYMENTS).map(([circuit, chains]) => [
+    circuit, Object.fromEntries(chains.map(chain => [chain, verifierAddress(circuit, chain)])),
   ]),
 ) as Record<DemoCircuit, Record<number, string>>;
 
@@ -50,6 +69,7 @@ export function buildDemoInputs(demo: DemoDefinition, options: DemoOptions, scop
       if (!['google', 'microsoft'].includes(options.provider)) throw new Error('Select a supported sign-in provider.');
       return { scope, domain, provider: options.provider };
     }
+    case 'passport': return { scope, minScore: parseMinScore(options.minScore) };
     // These requests carry only the scope. The Gotgan deposit flow builds its
     // action-bound request in lib/useGiwaVault.ts, and the Ssiat claim builds
     // its Claim(recipient) request in lib/useSsiatDrop.ts, not here.
@@ -61,13 +81,39 @@ export function buildDemoInputs(demo: DemoDefinition, options: DemoOptions, scop
   }
 }
 
-// OIDC's count is core's: the v2 circuit has 214 public inputs, and a v1
-// (148) proof is refused here before the SDK refuses it by name.
+// Every count is the SDK's or core's: a v1 Coinbase proof (128 / 150) or a v1
+// OIDC proof (148) is refused here before the SDK refuses it by name.
 const PUBLIC_COUNTS: Record<DemoCircuit, number> = {
   [CIRCUIT_IDS.GIWA_ATTESTATION]: GIWA_PUBLIC_INPUT_COUNT, [CIRCUIT_IDS.DOJANG_PLAYGROUND]: SSIAT_PUBLIC_INPUT_COUNT,
-  [CIRCUIT_IDS.COINBASE_ATTESTATION]: 128,
-  [CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION]: 150, [CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION]: OIDC_PUBLIC_INPUT_COUNT,
+  [CIRCUIT_IDS.COINBASE_ATTESTATION]: COINBASE_ATTESTATION_PUBLIC_INPUT_COUNT,
+  [CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION]: COINBASE_COUNTRY_PUBLIC_INPUT_COUNT, [CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION]: OIDC_PUBLIC_INPUT_COUNT,
+  [CIRCUIT_IDS.HUMAN_PASSPORT_SCORE]: HUMAN_PASSPORT_SCORE_PUBLIC_INPUT_COUNT,
 };
+
+/**
+ * Where each circuit's issuer root sits and what it must be, for the demos
+ * that check one here. The SDK checks it again during verification; this
+ * refuses a substituted issuer before the person is offered a verify button.
+ */
+const ISSUER_ROOTS: Partial<Record<DemoCircuit, { start: number; root: string; name: string }>> = {
+  [CIRCUIT_IDS.COINBASE_ATTESTATION]: { start: KYC.MERKLE_ROOT_START, root: COINBASE_SIGNER_SET.root, name: 'attester' },
+  [CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION]: { start: COUNTRY.MERKLE_ROOT_START, root: COINBASE_SIGNER_SET.root, name: 'attester' },
+  [CIRCUIT_IDS.HUMAN_PASSPORT_SCORE]: { start: PASSPORT.MERKLE_ROOT_START, root: HUMAN_PASSPORT_ISSUER_ROOT, name: 'issuer' },
+};
+
+/**
+ * What the SDK must be told about the request when it verifies a proof from a
+ * fresh instance (the on-chain path never saw the request): the country list
+ * and direction, or the score threshold. The proof carries these as public
+ * inputs the prover chose, so the SDK refuses to verify without them.
+ */
+export type VerificationConditions = { countryCondition?: CountryCondition; minScore?: number };
+export function verificationConditions(demo: DemoDefinition, options: DemoOptions, scope: string): VerificationConditions {
+  const requested = buildDemoInputs(demo, options, scope);
+  if ('countryList' in requested) return { countryCondition: { countryList: requested.countryList, isIncluded: requested.isIncluded } };
+  if ('minScore' in requested) return { minScore: requested.minScore };
+  return {};
+}
 
 function bytes(inputs: string[], start: number, length = 32): Uint8Array {
   return Uint8Array.from(inputs.slice(start, start + length).map(input => {
@@ -93,8 +139,15 @@ export function prepareDemoProof(result: RelayProofResult, context: DemoRequestC
   if (demo.id === 'ssiat') throw new Error('Ssiat claim proofs are checked by prepareSsiatClaimProof, with the claim action.');
   if (result.requestId !== requestId || result.circuit !== demo.circuit) throw new Error('This proof belongs to a different demo request.');
   if (result.status !== 'completed' || !result.proof || !/^0x(?:[0-9a-f]{2})+$/i.test(result.proof)) throw new Error(result.error || 'A completed proof is required.');
-  const verifier = result.chainId === undefined ? undefined : DEMO_VERIFIERS[demo.circuit][result.chainId];
-  if (!verifier || result.verifierAddress?.toLowerCase() !== verifier) throw new Error('The proof does not use a configured verifier for this circuit.');
+  // Which package made the proof (an Android signer's has its own verifier)
+  // is the SDK's call, from the result's claim and the proof's length.
+  const variant = proofSignerVariant(demo.circuit, result.signerVariant, result.proof);
+  if (result.chainId === undefined) throw new Error('The proof does not use a configured verifier for this circuit: it names no chain.');
+  let verifier: string;
+  try { verifier = variantVerifierAddress(demo.circuit, result.chainId, variant); } catch (cause) {
+    throw new Error(`The proof does not use a configured verifier for this circuit: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
+  if (result.verifierAddress?.toLowerCase() !== verifier) throw new Error('The proof does not use a configured verifier for this circuit.');
   const inputs = result.publicInputs;
   if (!inputs || inputs.length !== PUBLIC_COUNTS[demo.circuit] || inputs.some(value => !/^0x[0-9a-f]{1,64}$/i.test(value))) {
     throw new Error('The proof has an unexpected public-input format.');
@@ -121,7 +174,11 @@ export function prepareDemoProof(result: RelayProofResult, context: DemoRequestC
     }
     throw new Error('This proof does not match the requested session.');
   }
-  if (demo.id === 'kyc' || demo.id === 'country') equalHash(inputs, 32, COINBASE_SIGNER_ROOT, 'attester');
+  const issuer = ISSUER_ROOTS[demo.circuit];
+  if (issuer) equalHash(inputs, issuer.start, issuer.root, issuer.name);
+  if (demo.id === 'passport' && 'minScore' in requested) {
+    if (BigInt(inputs[PASSPORT.MIN_SCORE]) !== BigInt(humanPassportScoreUnits(requested.minScore))) throw new Error('The proof does not match the requested score threshold.');
+  }
   if (demo.id === 'country' && 'countryList' in requested) {
     const length = Number(BigInt(inputs[COUNTRY.COUNTRY_LIST_LENGTH]));
     if (length !== requested.countryList.length || BigInt(inputs[COUNTRY.IS_INCLUDED]) !== BigInt(requested.isIncluded ? 1 : 0)) throw new Error('The proof does not match the selected country policy.');
@@ -136,7 +193,10 @@ export function prepareDemoProof(result: RelayProofResult, context: DemoRequestC
     const domain = new TextDecoder().decode(bytes(inputs, OIDC.DOMAIN_STORAGE_START, length));
     if (domain !== requested.domain || BigInt(inputs[OIDC.PROVIDER]) !== BigInt(options.provider === 'microsoft' ? 1 : 0)) throw new Error('The proof does not match the selected email domain and provider.');
   }
-  return { requestId, circuit: demo.circuit, status: 'completed', proof: result.proof, publicInputs: inputs, chainId: result.chainId, verifierAddress: verifier };
+  return {
+    requestId, circuit: demo.circuit, status: 'completed', proof: result.proof, publicInputs: inputs, chainId: result.chainId, verifierAddress: verifier,
+    ...(result.signerVariant !== undefined && { signerVariant: variant }),
+  };
 }
 
 /**

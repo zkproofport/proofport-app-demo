@@ -7,7 +7,7 @@ import { CIRCUIT_IDS, type CircuitId } from '@zkproofport-app/sdk';
  */
 export const DEMO_CIRCUITS = [
   CIRCUIT_IDS.GIWA_ATTESTATION, CIRCUIT_IDS.DOJANG_PLAYGROUND, CIRCUIT_IDS.COINBASE_ATTESTATION, CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION,
-  CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION,
+  CIRCUIT_IDS.OIDC_DOMAIN_ATTESTATION, CIRCUIT_IDS.HUMAN_PASSPORT_SCORE,
 ] as const;
 export type DemoCircuit = (typeof DEMO_CIRCUITS)[number];
 
@@ -20,7 +20,7 @@ export type DemoCircuit = (typeof DEMO_CIRCUITS)[number];
  */
 export const SDK_CIRCUITS_WITHOUT_A_DEMO: readonly CircuitId[] = [];
 
-export type DemoId = 'giwa' | 'ssiat' | 'kyc' | 'country' | 'email';
+export type DemoId = 'giwa' | 'ssiat' | 'kyc' | 'country' | 'email' | 'passport';
 export type DemoDefinition = {
   id: DemoId; circuit: DemoCircuit; tab: string; brand: string; category: string;
   headline: string; description: string; image: number; imageAlt: string;
@@ -161,6 +161,29 @@ export const DEMOS: readonly DemoDefinition[] = [
     }
   ],
   "note": "Independent fictional workplace-community demo, not affiliated with Blind. Sample discussions are illustrative. Production integrations must separately enforce provider-key trust and token freshness.",
+  "experimental": false
+},
+{
+  circuit: CIRCUIT_IDS.HUMAN_PASSPORT_SCORE,
+  "id": "passport",
+  "tab": "Townhall",
+  "brand": "Townhall",
+  "category": "One person, one vote",
+  "headline": "One person. One vote.",
+  "description": "A community vote open to people, not bots. Prove your Human Passport score clears the bar.",
+  "image": 4,
+  "imageAlt": "",
+  "actionTitle": "Join the vote",
+  "actionDescription": "Prove your Human Passport score meets this vote's threshold.",
+  "credential": "Human Passport score at or above the threshold",
+  "hides": "Your wallet address and your exact score",
+  "outcomeTitle": "You can vote.",
+  "outcomeDescription": "Your proof shows your Human Passport score meets the threshold. Your wallet and exact score stay private.",
+  "outcomeItems": [
+    { "title": "Verified condition", "description": "Human Passport score at or above the threshold" },
+    { "title": "Private information", "description": "Your wallet address and your exact score are not included in the proof." }
+  ],
+  "note": "Fictional community vote. No ballot is recorded and no tokens are distributed. The threshold is a demo setting; the proof shows the score met it, not the score itself.",
   "experimental": false
 }
 ];

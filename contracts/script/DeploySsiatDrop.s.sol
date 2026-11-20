@@ -22,7 +22,8 @@ contract DeploySsiatDrop {
     /// 100 SEED per faucet wallet; 1,000,000 SEED in the pool, i.e. 10,000 claims.
     uint256 public constant CLAIM_AMOUNT = 100 ether;
     uint256 public constant SUPPLY = 1_000_000 ether;
-    address public constant VERIFIER = 0xAD6C9bFA60F3ee618dee9DC2027a69C57f2aD816;
+    address public constant VERIFIER = 0x400474E78a793289D091A5F556F78158956B5D01;
+    bytes32 public constant OPRF_KEY_HASH = 0x039ecd4ea1875bb5c7f7a1bfae692cab271e3f3f25df4e5ab691fcb17586e6d1;
 
     event SsiatDropDeployed(address indexed drop, address indexed token, string scope, bytes32 domainSeparator);
 
@@ -35,7 +36,9 @@ contract DeploySsiatDrop {
         require(address(drop).code.length != 0, "Drop deployment has no bytecode");
         require(address(token).code.length != 0, "Token deployment has no bytecode");
         require(drop.VERIFIER() == VERIFIER, "Drop verifier mismatch");
-        require(drop.PUBLIC_INPUT_COUNT() == 160, "Drop public input layout mismatch");
+        require(drop.PUBLIC_INPUT_COUNT() == 100, "Drop public input layout mismatch");
+        require(drop.OPRF_KEY_HASH() == OPRF_KEY_HASH, "Drop OPRF key hash mismatch");
+        require(keccak256(bytes(drop.OPRF_DOMAIN())) == keccak256("demo.zkproofport.app"), "Drop OPRF domain mismatch");
         require(drop.CLAIM_AMOUNT() == CLAIM_AMOUNT, "Claim amount mismatch");
         require(token.totalSupply() == SUPPLY, "Token supply mismatch");
         require(token.balanceOf(address(drop)) == SUPPLY, "Supply did not land in the drop");

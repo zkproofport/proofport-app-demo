@@ -16,6 +16,8 @@ export const VAULT_ABI = [
   'function balanceOf(address) view returns (uint256)',
   'function totalDeposits() view returns (uint256)',
   'function depositScope(address,uint256) view returns (string)',
+  'function OPRF_DOMAIN() view returns (string)',
+  'function OPRF_KEY_HASH() view returns (bytes32)',
   'function nonces(address) view returns (uint256)',
   'function domainSeparator() view returns (bytes32)',
   'function depositActionHash(address,uint256) view returns (bytes32)',
@@ -25,6 +27,8 @@ export const VAULT_ABI = [
   'error ProofRequired()', 'error WrongDepositScope()', 'error InvalidProof()',
   'error UntrustedIssuer()', 'error InsufficientBalance()', 'error TokenTransferFailed()',
   'error IdentityProofNotAllowed()', 'error WrongDepositDomain()', 'error WrongDepositAction()',
+  'error WrongOprfKey()', 'error WrongOprfDomain()', 'error InvalidPublicInputCount()',
+  'error InvalidPublicInputByte(uint256)', 'error InvalidPublicInputField(uint256)',
 ];
 const vaultInterface = new Interface(VAULT_ABI);
 
@@ -111,8 +115,8 @@ export function vaultErrorMessage(cause: unknown): string {
   const error = cause as { code?: string | number; shortMessage?: string; message?: string };
   if (error?.code === 'ACTION_REJECTED' || error?.code === 4001) return 'The wallet request was declined. You can try again.';
   const name = vaultErrorName(cause);
-  if (['WrongDepositScope', 'WrongDepositDomain', 'WrongDepositAction', 'IdentityProofNotAllowed'].includes(name ?? '')) return 'This proof no longer matches the deposit. Generate a new proof.';
-  if (name === 'InvalidProof' || name === 'UntrustedIssuer') return 'The eligibility proof did not pass the Vault check. Generate a new proof.';
+  if (['WrongDepositScope', 'WrongDepositDomain', 'WrongDepositAction', 'IdentityProofNotAllowed', 'WrongOprfDomain'].includes(name ?? '')) return 'This proof no longer matches the deposit. Generate a new proof.';
+  if (['InvalidProof', 'UntrustedIssuer', 'WrongOprfKey', 'InvalidPublicInputCount', 'InvalidPublicInputByte', 'InvalidPublicInputField'].includes(name ?? '')) return 'The eligibility proof did not pass the Vault check. Generate a new proof.';
   if (name === 'TokenTransferFailed') return 'Token transfer failed. Check your dKRW balance and Vault allowance.';
   return error?.shortMessage || error?.message || 'The request could not finish. Please try again.';
 }

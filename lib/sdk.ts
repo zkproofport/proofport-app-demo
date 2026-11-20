@@ -1,6 +1,7 @@
-import { ProofportSDK, type ProofResponse, type SDKEnvironment } from '@zkproofport-app/sdk';
+import { ProofportSDK, type ProofResponse } from '@zkproofport-app/sdk';
 import { VERIFIER_ABI } from '@zkproofport-app/core';
 import { Wallet } from 'ethers';
+import { oprfEnvironmentForChain } from './oprf';
 import { proofSignerVariant, variantVerifierAddress, verifierAddress } from './verifier-deployments';
 
 export function createSDK(): ProofportSDK {
@@ -41,22 +42,22 @@ export function createSDK(): ProofportSDK {
  * chosen" for every on-chain check. The verifier is configured here instead,
  * and the SDK still refuses a response whose verifierAddress differs from it.
  *
+ * The SDK's environment comes from the proof's chain (lib/oprf.ts): it decides
+ * whose OPRF key a wallet credential proof must carry, and the SDK refuses one
+ * without it. Off-chain verification uses this SDK too, for the same reason.
+ *
  * A configured verifier is the standard package's contract only. A proof from
  * an Android signer's package is verified on its environment's chains instead,
- * where the SDK picks that package's pinned verifier; the chain decides which
- * environment, and an unlisted chain is an error.
+ * where the SDK picks that package's pinned verifier.
  */
-const VARIANT_ENVIRONMENTS: Readonly<Record<number, SDKEnvironment>> = Object.freeze({ 8453: 'production', 84532: 'staging' });
-
 export function createVerifierSDK(proof: ProofResponse): ProofportSDK {
   const { circuit, chainId } = proof;
   if (chainId === undefined) throw new Error(`The ${circuit} proof names no chain, so there is no verifier to check it against.`);
   const address = verifierAddress(circuit, chainId);
+  const environment = oprfEnvironmentForChain(chainId);
   const variant = proofSignerVariant(circuit, proof.signerVariant, proof.proof);
-  if (variant === 'standard') return new ProofportSDK({ verifiers: { [circuit]: { address, chainId, abi: VERIFIER_ABI } } });
+  if (variant === 'standard') return new ProofportSDK({ verifiers: { [circuit]: { address, chainId, abi: VERIFIER_ABI } }, environment });
   variantVerifierAddress(circuit, chainId, variant);
-  const environment = Object.hasOwn(VARIANT_ENVIRONMENTS, chainId) ? VARIANT_ENVIRONMENTS[chainId] : undefined;
-  if (!environment) throw new Error(`No environment verifies chain ${chainId}. Known: ${Object.keys(VARIANT_ENVIRONMENTS).join(', ')}.`);
   return new ProofportSDK({ environment });
 }
 

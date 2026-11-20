@@ -9,6 +9,7 @@ import { useSsiatDrop } from '../lib/useSsiatDrop';
 import SsiatDemo from '../app/components/SsiatDemo';
 import { SSIAT_DROP_ABI } from '../lib/ssiat-drop';
 import { claimAction, SSIAT_TEST_DROP, SSIAT_TEST_NULLIFIER, SSIAT_TEST_RECIPIENT, SSIAT_TEST_SCOPE, ssiatResult } from './fixtures/ssiat';
+import { DEMO_DOMAIN, TESTNET_OPRF_KEY_HASH } from './fixtures/giwa';
 
 const external = vi.hoisted(() => ({
   dropAddress: '' as string,
@@ -17,7 +18,7 @@ const external = vi.hoisted(() => ({
   getBlockNumber: vi.fn(), destroy: vi.fn(), contracts: [] as string[],
   token: vi.fn(), claimAmount: vi.fn(), remaining: vi.fn(), totalClaims: vi.fn(),
   claimScope: vi.fn(), domainSeparator: vi.fn(), claimActionHash: vi.fn(),
-  claimed: vi.fn(), verifyClaim: vi.fn(), claim: vi.fn(), balanceOf: vi.fn(),
+  claimed: vi.fn(), verifyClaim: vi.fn(), claim: vi.fn(), balanceOf: vi.fn(), oprfDomain: vi.fn(), oprfKeyHash: vi.fn(),
 }));
 
 // The deployed address is the one thing the tests choose; everything else in
@@ -49,6 +50,7 @@ vi.mock('ethers', async importOriginal => {
       totalClaims = external.totalClaims; claimScope = external.claimScope; domainSeparator = external.domainSeparator;
       claimActionHash = external.claimActionHash; claimed = external.claimed; verifyClaim = external.verifyClaim;
       claim = external.claim; balanceOf = external.balanceOf;
+      OPRF_DOMAIN = external.oprfDomain; OPRF_KEY_HASH = external.oprfKeyHash;
     },
   };
 });
@@ -92,6 +94,8 @@ beforeEach(async () => {
   external.totalClaims.mockResolvedValue(BigInt(3));
   external.balanceOf.mockResolvedValue(BigInt(0));
   external.claimScope.mockResolvedValue(SSIAT_TEST_SCOPE);
+  external.oprfDomain.mockResolvedValue(DEMO_DOMAIN);
+  external.oprfKeyHash.mockResolvedValue(TESTNET_OPRF_KEY_HASH);
   external.domainSeparator.mockResolvedValue(TypedDataEncoder.hashDomain(claimAction().domain));
   contractAnswersFor(SSIAT_TEST_RECIPIENT);
   external.claimed.mockResolvedValue(false);
@@ -169,19 +173,31 @@ describe('Ssiat claim orchestration', () => {
 
   it('reads the drop at one block, sends the exact scope and Claim(recipient), and preflights the returned proof', async () => {
     await proveReady();
-    for (const read of [external.claimScope, external.domainSeparator, external.remaining, external.claimAmount]) {
+    for (const read of [external.claimScope, external.domainSeparator, external.remaining, external.claimAmount, external.oprfDomain, external.oprfKeyHash]) {
       expect(read).toHaveBeenCalledWith({ blockTag: 321 });
     }
     expect(external.claimActionHash).toHaveBeenCalledWith(SSIAT_TEST_RECIPIENT, { blockTag: 321 });
     expect(external.signer.mock.invocationCallOrder[0]).toBeLessThan(external.create.mock.invocationCallOrder[0]);
     // The browser talks to the relay itself, never through a route on this demo's server.
     expect(external.sdkConfigs.at(-1)).toEqual({ relayUrl: 'http://localhost:4001' });
-    expect(external.create).toHaveBeenCalledWith('dojang_playground', { scope: SSIAT_TEST_SCOPE, action: claimAction() }, expect.objectContaining({ dappName: 'Ssiat' }));
+    expect(external.create).toHaveBeenCalledWith('dojang_playground', { scope: SSIAT_TEST_SCOPE, oprfDomain: DEMO_DOMAIN, action: claimAction() }, expect.objectContaining({ dappName: 'Ssiat' }));
     expect(external.claimed).toHaveBeenCalledWith(SSIAT_TEST_NULLIFIER);
     expect(external.verifyClaim).toHaveBeenCalledWith(SSIAT_TEST_RECIPIENT, '0x1234', expect.any(Array));
-    expect(external.verifyClaim.mock.calls[0][2]).toHaveLength(160);
+    expect(external.verifyClaim.mock.calls[0][2]).toHaveLength(100);
     expect(flow.proof).toMatchObject({ recipient: SSIAT_TEST_RECIPIENT, nullifier: SSIAT_TEST_NULLIFIER, amount: CLAIM });
     expect(external.contracts.every(address => address === SSIAT_TEST_DROP || address === SEED_TOKEN)).toBe(true);
+  });
+
+  it.each([
+    ['another domain', () => external.oprfDomain.mockResolvedValue('stg-demo.zkproofport.app')],
+    ['another key hash', () => external.oprfKeyHash.mockResolvedValue('0x' + '22'.repeat(32))],
+  ])('refuses to request a proof from a drop pinning %s', async (_, arrange) => {
+    arrange();
+    await connect();
+    await act(async () => { await flow.requestProof(); });
+    expect(external.create).not.toHaveBeenCalled();
+    expect(flow.phase).toBe('blocked');
+    expect(flow.error).toMatch(/not the Ssiat drop this page expects/);
   });
 
   it('claims for the connected recipient and reports the confirmed transaction', async () => {

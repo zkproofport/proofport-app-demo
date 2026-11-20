@@ -14,6 +14,8 @@ import { CIRCUIT_IDS, ProofportSDK } from '@zkproofport-app/sdk';
 import { AbiCoder, Contract, hexlify, JsonRpcProvider, keccak256, randomBytes, TypedDataEncoder, Wallet } from 'ethers';
 import { buildGiwaDepositAction, GIWA_RPC, TOKEN_ADDRESS, VAULT_ABI, VAULT_ADDRESS, vaultErrorName } from '../lib/giwa-vault';
 import { verifierAddress } from '../lib/verifier-deployments';
+import { getPinnedOprfKeyHash } from '@zkproofport-app/core';
+import { DEMO_OPRF_DOMAIN, oprfEnvironmentForChain } from '../lib/oprf';
 
 const relayUrl = process.env.RELAY_URL;
 if (!relayUrl) throw new Error('RELAY_URL is required: the relay the request is created on.');
@@ -42,7 +44,8 @@ describe('Gotgan deposit request crosses the real relay', () => {
     const sdk = new ProofportSDK({ relayUrl });
     sdk.setSigner(wallet);
     try {
-      const pending = await sdk.createRelayRequest(CIRCUIT_IDS.GIWA_ATTESTATION, { scope, action }, {
+      // Outside a browser the SDK refuses a wallet request that names no OPRF domain.
+      const pending = await sdk.createRelayRequest(CIRCUIT_IDS.GIWA_ATTESTATION, { scope, oprfDomain: DEMO_OPRF_DOMAIN, action }, {
         dappName: 'Gotgan', message: `Verify a Gotgan deposit ${hexlify(randomBytes(8))}`,
       });
       expect(pending.requestId).toMatch(/^[0-9a-f-]{36}$/i);
@@ -52,6 +55,7 @@ describe('Gotgan deposit request crosses the real relay', () => {
       const payload = JSON.parse(Buffer.from(encoded!, 'base64').toString('utf8'));
       expect(payload.circuitId).toBe('giwa_attestation');
       expect(payload.inputs.scope).toBe(scope);
+      expect(payload.inputs.oprfDomain).toBe(DEMO_OPRF_DOMAIN);
       expect(payload.inputs.action).toEqual({
         domain: { name: 'Gotgan', version: '2', chainId: 91342, verifyingContract: VAULT_ADDRESS },
         primaryType: 'Deposit',
@@ -96,18 +100,22 @@ describe('the deployed GIWA vault agrees with the SDK deposit action', () => {
       expect(Number(await provider.send('eth_chainId', []))).toBe(91342);
       const blockTag = await provider.getBlockNumber();
       const amount = BigInt(1000000);
-      const [code, nonce, scope, domainHash, actionHash, asset, verifier] = await Promise.all([
+      const [code, nonce, scope, domainHash, actionHash, asset, verifier, oprfDomain, oprfKeyHash] = await Promise.all([
         provider.getCode(VAULT_ADDRESS, blockTag),
         contract.nonces(account, { blockTag }),
         contract.depositScope(account, amount, { blockTag }),
         contract.domainSeparator({ blockTag }),
         contract.depositActionHash(account, amount, { blockTag }),
         contract.asset({ blockTag }), contract.VERIFIER({ blockTag }),
+        contract.OPRF_DOMAIN({ blockTag }), contract.OPRF_KEY_HASH({ blockTag }),
       ]);
       expect(code).not.toBe('0x');
       expect(asset.toLowerCase()).toBe(TOKEN_ADDRESS.toLowerCase());
       // The vault's immutable VERIFIER must be the one the demo's proof allowlist names.
       expect(verifier.toLowerCase()).toBe(verifierAddress(CIRCUIT_IDS.GIWA_ATTESTATION, 91342));
+      // And it pins the OPRF domain the demo requests and the key core pins for this chain.
+      expect(oprfDomain).toBe(DEMO_OPRF_DOMAIN);
+      expect(oprfKeyHash.toLowerCase()).toBe(getPinnedOprfKeyHash(oprfEnvironmentForChain(91342), CIRCUIT_IDS.GIWA_ATTESTATION));
       const action = buildGiwaDepositAction(account, amount, nonce);
       expect(TypedDataEncoder.hashDomain(action.domain)).toBe(domainHash);
       expect(TypedDataEncoder.hashStruct(action.primaryType, action.types, action.message)).toBe(actionHash);

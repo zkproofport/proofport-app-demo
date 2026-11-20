@@ -1,13 +1,15 @@
 import { CIRCUIT_IDS, validateTypedAction, type TypedAction, type ProofResponse, type RelayProofResult } from '@zkproofport-app/sdk';
-import { keccak256, toUtf8Bytes, TypedDataEncoder, ZeroHash } from 'ethers';
-import { GIWA_SIGNER_SET } from '@zkproofport-app/core';
+import { TypedDataEncoder, ZeroHash } from 'ethers';
+import { GIWA_ATTESTATION_PUBLIC_INPUT_COUNT, GIWA_ATTESTATION_PUBLIC_INPUT_LAYOUT as GIWA, GIWA_SIGNER_SET } from '@zkproofport-app/core';
+import { checkDemoOprfProof } from './oprf';
 import { verifierAddress } from './verifier-deployments';
 
 // CIP-4 PoC profile. Keep these aligned with the mobile app's giwaKyc.ts
 // and circuits/giwa-attestation. The response never chooses our trust anchor.
 export const GIWA_CHAIN_ID = 91342;
 export const GIWA_VERIFIER = verifierAddress(CIRCUIT_IDS.GIWA_ATTESTATION, GIWA_CHAIN_ID);
-export const GIWA_PUBLIC_INPUT_COUNT = 192;
+/** 128 byte-valued inputs (signal, EIP-712 domain, action, issuer root), then the four OPRF fields. Core's count. */
+export const GIWA_PUBLIC_INPUT_COUNT = GIWA_ATTESTATION_PUBLIC_INPUT_COUNT;
 /** The GIWA attester's signer-list root, from core (the set the SDK's verify functions check). */
 export const GIWA_SIGNER_ROOT = GIWA_SIGNER_SET.root;
 export const GIWA_EXPLORER = `https://sepolia-explorer.giwa.io/address/${GIWA_VERIFIER}`;
@@ -22,8 +24,14 @@ function readBytes(inputs: string[], start: number): string {
   }).join('');
 }
 
-/** Validate the application policy before asking the pinned verifier to check the proof. */
-export function prepareGiwaMembershipProof(result: RelayProofResult, requestId: string, scope: string, expectedAction?: TypedAction): ProofResponse {
+/**
+ * Validate the application policy before asking the pinned verifier to check the proof.
+ * `oprfDomain` is the domain the request named; the proof's domain, scope and
+ * OPRF key hash are core's to compare (lib/oprf.ts).
+ */
+export function prepareGiwaMembershipProof(
+  result: RelayProofResult, requestId: string, scope: string, oprfDomain: string, expectedAction?: TypedAction,
+): ProofResponse {
   if (result.requestId !== requestId) throw new Error('This proof belongs to a different request. Please try again.');
   if (result.status !== 'completed' || !result.proof || !/^0x(?:[0-9a-f]{2})+$/i.test(result.proof)) {
     throw new Error(result.error || 'No completed proof was received. Please try again.');
@@ -33,9 +41,14 @@ export function prepareGiwaMembershipProof(result: RelayProofResult, requestId: 
     throw new Error('This proof does not use the GIWA Sepolia demo verifier.');
   }
   if (!Array.isArray(result.publicInputs) || result.publicInputs.length !== GIWA_PUBLIC_INPUT_COUNT) throw new Error('The GIWA proof has an unexpected public-input format.');
-  const [signal, domain, action, root, scopeHash] = [0, 32, 64, 96, 128, 160].map(offset => readBytes(result.publicInputs!, offset));
+  const [signal, domain, action, root] = [GIWA.SIGNAL_HASH_START, GIWA.DOMAIN_SEPARATOR_START, GIWA.ACTION_HASH_START, GIWA.MERKLE_ROOT_START]
+    .map(offset => readBytes(result.publicInputs!, offset));
   if (root !== GIWA_SIGNER_ROOT) throw new Error('The attestation is not from the configured GIWA test issuer.');
-  if (scopeHash !== keccak256(toUtf8Bytes(scope))) throw new Error('This proof was created for a different membership request.');
+  try {
+    checkDemoOprfProof(CIRCUIT_IDS.GIWA_ATTESTATION, GIWA_CHAIN_ID, result.publicInputs, { scope, oprfDomain });
+  } catch (cause) {
+    throw new Error(`This proof does not match this membership request: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
   if (expectedAction) {
     const problem = validateTypedAction(expectedAction);
     if (problem) throw new Error(`Invalid deposit action: ${problem}`);

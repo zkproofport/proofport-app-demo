@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { OidcRequestContext, ProofResponse, ProofportSDK } from '@zkproofport-app/sdk';
+import type { ProofRequestContext, ProofResponse, ProofportSDK } from '@zkproofport-app/sdk';
 import { createSDK, createVerifierSDK } from './sdk';
 import type { DemoDefinition } from './demo-catalog';
 import { buildDemoInputs, prepareDemoProof, verificationConditions, type DemoOptions, type VerificationConditions } from './demo-policy';
@@ -38,9 +38,10 @@ export function useCredentialDemo(demo: DemoDefinition) {
   const busy = useRef(false);
   const sdkRef = useRef<ProofportSDK | null>(null);
   // The relay request the current proof answers. Every verify passes it, so an
-  // OIDC proof's request-bound nonce is checked against this scope and id on
-  // both paths -- the on-chain path uses a fresh SDK that never saw the request.
-  const requestRef = useRef<OidcRequestContext | null>(null);
+  // OIDC proof's request-bound nonce, and a wallet proof's signal hash, OPRF
+  // domain and scope, are checked against it on both paths -- both use a fresh
+  // SDK (createVerifierSDK) that never saw the request.
+  const requestRef = useRef<ProofRequestContext | null>(null);
   // What the request asked for (country list, score threshold), as it was when
   // the request was made: a fresh verifier SDK has to be told.
   const conditionsRef = useRef<VerificationConditions>({});
@@ -74,7 +75,8 @@ export function useCredentialDemo(demo: DemoDefinition) {
       }), 30000, 'The relay did not respond. Please try again.');
       if (current !== attempt.current) return;
       if (!pending.requestId || !pending.deepLink) throw new Error('The relay returned an incomplete request.');
-      requestRef.current = { scope, requestId: pending.requestId };
+      const oprfDomain = 'oprfDomain' in inputs ? inputs.oprfDomain : undefined;
+      requestRef.current = oprfDomain === undefined ? { scope, requestId: pending.requestId } : { scope, requestId: pending.requestId, oprfDomain };
       conditionsRef.current = verificationConditions(demo, snapshot, scope);
       const qr = await sdk.generateQRCode(pending.deepLink, { width: 240 });
       if (current !== attempt.current) return;
@@ -110,10 +112,11 @@ export function useCredentialDemo(demo: DemoDefinition) {
       const conditions = conditionsRef.current;
       // The SDK refuses a request whose id is not the response's.
       if (!request) throw new Error('This proof does not answer a request this page made. Request a new proof.');
-      // On-chain: core's pinned verifier for the proof's chain (createVerifierSDK).
+      // Both paths: an SDK on the proof's chain (createVerifierSDK) -- core's
+      // pinned verifier on chain, and the OPRF key pinned for that chain.
       const verification = selectedMethod === 'onchain'
         ? createVerifierSDK(proof).verifyResponseOnChain(proof, undefined, { request, ...conditions })
-        : (sdkRef.current || createSDK()).verifyResponseOffChain(proof, { request, ...conditions });
+        : createVerifierSDK(proof).verifyResponseOffChain(proof, { request, ...conditions });
       const result = await deadline(verification, selectedMethod === 'onchain' ? 30000 : 90000, 'Verification timed out. Retry with the same proof.');
       if (current !== attempt.current) return;
       if (!result.valid) throw new Error(result.error || 'The proof did not pass verification.');

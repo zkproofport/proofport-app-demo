@@ -24,7 +24,7 @@ contract DojangVerifierDouble {
 
     function verify(bytes calldata proof, bytes32[] calldata inputs) external view returns (bool) {
         require(mode != 2, "Verifier reverted");
-        return mode != 1 && keccak256(proof) == keccak256(hex"cafe") && inputs.length == 160;
+        return mode != 1 && keccak256(proof) == keccak256(hex"cafe") && inputs.length == 100;
     }
 }
 
@@ -59,11 +59,17 @@ contract AdversarialSeed {
 
 contract SsiatDropTest {
     Vm constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-    address constant VERIFIER = 0xAD6C9bFA60F3ee618dee9DC2027a69C57f2aD816;
+    address constant VERIFIER = 0x400474E78a793289D091A5F556F78158956B5D01;
     address constant ALICE = address(0xA11CE);
     address constant BOB = address(0xB0B);
-    bytes32 constant FAUCET_WALLET_1 = keccak256("faucet wallet 1 nullifier");
-    bytes32 constant FAUCET_WALLET_2 = keccak256("faucet wallet 2 nullifier");
+    uint256 constant P = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
+    // Written out, not read from the contract: core's getPinnedOprfKeyHash('staging', 'dojang_playground').
+    bytes32 constant TESTNET_OPRF_KEY_HASH = 0x039ecd4ea1875bb5c7f7a1bfae692cab271e3f3f25df4e5ab691fcb17586e6d1;
+    // core's reduceOprfName("demo.zkproofport.app"); its raw keccak256 is above the field modulus.
+    bytes32 constant DEMO_DOMAIN_FIELD = 0x0fd195923d45a11d40ac6c6d66108ede0763262945cd8c62a90491a5e3c13a32;
+    // An OPRF nullifier is a field element.
+    bytes32 constant FAUCET_WALLET_1 = bytes32(uint256(keccak256("faucet wallet 1 nullifier")) % P);
+    bytes32 constant FAUCET_WALLET_2 = bytes32(uint256(keccak256("faucet wallet 2 nullifier")) % P);
     uint256 constant CLAIM = 100 ether;
     uint256 constant SUPPLY = 1_000_000 ether;
     SsiatDrop drop;
@@ -114,11 +120,13 @@ contract SsiatDropTest {
         view
         returns (bytes32[] memory p)
     {
-        p = new bytes32[](160);
+        p = new bytes32[](100);
         _put(p, 32, _domain(address(target), "Ssiat", "1", block.chainid));
         _put(p, 64, _action(recipient));
-        _put(p, 96, keccak256(bytes(target.claimScope())));
-        _put(p, 128, nullifier);
+        p[96] = TESTNET_OPRF_KEY_HASH;
+        p[97] = DEMO_DOMAIN_FIELD;
+        p[98] = bytes32(uint256(keccak256(bytes(target.claimScope()))) % P);
+        p[99] = nullifier;
     }
 
     function _claim(SsiatDrop target, address recipient, bytes32[] memory p) internal {
@@ -244,7 +252,7 @@ contract SsiatDropTest {
     }
 
     function testWrongInputCountsRejected() public {
-        uint256[5] memory counts = [uint256(0), 1, 159, 161, 192];
+        uint256[6] memory counts = [uint256(0), 1, 99, 101, 160, 192];
         for (uint256 i; i < counts.length; ++i) {
             vm.expectRevert(SsiatDrop.InvalidPublicInputCount.selector);
             _claim(drop, ALICE, new bytes32[](counts[i]));
@@ -257,14 +265,118 @@ contract SsiatDropTest {
         vm.expectRevert(abi.encodeWithSelector(SsiatDrop.InvalidPublicInputByte.selector, 0));
         _claim(drop, ALICE, p);
         p = _inputs(drop, ALICE, FAUCET_WALLET_1);
-        p[159] = bytes32(type(uint256).max);
-        vm.expectRevert(abi.encodeWithSelector(SsiatDrop.InvalidPublicInputByte.selector, 159));
+        p[95] = bytes32(type(uint256).max);
+        vm.expectRevert(abi.encodeWithSelector(SsiatDrop.InvalidPublicInputByte.selector, 95));
         _claim(drop, ALICE, p);
     }
 
     function testByte255IsAccepted() public {
-        _claim(drop, ALICE, _inputs(drop, ALICE, bytes32(type(uint256).max)));
-        require(drop.claimed(bytes32(type(uint256).max)), "0xff nullifier not recorded");
+        bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
+        p[95] = bytes32(uint256(255));
+        p[94] = bytes32(uint256(255));
+        // The action's last bytes changed, so the action check refuses; the byte check let it through.
+        vm.expectRevert(SsiatDrop.WrongClaimAction.selector);
+        _claim(drop, ALICE, p);
+    }
+
+    function testLargestNullifierIsAccepted() public {
+        _claim(drop, ALICE, _inputs(drop, ALICE, bytes32(P - 1)));
+        require(drop.claimed(bytes32(P - 1)), "p - 1 nullifier not recorded");
+    }
+
+    // A verifier reduces a public input modulo the field, so `n` and `n + P` would be one proof
+    // under two nullifiers -- a second claim from the same faucet wallet.
+    function testNullifierAtOrAboveTheModulusRejected() public {
+        bytes32[3] memory wrong = [bytes32(P), bytes32(uint256(FAUCET_WALLET_1) + P), bytes32(type(uint256).max)];
+        for (uint256 i; i < wrong.length; ++i) {
+            bytes32[] memory p = _inputs(drop, ALICE, wrong[i]);
+            vm.expectRevert(abi.encodeWithSelector(SsiatDrop.InvalidPublicInputField.selector, 99));
+            _claim(drop, ALICE, p);
+        }
+    }
+
+    function testAliasOfAClaimedNullifierRejected() public {
+        _claim(drop, ALICE, _inputs(drop, ALICE, FAUCET_WALLET_1));
+        bytes32[] memory aliased = _inputs(drop, ALICE, bytes32(uint256(FAUCET_WALLET_1) + P));
+        vm.expectRevert(abi.encodeWithSelector(SsiatDrop.InvalidPublicInputField.selector, 99));
+        _claim(drop, ALICE, aliased);
+        require(drop.totalClaims() == 1, "alias claimed twice");
+    }
+
+    // ---------- the OPRF key and domain ----------
+
+    function testPinnedOprfKeyHashMatchesCore() public view {
+        require(drop.OPRF_KEY_HASH() == TESTNET_OPRF_KEY_HASH, "key hash");
+        require(drop.oprfName(drop.OPRF_DOMAIN()) == DEMO_DOMAIN_FIELD, "domain field");
+        require(keccak256(bytes(drop.OPRF_DOMAIN())) == keccak256("demo.zkproofport.app"), "domain");
+    }
+
+    function testPinnedOprfKeyHashAccepted() public {
+        bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
+        require(p[96] == TESTNET_OPRF_KEY_HASH, "fixture");
+        require(drop.verifyClaim(ALICE, hex"cafe", p), "preflight");
+        _claim(drop, ALICE, p);
+        require(drop.claimed(FAUCET_WALLET_1) && seed.balanceOf(ALICE) == CLAIM, "not paid");
+    }
+
+    function testOtherOprfKeyHashRejected() public {
+        bytes32[3] memory wrong = [bytes32(0), bytes32(uint256(TESTNET_OPRF_KEY_HASH) ^ 1), DEMO_DOMAIN_FIELD];
+        for (uint256 i; i < wrong.length; ++i) {
+            bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
+            p[96] = wrong[i];
+            vm.expectRevert(SsiatDrop.WrongOprfKey.selector);
+            _claim(drop, ALICE, p);
+        }
+        require(drop.totalClaims() == 0 && !drop.claimed(FAUCET_WALLET_1), "claimed under a foreign key");
+    }
+
+    function testOprfKeyHashAtFieldModulusRejected() public {
+        bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
+        p[96] = bytes32(uint256(TESTNET_OPRF_KEY_HASH) + P);
+        vm.expectRevert(abi.encodeWithSelector(SsiatDrop.InvalidPublicInputField.selector, 96));
+        _claim(drop, ALICE, p);
+    }
+
+    function testFuzzOnlyThePinnedKeyHashPasses(bytes32 keyHash) public {
+        bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
+        p[96] = keyHash;
+        if (keyHash == TESTNET_OPRF_KEY_HASH) {
+            require(drop.verifyClaim(ALICE, hex"cafe", p), "pinned key refused");
+        } else if (uint256(keyHash) >= P) {
+            vm.expectRevert(abi.encodeWithSelector(SsiatDrop.InvalidPublicInputField.selector, 96));
+            drop.verifyClaim(ALICE, hex"cafe", p);
+        } else {
+            vm.expectRevert(SsiatDrop.WrongOprfKey.selector);
+            drop.verifyClaim(ALICE, hex"cafe", p);
+        }
+    }
+
+    function testOtherOprfDomainsRejected() public {
+        bytes32[3] memory wrong = [
+            bytes32(0),
+            bytes32(uint256(keccak256("stg-demo.zkproofport.app")) % P),
+            bytes32(uint256(keccak256("localhost")) % P)
+        ];
+        for (uint256 i; i < wrong.length; ++i) {
+            bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
+            p[97] = wrong[i];
+            vm.expectRevert(SsiatDrop.WrongOprfDomain.selector);
+            _claim(drop, ALICE, p);
+        }
+    }
+
+    function testUnreducedOprfDomainRejected() public {
+        bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
+        p[97] = keccak256("demo.zkproofport.app");
+        vm.expectRevert(abi.encodeWithSelector(SsiatDrop.InvalidPublicInputField.selector, 97));
+        _claim(drop, ALICE, p);
+    }
+
+    function testDomainAndScopeSwappedRejected() public {
+        bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
+        (p[97], p[98]) = (p[98], p[97]);
+        vm.expectRevert(SsiatDrop.WrongOprfDomain.selector);
+        _claim(drop, ALICE, p);
     }
 
     function testIdentityOnlyProofRejected() public {
@@ -325,7 +437,7 @@ contract SsiatDropTest {
         ];
         for (uint256 i; i < wrong.length; ++i) {
             bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
-            _put(p, 96, wrong[i]);
+            p[98] = bytes32(uint256(wrong[i]) % P);
             vm.expectRevert(SsiatDrop.WrongClaimScope.selector);
             _claim(drop, ALICE, p);
         }
@@ -346,7 +458,7 @@ contract SsiatDropTest {
         SsiatDrop small = new SsiatDrop(CLAIM, CLAIM * 2 + 1);
         _claim(small, ALICE, _inputs(small, ALICE, FAUCET_WALLET_1));
         _claim(small, ALICE, _inputs(small, ALICE, FAUCET_WALLET_2));
-        bytes32[] memory third = _inputs(small, BOB, keccak256("third"));
+        bytes32[] memory third = _inputs(small, BOB, bytes32(uint256(keccak256("third")) % P));
         vm.expectRevert(SsiatDrop.DropExhausted.selector);
         small.verifyClaim(BOB, hex"cafe", third);
         vm.expectRevert(SsiatDrop.DropExhausted.selector);
@@ -417,7 +529,7 @@ contract SsiatDropTest {
         require(keccak256(bytes(seed.name())) == keccak256("Ssiat Seed"), "name");
         require(keccak256(bytes(seed.symbol())) == keccak256("SEED") && seed.decimals() == 18, "symbol");
         require(
-            drop.VERIFIER() == VERIFIER && drop.PUBLIC_INPUT_COUNT() == 160 && drop.CHAIN_ID() == 91342, "constants"
+            drop.VERIFIER() == VERIFIER && drop.PUBLIC_INPUT_COUNT() == 100 && drop.CHAIN_ID() == 91342, "constants"
         );
     }
 
@@ -498,12 +610,18 @@ contract SsiatDropTest {
             keccak256(bytes(target.claimScope())) == 0xc69788fa294dd279cd16e71d89f1e5825e56babd7413eed1baf2db7ed1bf12f5,
             "scope hash"
         );
+        // core's reduceOprfName of that scope: what the proof publishes.
+        require(
+            target.oprfName(target.claimScope()) == 0x05064f2ea48751d2ebd5d04383ec840dbd87199b8d2e2c8cab6b052f11bf12f1,
+            "scope field"
+        );
     }
 
     // ---------- conservation ----------
 
     function testFuzzClaimsConserveSupply(address recipient, bytes32 nullifier) public {
         if (recipient == address(0)) recipient = ALICE;
+        nullifier = bytes32(uint256(nullifier) % P);
         _claim(drop, recipient, _inputs(drop, recipient, nullifier));
         require(drop.remaining() + seed.balanceOf(recipient) == SUPPLY || recipient == address(drop), "supply leaked");
         require(drop.claimed(nullifier) && drop.totalClaims() == 1, "claim not recorded");

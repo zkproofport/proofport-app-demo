@@ -1,18 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { extractNullifierFromPublicInputs, extractScopeFromPublicInputs } from '@zkproofport-app/sdk';
+import { reduceOprfName } from '@zkproofport-app/core';
 import { getBytes, Interface, keccak256, MaxUint256, toUtf8Bytes, TypedDataEncoder } from 'ethers';
 import {
   buildSsiatClaimAction, displaySeed, expectedSsiatScope, prepareSsiatClaimProof, SSIAT_DROP_ABI, SSIAT_DROP_ADDRESS,
   SSIAT_SCOPE_PATTERN, ssiatDropAddress, ssiatErrorMessage, ssiatErrorName, ssiatScopeHash,
 } from '../lib/ssiat-drop';
 import {
-  byteFields, claimAction, SSIAT_TEST_DROP, SSIAT_TEST_NULLIFIER, SSIAT_TEST_RECIPIENT, SSIAT_TEST_SCOPE, ssiatResult,
+  byteFields, claimAction, SSIAT_OPRF, SSIAT_TEST_DROP, SSIAT_TEST_NULLIFIER, SSIAT_TEST_RECIPIENT, SSIAT_TEST_SCOPE, ssiatResult,
 } from './fixtures/ssiat';
+import { DEMO_DOMAIN, DEMO_DOMAIN_FIELD, TESTNET_OPRF_KEY_HASH } from './fixtures/giwa';
 
 const BOB = '0x0000000000000000000000000000000000000B0B';
 const abi = new Interface(SSIAT_DROP_ABI);
-const prepare = (result = ssiatResult(SSIAT_TEST_SCOPE, claimAction()), action = claimAction()) =>
-  prepareSsiatClaimProof(result, 'current-request', SSIAT_TEST_SCOPE, action);
+const prepare = (result = ssiatResult(SSIAT_TEST_SCOPE, claimAction()), action = claimAction(), domain = DEMO_DOMAIN) =>
+  prepareSsiatClaimProof(result, 'current-request', SSIAT_TEST_SCOPE, domain, action);
 
 describe('the drop address is the deployed one, and a missing one fails loudly', () => {
   it('ships the drop deployed on GIWA Sepolia, whose claimScope() read over RPC was this string', () => {
@@ -43,14 +45,21 @@ describe('the claim action, scope and hashes match the contract', () => {
     expect(TypedDataEncoder.hashDomain(action.domain)).toBe('0x23ab5e17f1fc30358e780537cd832a814bb55fa1bab072fc84c450088ecd89e7');
     expect(TypedDataEncoder.hashStruct(action.primaryType, action.types, action.message)).toBe('0xea55ff6513499a985fe58064fa898e3356e095ef50a294d4888eb0602a442b1e');
     expect(expectedSsiatScope(SSIAT_TEST_DROP)).toBe(SSIAT_TEST_SCOPE);
-    expect(ssiatScopeHash(SSIAT_TEST_SCOPE)).toBe('0xc69788fa294dd279cd16e71d89f1e5825e56babd7413eed1baf2db7ed1bf12f5');
+    // keccak256 of the scope is 0xc697…12f5; the proof publishes it reduced into the field,
+    // the same value testDomainActionAndScopeMatchIndependentEthersVectors pins.
+    expect(keccak256(toUtf8Bytes(SSIAT_TEST_SCOPE))).toBe('0xc69788fa294dd279cd16e71d89f1e5825e56babd7413eed1baf2db7ed1bf12f5');
+    expect(ssiatScopeHash(SSIAT_TEST_SCOPE)).toBe('0x05064f2ea48751d2ebd5d04383ec840dbd87199b8d2e2c8cab6b052f11bf12f1');
   });
-  it('hashes the scope string the way the mobile app does: keccak256 of its UTF-8 bytes, once', () => {
-    // proofport-app computeScope: ethers.utils.keccak256(ethers.utils.toUtf8Bytes(scopeString)).
-    for (const scope of [SSIAT_TEST_SCOPE, '씨앗 🌱', 'tab\tand\nnewline']) {
-      expect(ssiatScopeHash(scope)).toBe(keccak256(toUtf8Bytes(scope)));
+  it('publishes the scope as keccak256 of its UTF-8 bytes reduced modulo the BN254 field', () => {
+    const P = BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617');
+    for (const scope of [SSIAT_TEST_SCOPE, '씨앗 🌱', 'spaces and <script>%_\\']) {
+      const reduced = BigInt(keccak256(toUtf8Bytes(scope))) % P;
+      expect(ssiatScopeHash(scope)).toBe('0x' + reduced.toString(16).padStart(64, '0'));
     }
-    expect(ssiatScopeHash('씨앗')).not.toBe(keccak256(Uint8Array.from([..."씨앗"].map(c => c.charCodeAt(0) & 255))));
+    expect(ssiatScopeHash('씨앗')).not.toBe(reduceOprfName(String.fromCharCode(...[..."씨앗"].map(c => c.charCodeAt(0) & 255))));
+  });
+  it.each(['tab\tand\nnewline', 'zero\u200bwidth', '', 'x'.repeat(257)])('refuses a scope the OPRF node would refuse: %j', scope => {
+    expect(() => ssiatScopeHash(scope)).toThrow(/name/);
   });
   it('gives a scope that does not depend on the recipient, and one per drop and chain', () => {
     expect(SSIAT_SCOPE_PATTERN.test(SSIAT_TEST_SCOPE)).toBe(true);
@@ -80,16 +89,43 @@ describe('a returned proof is checked against the requested claim', () => {
     const accepted = prepare();
     expect(accepted.nullifier).toBe(SSIAT_TEST_NULLIFIER);
     expect(accepted.recipient).toBe(SSIAT_TEST_RECIPIENT);
-    expect(accepted.publicInputs).toHaveLength(160);
+    expect(accepted.publicInputs).toHaveLength(100);
     for (const input of accepted.publicInputs) expect(input).toMatch(/^0x[0-9a-f]{64}$/);
     const raw = ssiatResult(SSIAT_TEST_SCOPE, claimAction()).publicInputs!;
     expect(extractNullifierFromPublicInputs(raw, 'dojang_playground')).toBe(SSIAT_TEST_NULLIFIER);
     expect(extractScopeFromPublicInputs(raw, 'dojang_playground')).toBe(ssiatScopeHash(SSIAT_TEST_SCOPE));
   });
-  it('accepts short hex fields and the byte 0xff', () => {
-    const result = ssiatResult(SSIAT_TEST_SCOPE, claimAction(), '0x' + 'ff'.repeat(32));
+  it('accepts short hex fields and the largest field element as a nullifier', () => {
+    const largest = '0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000000';
+    const result = ssiatResult(SSIAT_TEST_SCOPE, claimAction(), largest);
     result.publicInputs = result.publicInputs!.map(value => '0x' + BigInt(value).toString(16));
-    expect(prepare(result).nullifier).toBe('0x' + 'ff'.repeat(32));
+    expect(prepare(result).nullifier).toBe(largest);
+  });
+  it.each([
+    ['the field modulus', '0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001'],
+    ['all ones', '0x' + 'ff'.repeat(32)],
+  ])('refuses a nullifier at or above the field modulus (%s): it would alias a smaller one', (_, nullifier) => {
+    expect(() => prepare(ssiatResult(SSIAT_TEST_SCOPE, claimAction(), nullifier))).toThrow(/field modulus/);
+  });
+  it('refuses a proof under another OPRF key hash', () => {
+    for (const keyHash of ['0x' + '00'.repeat(32), '0x' + '11'.repeat(32), DEMO_DOMAIN_FIELD]) {
+      const result = ssiatResult(SSIAT_TEST_SCOPE, claimAction());
+      result.publicInputs![SSIAT_OPRF.keyHash] = keyHash;
+      expect(() => prepare(result)).toThrow(/OPRF key hash/);
+    }
+  });
+  it('accepts the pinned testnet OPRF key hash', () => {
+    expect(ssiatResult(SSIAT_TEST_SCOPE, claimAction()).publicInputs![SSIAT_OPRF.keyHash]).toBe(TESTNET_OPRF_KEY_HASH);
+    expect(prepare().nullifier).toBe(SSIAT_TEST_NULLIFIER);
+  });
+  it.each(['stg-demo.zkproofport.app', 'localhost', 'Demo.zkproofport.app'])('refuses a proof for a request naming another OPRF domain: %s', domain => {
+    expect(() => prepare(undefined, undefined, domain)).toThrow(/OPRF domain/);
+  });
+  it('refuses a proof whose OPRF domain and scope are swapped', () => {
+    const result = ssiatResult(SSIAT_TEST_SCOPE, claimAction());
+    const inputs = result.publicInputs!;
+    [inputs[SSIAT_OPRF.domain], inputs[SSIAT_OPRF.scope]] = [inputs[SSIAT_OPRF.scope], inputs[SSIAT_OPRF.domain]];
+    expect(() => prepare(result)).toThrow(/swapped/);
   });
   it('refuses a proof for another recipient: the copied-proof redirect', () => {
     expect(() => prepare(ssiatResult(SSIAT_TEST_SCOPE, claimAction(BOB)))).toThrow(/different recipient/);
@@ -107,7 +143,7 @@ describe('a returned proof is checked against the requested claim', () => {
     result.publicInputs![31] = '0x' + '1'.padStart(64, '0');
     expect(() => prepare(result)).toThrow(/claim action/);
   });
-  it.each(['proofport:dojang-playground', 'giwa-vault:v1:' + 'ab'.repeat(32), expectedSsiatScope('0x2222222222222222222222222222222222222222'), ''])(
+  it.each(['proofport:dojang-playground', 'giwa-vault:v1:' + 'ab'.repeat(32), expectedSsiatScope('0x2222222222222222222222222222222222222222')])(
     'refuses a proof made for another scope: %j', scope => {
       expect(() => prepare(ssiatResult(scope, claimAction()))).toThrow(/different drop/);
     },
@@ -124,14 +160,15 @@ describe('a returned proof is checked against the requested claim', () => {
     ['another chain', { chainId: 84532 }, /Dojang Playground verifier/],
     ['another verifier', { verifierAddress: '0x2d01c2fe3445b7dde60118f956bb14e84fd64724' }, /Dojang Playground verifier/],
     ['no public inputs', { publicInputs: undefined }, /public-input format/],
-    ['159 public inputs', { publicInputs: Array(159).fill('0x00') }, /public-input format/],
-    ['161 public inputs', { publicInputs: Array(161).fill('0x00') }, /public-input format/],
-    ['192 public inputs (the GIWA layout)', { publicInputs: Array(192).fill('0x00') }, /public-input format/],
+    ['99 public inputs', { publicInputs: Array(99).fill('0x00') }, /public-input format/],
+    ['101 public inputs', { publicInputs: Array(101).fill('0x00') }, /public-input format/],
+    ['160 public inputs (before the OPRF nullifier)', { publicInputs: Array(160).fill('0x00') }, /public-input format/],
+    ['132 public inputs (the GIWA layout)', { publicInputs: Array(132).fill('0x00') }, /public-input format/],
   ])('refuses %s', (_, patch, message) => {
     expect(() => prepare({ ...ssiatResult(SSIAT_TEST_SCOPE, claimAction()), ...patch } as never)).toThrow(message);
   });
   it.each([
-    [0, '0x100'], [159, '0x' + 'f'.repeat(64)], [96, '0x100'],
+    [0, '0x100'], [95, '0x' + 'f'.repeat(64)], [64, '0x100'],
   ])('refuses a public input that is not a byte, at index %i', (index, value) => {
     const result = ssiatResult(SSIAT_TEST_SCOPE, claimAction());
     result.publicInputs![index] = value;
@@ -190,10 +227,13 @@ describe('SEED amounts are exact 18-decimal integers', () => {
 });
 
 describe('fixtures put each field where the circuit declares it', () => {
-  it('lays out signal, domain, action, scope and nullifier at 0/32/64/96/128', () => {
+  it('lays out signal, domain, action at 0/32/64 and the OPRF key hash, domain, scope, nullifier at 96..99', () => {
     const inputs = ssiatResult(SSIAT_TEST_SCOPE, claimAction()).publicInputs!;
-    expect(inputs.slice(128)).toEqual(byteFields(SSIAT_TEST_NULLIFIER));
-    expect(inputs.slice(96, 128)).toEqual(byteFields(ssiatScopeHash(SSIAT_TEST_SCOPE)));
+    expect(inputs).toHaveLength(100);
+    expect(inputs.slice(64, 96)).toEqual(byteFields(TypedDataEncoder.hashStruct('Claim', claimAction().types, claimAction().message)));
+    expect(inputs.slice(96)).toEqual([TESTNET_OPRF_KEY_HASH, DEMO_DOMAIN_FIELD, ssiatScopeHash(SSIAT_TEST_SCOPE), SSIAT_TEST_NULLIFIER]);
+    expect(extractNullifierFromPublicInputs(inputs, 'dojang_playground')).toBe(SSIAT_TEST_NULLIFIER);
+    expect(extractScopeFromPublicInputs(inputs, 'dojang_playground')).toBe(ssiatScopeHash(SSIAT_TEST_SCOPE));
     expect(getBytes(SSIAT_TEST_NULLIFIER)).toHaveLength(32);
   });
 });

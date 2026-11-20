@@ -1,11 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DEMO_VERIFIERS } from '../lib/demo-policy';
 import { GIWA_PUBLIC_INPUT_COUNT, GIWA_VERIFIER } from '../lib/giwa-membership';
 import { SSIAT_PUBLIC_INPUT_COUNT, SSIAT_VERIFIER } from '../lib/ssiat-drop';
 import { PINNED_VERIFIERS, getPinnedVariantVerifier, getPinnedVerifier, signerVariantsOf } from '@zkproofport-app/sdk';
 import { VERIFIER_DEPLOYMENTS, variantVerifierAddress, verifierAddress } from '../lib/verifier-deployments';
+import { getPinnedOprfKeyHash, OPRF_FIELD_MODULUS, OPRF_PUBLIC_INPUT_LAYOUTS } from '@zkproofport-app/core';
+import { DEMO_OPRF_DOMAIN, oprfEnvironmentForChain } from '../lib/oprf';
 
 // The circuits repository is a sibling checkout. Its records are read from
 // origin/main with `git show`, so the answer does not depend on which branch
@@ -31,13 +32,38 @@ function recordedAddress(path: string): string {
   return String(json.address).toLowerCase();
 }
 
-const rows = Object.entries(VERIFIER_DEPLOYMENTS).flatMap(([circuit, chains]) =>
-  chains.map(chain => ({ circuit, chain, address: verifierAddress(circuit, chain), record: getPinnedVerifier(circuit, chain).record })));
+// A pinned verifier built from a verification key that is no longer the
+// circuit's (the mainnet ones until their redeploy) is refused by core, by
+// name. Those pairs are collected and held to that refusal; every other pair
+// must resolve.
+const AWAITS_REDEPLOY = /awaits a redeploy/;
+const awaiting: { circuit: string; chain: number; variant: string; error: string }[] = [];
+function resolve<T>(circuit: string, chain: number, variant: string, read: () => T): T[] {
+  try { return [read()]; } catch (cause) {
+    const error = cause instanceof Error ? cause.message : String(cause);
+    if (!AWAITS_REDEPLOY.test(error)) throw cause;
+    awaiting.push({ circuit, chain, variant, error });
+    return [];
+  }
+}
+const rows = Object.entries(VERIFIER_DEPLOYMENTS).flatMap(([circuit, chains]) => chains.flatMap(chain =>
+  resolve(circuit, chain, 'standard', () => ({ circuit, chain, address: verifierAddress(circuit, chain), record: getPinnedVerifier(circuit, chain).record }))));
 // Every other package (an Android signer's) of every accepted pair: its own verifier, its own record.
 const variantRows = Object.entries(VERIFIER_DEPLOYMENTS).flatMap(([circuit, chains]) =>
-  signerVariantsOf(circuit).filter(variant => variant !== 'standard').flatMap(variant => chains.map(chain => ({
+  signerVariantsOf(circuit).filter(variant => variant !== 'standard').flatMap(variant => chains.flatMap(chain => resolve(circuit, chain, variant, () => ({
     circuit, chain, variant, address: variantVerifierAddress(circuit, chain, variant), record: getPinnedVariantVerifier(circuit, variant, chain).record,
-  }))));
+  })))));
+
+describe('verifiers awaiting a redeploy are refused by name, never replaced', () => {
+  it('are exactly the Base mainnet rows, until the mainnet redeploy', () => {
+    expect(awaiting.length).toBeGreaterThan(0);
+    for (const row of awaiting) expect(row.chain, `${row.circuit} (${row.variant})`).toBe(8453);
+    expect(rows.every(r => r.chain !== 8453)).toBe(true);
+  });
+  it.each(awaiting.map(row => [`${row.circuit} (${row.variant}) on ${row.chain}`, row] as const))('%s', (_name, row) => {
+    expect(row.error).toMatch(new RegExp(`^The ${row.circuit} verifier (for the '${row.variant}' signer )?on chain ${row.chain} awaits a redeploy`));
+  });
+});
 
 describe('verifier table', () => {
   it('lists lowercase 20-byte addresses, each exactly once', () => {
@@ -45,7 +71,6 @@ describe('verifier table', () => {
     expect(new Set(rows.map(r => r.address)).size).toBe(rows.length);
   });
   it('feeds every consumer from the one table', () => {
-    for (const r of rows) expect(DEMO_VERIFIERS[r.circuit as keyof typeof DEMO_VERIFIERS][r.chain]).toBe(r.address);
     expect(GIWA_VERIFIER).toBe(verifierAddress('giwa_attestation', 91342));
     expect(SSIAT_VERIFIER).toBe(verifierAddress('dojang_playground', 91342));
   });
@@ -90,13 +115,30 @@ function solidityConstant(file: string, name: string): string {
   if (!match) throw new Error(`${name} not found in contracts/src/${file}.`);
   return match[1];
 }
+function solidityString(file: string, name: string): string {
+  const match = readFileSync(`contracts/src/${file}`, 'utf8').match(new RegExp(`\\b${name}\\s*=\\s*"([^"]*)";`));
+  if (!match) throw new Error(`${name} not found in contracts/src/${file}.`);
+  return match[1];
+}
 describe('demo contracts are built against the table', () => {
   it.each([
     ['GiwaDemoVault.sol', 'giwa_attestation', GIWA_PUBLIC_INPUT_COUNT],
     ['SsiatDrop.sol', 'dojang_playground', SSIAT_PUBLIC_INPUT_COUNT],
-  ] as const)('%s uses the %s verifier and its public-input count', (file, circuit, count) => {
+  ] as const)('%s uses the %s verifier, its public-input count, and the pinned OPRF key and demo domain', (file, circuit, count) => {
     expect(solidityConstant(file, 'VERIFIER').toLowerCase()).toBe(verifierAddress(circuit, 91342));
     expect(Number(solidityConstant(file, 'PUBLIC_INPUT_COUNT'))).toBe(count);
+    expect(solidityConstant(file, 'OPRF_KEY_HASH').toLowerCase()).toBe(getPinnedOprfKeyHash(oprfEnvironmentForChain(91342), circuit));
+    expect(solidityString(file, 'OPRF_DOMAIN')).toBe(DEMO_OPRF_DOMAIN);
+    expect(BigInt(solidityConstant(file, 'FIELD_MODULUS'))).toBe(OPRF_FIELD_MODULUS);
+    // The offsets the contract reads are core's, for this circuit.
+    const layout = OPRF_PUBLIC_INPUT_LAYOUTS[circuit];
+    expect(Number(solidityConstant(file, 'OPRF_KEY_HASH_INDEX'))).toBe(layout.keyHash);
+    expect(Number(solidityConstant(file, 'OPRF_DOMAIN_INDEX'))).toBe(layout.domain);
+    expect(Number(solidityConstant(file, 'SCOPE_INDEX'))).toBe(layout.scope);
+    expect(Number(solidityConstant(file, 'BYTE_FIELDS'))).toBe(layout.keyHash);
+  });
+  it('SsiatDrop reads the nullifier where core says it is', () => {
+    expect(Number(solidityConstant('SsiatDrop.sol', 'NULLIFIER_INDEX'))).toBe(OPRF_PUBLIC_INPUT_LAYOUTS.dojang_playground.nullifier);
   });
 });
 

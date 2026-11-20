@@ -11,7 +11,7 @@ const external = vi.hoisted(() => ({ create: vi.fn(), qr: vi.fn(), wait: vi.fn()
 vi.mock('../lib/sdk', () => ({
   createSDK: () => ({ createRelayRequest: external.create, generateQRCode: external.qr, waitForProof: external.wait, verifyResponseOnChain: external.unconfigured, verifyResponseOffChain: external.offchain, disconnect: external.disconnect }),
   // On-chain verification must go through the pinned-verifier SDK, never the relay SDK.
-  createVerifierSDK: (proof: unknown) => { external.verifierFor(proof); return { verifyResponseOnChain: external.onchain }; },
+  createVerifierSDK: (proof: unknown) => { external.verifierFor(proof); return { verifyResponseOnChain: external.onchain, verifyResponseOffChain: external.offchain }; },
 }));
 
 let host: HTMLDivElement;

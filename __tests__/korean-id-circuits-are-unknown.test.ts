@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ALL_CIRCUIT_IDS, isCircuitId } from '@zkproofport-app/sdk';
 import { DEMO_CIRCUITS, DEMOS, demoById, type DemoId } from '../lib/demo-catalog';
-import { DEMO_VERIFIERS } from '../lib/demo-policy';
 import { CARD_SCOPES, LIVE_SECTION_SCOPES, cardScope, liveSectionScope } from '../lib/demo-scopes';
 import { VERIFIER_DEPLOYMENTS, verifierAddress } from '../lib/verifier-deployments';
 
@@ -23,7 +22,6 @@ describe.each(GONE)('%s is unknown', circuit => {
   it('to the demo catalog and its keyed tables', () => {
     expect(DEMO_CIRCUITS as readonly string[]).not.toContain(circuit);
     expect(DEMOS.map(demo => demo.circuit as string)).not.toContain(circuit);
-    expect(Object.keys(DEMO_VERIFIERS)).not.toContain(circuit);
     expect(Object.keys(VERIFIER_DEPLOYMENTS)).not.toContain(circuit);
     expect(Object.keys(LIVE_SECTION_SCOPES)).not.toContain(circuit);
   });

@@ -4,8 +4,9 @@ import {
   HUMAN_PASSPORT_SCORE_PUBLIC_INPUT_LAYOUT as PASSPORT, HUMAN_PASSPORT_SCORER_IDS, OIDC_DOMAIN_ATTESTATION_PUBLIC_INPUT_LAYOUT as OIDC,
   evmProofByteLength, getCircuitPackage, humanPassportScoreUnits, type RelayProofResult, type SignerVariant,
 } from '@zkproofport-app/sdk';
-import { COINBASE_ATTESTATION_PUBLIC_INPUT_COUNT, OIDC_PUBLIC_INPUT_COUNT } from '@zkproofport-app/core';
+import { COINBASE_ATTESTATION_PUBLIC_INPUT_COUNT, OIDC_PUBLIC_INPUT_COUNT, reduceOprfName } from '@zkproofport-app/core';
 import { getBytes, keccak256, toUtf8Bytes } from 'ethers';
+import { DEMO_DOMAIN_FIELD, TESTNET_OPRF_KEY_HASH } from './giwa';
 import { COINBASE_SIGNER_ROOT, DEFAULT_OPTIONS, parseMinScore, type DemoOptions } from '../../lib/demo-policy';
 import { demoById, type DemoId } from '../../lib/demo-catalog';
 import { variantVerifierAddress } from '../../lib/verifier-deployments';
@@ -20,13 +21,25 @@ export const field = (value: number | bigint) => `0x${value.toString(16).padStar
 
 export type CardDemo = 'kyc' | 'country' | 'email' | 'passport';
 
-/** Per demo: count, where scope starts. Keyed, so a demo with no row is an error. */
-export const LAYOUT: Record<CardDemo, { count: number; scopeAt: number }> = {
-  kyc: { count: COINBASE_ATTESTATION_PUBLIC_INPUT_COUNT, scopeAt: KYC.SCOPE_START },
-  country: { count: COINBASE_COUNTRY_PUBLIC_INPUT_COUNT, scopeAt: COUNTRY.SCOPE_START },
-  email: { count: OIDC_PUBLIC_INPUT_COUNT, scopeAt: OIDC.SCOPE_START },
-  passport: { count: HUMAN_PASSPORT_SCORE_PUBLIC_INPUT_COUNT, scopeAt: PASSPORT.SCOPE_START },
+/**
+ * Per demo: count, and where the scope sits. A wallet credential publishes its
+ * scope as ONE field element beside the OPRF key hash, domain and nullifier
+ * (`oprf`); OIDC lays its keccak256 out one byte per input from `bytesAt`.
+ * Keyed, so a demo with no row is an error.
+ */
+export type CardLayout =
+  | { count: number; kind: 'oprf'; oprf: { keyHash: number; domain: number; scope: number; nullifier: number } }
+  | { count: number; kind: 'bytes'; bytesAt: number };
+const oprf = (l: { OPRF_KEY_HASH: number; OPRF_DOMAIN: number; SCOPE: number; NULLIFIER: number }) =>
+  ({ keyHash: l.OPRF_KEY_HASH, domain: l.OPRF_DOMAIN, scope: l.SCOPE, nullifier: l.NULLIFIER });
+export const LAYOUT: Record<CardDemo, CardLayout> = {
+  kyc: { count: COINBASE_ATTESTATION_PUBLIC_INPUT_COUNT, kind: 'oprf', oprf: oprf(KYC) },
+  country: { count: COINBASE_COUNTRY_PUBLIC_INPUT_COUNT, kind: 'oprf', oprf: oprf(COUNTRY) },
+  email: { count: OIDC_PUBLIC_INPUT_COUNT, kind: 'bytes', bytesAt: OIDC.SCOPE_START },
+  passport: { count: HUMAN_PASSPORT_SCORE_PUBLIC_INPUT_COUNT, kind: 'oprf', oprf: oprf(PASSPORT) },
 };
+/** A nullifier is a field element, below the BN254 modulus. */
+export const CARD_NULLIFIER = '0x' + '0c'.repeat(32);
 
 /**
  * A proof of the byte length the circuit's package produces. For a circuit with
@@ -44,7 +57,14 @@ export function cardInputs(id: CardDemo, scope: string, options: DemoOptions = D
   if (!layout) throw new Error(`No public-input layout for '${id}'. Known: ${Object.keys(LAYOUT).join(', ')}.`);
   const values = Array.from({ length: layout.count }, () => field(0));
   const put = (start: number, bytes: Uint8Array) => bytes.forEach((value, index) => { values[start + index] = field(value); });
-  put(layout.scopeAt, getBytes(keccak256(toUtf8Bytes(scope))));
+  if (layout.kind === 'oprf') {
+    values[layout.oprf.keyHash] = TESTNET_OPRF_KEY_HASH;
+    values[layout.oprf.domain] = DEMO_DOMAIN_FIELD;
+    values[layout.oprf.scope] = reduceOprfName(scope);
+    values[layout.oprf.nullifier] = CARD_NULLIFIER;
+  } else {
+    put(layout.bytesAt, getBytes(keccak256(toUtf8Bytes(scope))));
+  }
   if (id === 'kyc') put(KYC.MERKLE_ROOT_START, getBytes(COINBASE_SIGNER_ROOT));
   if (id === 'country') {
     put(COUNTRY.MERKLE_ROOT_START, getBytes(COINBASE_SIGNER_ROOT));

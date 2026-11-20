@@ -5,10 +5,10 @@ import {
   isCircuitId, type RelayProofResult,
 } from '@zkproofport-app/sdk';
 import { DEMO_CIRCUITS, DEMOS, SDK_CIRCUITS_WITHOUT_A_DEMO, demoById, type DemoId } from '../lib/demo-catalog';
-import { buildDemoInputs, DEFAULT_OPTIONS, DEMO_VERIFIERS, parseMinScore, prepareDemoProof, verificationConditions, type DemoOptions } from '../lib/demo-policy';
-import { variantVerifierAddress } from '../lib/verifier-deployments';
-import { depositAction, giwaResult } from './fixtures/giwa';
-import { cardResult, field, proofHex, type CardDemo } from './fixtures/card-proofs';
+import { buildDemoInputs, DEFAULT_OPTIONS, parseMinScore, prepareDemoProof, verificationConditions, type DemoOptions } from '../lib/demo-policy';
+import { variantVerifierAddress, verifierAddress } from '../lib/verifier-deployments';
+import { DEMO_DOMAIN, DEMO_DOMAIN_FIELD, depositAction, giwaResult, TESTNET_OPRF_KEY_HASH } from './fixtures/giwa';
+import { cardResult, field, LAYOUT, proofHex, type CardDemo } from './fixtures/card-proofs';
 
 const requestId = 'request-for-this-tab';
 const scope = 'unique-example-session';
@@ -34,23 +34,24 @@ describe('dedicated circuit coverage', () => {
 });
 
 describe('Ssiat goes through its own claim policy, never the generic one', () => {
-  it('builds a scope-only request for the relay check, like the other GIWA demo', () => {
-    expect(buildDemoInputs(demoById('ssiat')!, DEFAULT_OPTIONS, scope)).toEqual({ scope });
+  it('builds a scope-and-domain request for the relay check, like the other GIWA demo', () => {
+    expect(buildDemoInputs(demoById('ssiat')!, DEFAULT_OPTIONS, scope)).toEqual({ scope, oprfDomain: DEMO_DOMAIN });
   });
   it('refuses to accept a Ssiat proof through prepareDemoProof, which does not know the claim action', () => {
     const demo = demoById('ssiat')!;
-    const response: RelayProofResult = { requestId, circuit: demo.circuit, status: 'completed', proof: proofHex(demo.circuit), publicInputs: Array(160).fill(field(0)), chainId: 91342, verifierAddress: DEMO_VERIFIERS[demo.circuit][91342] };
+    const response: RelayProofResult = { requestId, circuit: demo.circuit, status: 'completed', proof: proofHex(demo.circuit), publicInputs: Array(100).fill(field(0)), chainId: 91342, verifierAddress: verifierAddress(demo.circuit, 91342) };
     expect(() => prepareDemoProof(response, { demo, requestId, scope, options: DEFAULT_OPTIONS })).toThrow(/prepareSsiatClaimProof/);
   });
   it('allowlists only the GIWA Sepolia Dojang Playground verifier', () => {
-    expect(DEMO_VERIFIERS.dojang_playground).toEqual({ 91342: '0xad6c9bfa60f3ee618dee9dc2027a69c57f2ad816' });
+    expect(verifierAddress('dojang_playground', 91342)).toBe('0x400474e78a793289d091a5f556f78158956b5d01');
+    for (const chain of [8453, 84532]) expect(() => verifierAddress('dojang_playground', chain)).toThrow(/Known chains: 91342/);
   });
 });
 
 describe('GIWA generic identity policy uses the current SDK layout', () => {
   const context = { demo: demoById('giwa')!, requestId: 'current-request', scope, options: DEFAULT_OPTIONS };
-  it('accepts identity membership with scope at byte 128', () => {
-    expect(prepareDemoProof(giwaResult(scope), context).publicInputs).toHaveLength(192);
+  it('accepts identity membership with the OPRF fields at 128..131', () => {
+    expect(prepareDemoProof(giwaResult(scope), context).publicInputs).toHaveLength(132);
   });
   it('rejects an action-bound deposit proof for an identity-only request', () => {
     expect(() => prepareDemoProof(giwaResult(scope, depositAction()), context)).toThrow();
@@ -59,16 +60,19 @@ describe('GIWA generic identity policy uses the current SDK layout', () => {
 
 describe('requested inputs', () => {
   it('normalizes and deduplicates countries without changing inclusion mode', () => {
-    expect(buildDemoInputs(demoById('country')!, { ...DEFAULT_OPTIONS, countries: ' kr, US, KR ', inclusion: false }, scope)).toEqual({ scope, countryList: ['KR', 'US'], isIncluded: false });
+    expect(buildDemoInputs(demoById('country')!, { ...DEFAULT_OPTIONS, countries: ' kr, US, KR ', inclusion: false }, scope)).toEqual({ scope, oprfDomain: DEMO_DOMAIN, countryList: ['KR', 'US'], isIncluded: false });
   });
   it('normalizes the domain and retains provider choice', () => {
     expect(buildDemoInputs(demoById('email')!, { ...DEFAULT_OPTIONS, domain: ' Example.COM ', provider: 'microsoft' }, scope)).toEqual({ scope, domain: 'example.com', provider: 'microsoft' });
   });
   it('asks for the typed score threshold for passport, as a number of points', () => {
-    expect(buildDemoInputs(demoById('passport')!, { ...DEFAULT_OPTIONS, minScore: ' 20.5 ' }, scope)).toEqual({ scope, minScore: 20.5 });
+    expect(buildDemoInputs(demoById('passport')!, { ...DEFAULT_OPTIONS, minScore: ' 20.5 ' }, scope)).toEqual({ scope, oprfDomain: DEMO_DOMAIN, minScore: 20.5 });
   });
-  it.each(['kyc', 'giwa', 'ssiat'] as DemoId[])('requests only the scope for %s', id => {
-    expect(buildDemoInputs(demoById(id)!, DEFAULT_OPTIONS, scope)).toEqual({ scope });
+  it.each(['kyc', 'giwa', 'ssiat'] as DemoId[])('requests only the scope and the OPRF domain for %s', id => {
+    expect(buildDemoInputs(demoById(id)!, DEFAULT_OPTIONS, scope)).toEqual({ scope, oprfDomain: DEMO_DOMAIN });
+  });
+  it('sends no OPRF domain for the email proof, which has no OPRF nullifier', () => {
+    expect(buildDemoInputs(demoById('email')!, DEFAULT_OPTIONS, scope)).not.toHaveProperty('oprfDomain');
   });
   it('refuses a demo it has no inputs for, naming it', () => {
     const invented = { ...demoById('kyc')!, id: 'age' as DemoId };
@@ -112,6 +116,33 @@ describe.each(ids)('%s response policy', id => {
   });
 });
 
+describe.each(['kyc', 'country', 'passport'] as CardDemo[])('%s OPRF nullifier policy', id => {
+  const oprf = () => { const layout = LAYOUT[id]; if (layout.kind !== 'oprf') throw new Error(`${id} has no OPRF layout`); return layout.oprf; };
+  it('accepts the testnet key hash and the demo domain on Base Sepolia', () => {
+    const { response, context } = fixture(id);
+    expect(response.publicInputs![oprf().keyHash]).toBe(TESTNET_OPRF_KEY_HASH);
+    expect(response.publicInputs![oprf().domain]).toBe(DEMO_DOMAIN_FIELD);
+    expect(prepareDemoProof(response, context).publicInputs).toEqual(response.publicInputs);
+  });
+  it.each([['zero', field(0)], ['another key', '0x' + '11'.repeat(32)], ['the domain field', DEMO_DOMAIN_FIELD]])('refuses a proof under %s as OPRF key hash', (_, keyHash) => {
+    const { response, context } = fixture(id); response.publicInputs![oprf().keyHash] = keyHash;
+    expect(() => prepareDemoProof(response, context)).toThrow(/OPRF key hash/);
+  });
+  it('refuses a proof keyed by another domain', () => {
+    const { response, context } = fixture(id); response.publicInputs![oprf().domain] = field(1);
+    expect(() => prepareDemoProof(response, context)).toThrow(/OPRF domain/);
+  });
+  it('refuses the plain keccak256 scope a proof made before the OPRF nullifier published', () => {
+    const { response, context } = fixture(id);
+    response.publicInputs![oprf().scope] = '0x' + (BigInt(response.publicInputs![oprf().scope]) + BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617')).toString(16);
+    expect(() => prepareDemoProof(response, context)).toThrow(/field modulus|session/);
+  });
+  it.each([['the field modulus', '0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001'], ['a non-number', 'garbage']])('refuses a nullifier that is %s', (_, value) => {
+    const { response, context } = fixture(id); response.publicInputs![oprf().nullifier] = value;
+    expect(() => prepareDemoProof(response, context)).toThrow();
+  });
+});
+
 describe('predicate substitution', () => {
   it.each([['kyc', KYC.MERKLE_ROOT_START, 'attester'], ['country', COUNTRY.MERKLE_ROOT_START, 'attester'], ['passport', PASSPORT.MERKLE_ROOT_START, 'issuer']] as [CardDemo, number, string][])('rejects a different signer root for %s', (id, at, name) => {
     const { response, context } = fixture(id); response.publicInputs![at] = field(0);
@@ -143,8 +174,8 @@ describe('predicate substitution', () => {
     const { response, context } = fixture('email'); response.publicInputs![OIDC.DOMAIN_LEN] = field(65);
     expect(() => prepareDemoProof(response, context)).toThrow('invalid length');
   });
-  it('rejects a field masquerading as a byte', () => {
-    const { response, context } = fixture('kyc'); response.publicInputs![KYC.SCOPE_START] = field(256);
+  it('rejects a field masquerading as a byte in the email scope', () => {
+    const { response, context } = fixture('email'); response.publicInputs![OIDC.SCOPE_START] = field(256);
     expect(() => prepareDemoProof(response, context)).toThrow('invalid byte');
   });
 });
@@ -167,7 +198,7 @@ describe('Human Passport score threshold, as typed', () => {
 describe('Human Passport response policy', () => {
   it('accepts a proof made for exactly the requested threshold', () => {
     const { response, context } = fixture('passport', { ...DEFAULT_OPTIONS, minScore: '20.5' });
-    expect(prepareDemoProof(response, context).publicInputs).toHaveLength(195);
+    expect(prepareDemoProof(response, context).publicInputs).toHaveLength(135);
   });
   it.each([['19.9999'], ['20.0001'], ['0.0001'], ['2000']])('refuses a proof made for %s when 20 was asked', made => {
     const { response, context } = fixture('passport', { ...DEFAULT_OPTIONS, minScore: made });
@@ -179,7 +210,8 @@ describe('Human Passport response policy', () => {
   });
   it('is accepted on Base and Base Sepolia only, the chains the app verifies it on', () => {
     const { response, context } = fixture('passport');
-    expect(prepareDemoProof({ ...response, chainId: 8453, verifierAddress: DEMO_VERIFIERS.human_passport_score[8453] }, context).chainId).toBe(8453);
+    // Base's verifier predates the current circuit; core refuses it by name until it is redeployed.
+    expect(() => prepareDemoProof({ ...response, chainId: 8453 }, context)).toThrow(/awaits a redeploy/);
     for (const chainId of [1, 10, 42161, 59144, 534352, 324, 11155111]) {
       expect(() => prepareDemoProof({ ...response, chainId }, context), String(chainId)).toThrow('configured verifier');
     }

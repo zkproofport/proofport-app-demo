@@ -28,8 +28,13 @@ contract DeployGiwaDemoVault {
 
         require(address(vault).code.length != 0, "Vault deployment has no bytecode");
         require(address(vault.asset()) == asset, "Vault asset mismatch");
-        require(vault.VERIFIER() == 0xF6Edb9d6114B2546B6E559997fdDE08CAeEA83b3, "Vault verifier mismatch");
-        require(vault.PUBLIC_INPUT_COUNT() == 192, "Vault public input layout mismatch");
+        require(vault.VERIFIER() == 0xA272056866453F0182426A29B9Ca6382d6C6a060, "Vault verifier mismatch");
+        require(vault.PUBLIC_INPUT_COUNT() == 132, "Vault public input layout mismatch");
+        require(
+            vault.OPRF_KEY_HASH() == 0x039ecd4ea1875bb5c7f7a1bfae692cab271e3f3f25df4e5ab691fcb17586e6d1,
+            "Vault OPRF key hash mismatch"
+        );
+        require(keccak256(bytes(vault.OPRF_DOMAIN())) == keccak256("demo.zkproofport.app"), "Vault OPRF domain mismatch");
         require(vault.totalDeposits() == 0, "New vault has nonzero deposits");
         emit VaultDeployed(address(vault), asset, vault.VERIFIER(), vault.domainSeparator());
     }

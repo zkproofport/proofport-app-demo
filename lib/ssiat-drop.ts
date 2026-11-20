@@ -1,9 +1,10 @@
+import { CIRCUIT_IDS, validateTypedAction, type RelayProofResult, type TypedAction } from '@zkproofport-app/sdk';
 import {
-  CIRCUIT_IDS, extractNullifierFromPublicInputs, extractScopeFromPublicInputs, validateTypedAction,
-  type RelayProofResult, type TypedAction,
-} from '@zkproofport-app/sdk';
-import { AbiCoder, Interface, formatUnits, isAddress, keccak256, toBeHex, toUtf8Bytes, TypedDataEncoder, ZeroAddress, ZeroHash } from 'ethers';
+  DOJANG_PLAYGROUND_PUBLIC_INPUT_COUNT, DOJANG_PLAYGROUND_PUBLIC_INPUT_LAYOUT as DOJANG, reduceOprfName,
+} from '@zkproofport-app/core';
+import { AbiCoder, Interface, formatUnits, isAddress, keccak256, toBeHex, TypedDataEncoder, ZeroAddress, ZeroHash } from 'ethers';
 import { GIWA_CHAIN_ID } from './giwa-membership';
+import { checkDemoOprfProof } from './oprf';
 import { verifierAddress } from './verifier-deployments';
 
 /**
@@ -21,17 +22,20 @@ export const SSIAT_DROP_ADDRESS: string = '0xA7D93C4699e86AF9f60EcBe1A1D90297fcc
 /** `dojang_playground` verifier: circuits/deployments/91342/DojangPlayground.json. */
 export const SSIAT_VERIFIER = verifierAddress(CIRCUIT_IDS.DOJANG_PLAYGROUND, GIWA_CHAIN_ID);
 export const SSIAT_CIRCUIT = CIRCUIT_IDS.DOJANG_PLAYGROUND;
-export const SSIAT_PUBLIC_INPUT_COUNT = 160;
+/** 96 byte-valued inputs (signal, EIP-712 domain, action), then the four OPRF fields. Core's count. */
+export const SSIAT_PUBLIC_INPUT_COUNT = DOJANG_PLAYGROUND_PUBLIC_INPUT_COUNT;
 export const SSIAT_TOKEN_DECIMALS = 18;
 export const SSIAT_SCOPE_PATTERN = /^ssiat-drop:v1:[0-9a-f]{64}$/;
 /** The Playground faucet whose payAndIssueEAS() call the circuit requires. */
 export const PLAYGROUND_FAUCET = '0x63CCe2b569A7bC35895ee24306c1512fefc06121';
 
 /**
- * Where the action fields sit in the dojang_playground public inputs. Scope and
- * nullifier are read through the SDK, which keys their offsets per circuit.
+ * Where the action fields sit in the dojang_playground public inputs, from
+ * core's layout. The OPRF fields after them are read by core (lib/oprf.ts).
  */
-const ACTION_FIELDS = { signal: 0, domain: 32, action: 64 } as const;
+const ACTION_FIELDS = { signal: DOJANG.SIGNAL_HASH_START, domain: DOJANG.DOMAIN_SEPARATOR_START, action: DOJANG.ACTION_HASH_START } as const;
+/** Inputs before this index hold one byte each; from it on, whole field elements. */
+const FIRST_FIELD_INPUT = DOJANG.OPRF_KEY_HASH;
 
 export const SSIAT_DROP_ABI = [
   'function token() view returns (address)',
@@ -39,12 +43,15 @@ export const SSIAT_DROP_ABI = [
   'function remaining() view returns (uint256)',
   'function totalClaims() view returns (uint256)',
   'function claimScope() view returns (string)',
+  'function OPRF_DOMAIN() view returns (string)',
+  'function OPRF_KEY_HASH() view returns (bytes32)',
   'function domainSeparator() view returns (bytes32)',
   'function claimActionHash(address) view returns (bytes32)',
   'function claimed(bytes32) view returns (bool)',
   'function verifyClaim(address,bytes,bytes32[]) view returns (bool)',
   'function claim(address,bytes,bytes32[])',
   'error ZeroAddress()', 'error ProofRequired()', 'error InvalidPublicInputCount()', 'error InvalidPublicInputByte(uint256)',
+  'error InvalidPublicInputField(uint256)', 'error WrongOprfKey()', 'error WrongOprfDomain()',
   'error IdentityProofNotAllowed()', 'error WrongClaimDomain()', 'error WrongClaimAction()', 'error WrongClaimScope()',
   'error AlreadyClaimed(bytes32)', 'error DropExhausted()', 'error InvalidProof()', 'error TokenTransferFailed()', 'error Reentrancy()',
 ];
@@ -84,8 +91,8 @@ export function expectedSsiatScope(dropAddress: string, chainId: number = GIWA_C
   return `ssiat-drop:v1:${seed.slice(2)}`;
 }
 
-/** The app hashes the scope string exactly like this (proofport-app computeScope). */
-export const ssiatScopeHash = (scope: string) => keccak256(toUtf8Bytes(scope));
+/** The scope as the proof publishes it: keccak256(UTF-8) reduced into the field (core's reduceOprfName). */
+export const ssiatScopeHash = (scope: string) => reduceOprfName(scope);
 
 function field(inputs: string[], start: number): string {
   return '0x' + Array.from({ length: 32 }, (_, index) => BigInt(inputs[start + index]).toString(16).padStart(2, '0')).join('');
@@ -98,7 +105,9 @@ export type SsiatClaimProof = { requestId: string; proof: string; publicInputs: 
  * contract call. Every field the contract checks is checked here too, so a
  * mismatch is reported in words instead of as a revert.
  */
-export function prepareSsiatClaimProof(result: RelayProofResult, requestId: string, scope: string, action: TypedAction): SsiatClaimProof {
+export function prepareSsiatClaimProof(
+  result: RelayProofResult, requestId: string, scope: string, oprfDomain: string, action: TypedAction,
+): SsiatClaimProof {
   if (result.requestId !== requestId) throw new Error('This proof belongs to a different request. Please try again.');
   if (result.status !== 'completed' || typeof result.proof !== 'string' || !/^0x(?:[0-9a-f]{2})+$/i.test(result.proof)) {
     throw new Error('No completed proof was received. Please try again.');
@@ -111,8 +120,8 @@ export function prepareSsiatClaimProof(result: RelayProofResult, requestId: stri
   if (!Array.isArray(inputs) || inputs.length !== SSIAT_PUBLIC_INPUT_COUNT) throw new Error('The proof has an unexpected public-input format.');
   inputs.forEach((value, index) => {
     if (typeof value !== 'string' || !/^0x[0-9a-f]{1,64}$/i.test(value)) throw new Error('Malformed public input. Please create a new proof.');
-    // The SDK reads a value above 255 as zero, so a malformed byte is refused before it is asked.
-    if (BigInt(value) > BigInt(255)) throw new Error(`Public input ${index} is not a byte. Please create a new proof.`);
+    // The hashes before the OPRF fields are laid out one byte per input; a wider value is no proof.
+    if (index < FIRST_FIELD_INPUT && BigInt(value) > BigInt(255)) throw new Error(`Public input ${index} is not a byte. Please create a new proof.`);
   });
   const problem = validateTypedAction(action);
   if (problem) throw new Error(`Invalid claim action: ${problem}`);
@@ -121,9 +130,12 @@ export function prepareSsiatClaimProof(result: RelayProofResult, requestId: stri
   if (field(inputs, ACTION_FIELDS.action) !== TypedDataEncoder.hashStruct(action.primaryType, action.types, action.message)) {
     throw new Error('This proof authorizes a claim for a different recipient.');
   }
-  if (extractScopeFromPublicInputs(inputs, SSIAT_CIRCUIT)?.toLowerCase() !== ssiatScopeHash(scope)) throw new Error('This proof was created for a different drop.');
-  const nullifier = extractNullifierFromPublicInputs(inputs, SSIAT_CIRCUIT)?.toLowerCase();
-  if (!nullifier || !/^0x[0-9a-f]{64}$/.test(nullifier)) throw new Error('The proof carries no nullifier.');
+  let nullifier: string;
+  try {
+    nullifier = checkDemoOprfProof(SSIAT_CIRCUIT, GIWA_CHAIN_ID, inputs, { scope, oprfDomain });
+  } catch (cause) {
+    throw new Error(`This proof was created for a different drop: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
   return {
     requestId, proof: result.proof, publicInputs: inputs.map(value => toBeHex(BigInt(value), 32)), nullifier, scope,
     recipient: String(action.message.recipient),
@@ -131,7 +143,10 @@ export function prepareSsiatClaimProof(result: RelayProofResult, requestId: stri
 }
 
 /** Errors that mean the proof itself must be replaced. */
-export const SSIAT_PROOF_ERRORS = ['IdentityProofNotAllowed', 'WrongClaimDomain', 'WrongClaimAction', 'WrongClaimScope', 'InvalidProof', 'InvalidPublicInputCount', 'InvalidPublicInputByte', 'ProofRequired'];
+export const SSIAT_PROOF_ERRORS = [
+  'IdentityProofNotAllowed', 'WrongClaimDomain', 'WrongClaimAction', 'WrongClaimScope', 'WrongOprfKey', 'WrongOprfDomain',
+  'InvalidProof', 'InvalidPublicInputCount', 'InvalidPublicInputByte', 'InvalidPublicInputField', 'ProofRequired',
+];
 
 export function ssiatErrorName(cause: unknown): string | undefined {
   const error = cause as { data?: string; info?: { error?: { data?: string | { data?: string } } } };
@@ -146,6 +161,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   WrongClaimAction: 'This proof names a different recipient. Generate a new proof for the connected wallet.',
   WrongClaimDomain: 'This proof was made for a different drop contract. Generate a new proof.',
   WrongClaimScope: 'This proof was made for a different drop. Generate a new proof.',
+  WrongOprfKey: 'This proof was not made with the expected key. Generate a new proof.',
+  WrongOprfDomain: 'This proof was made for a different site. Generate a new proof.',
+  InvalidPublicInputField: 'The proof has a malformed public input. Generate a new proof.',
   IdentityProofNotAllowed: 'A claim needs a proof that signs the claim action. Generate a new proof.',
   InvalidProof: 'The proof did not pass the GIWA verifier. Generate a new proof.',
   InvalidPublicInputCount: 'The proof has the wrong number of public inputs. Generate a new proof.',

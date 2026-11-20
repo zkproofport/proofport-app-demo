@@ -233,7 +233,7 @@ read-only contract check or in-browser verification through the SDK. Neither
 option sends a transaction. Access is an in-memory example, not server-enforced
 authorization. The sample venues and unlocked content are fictional.
 
-Gotgan uses SDK 0.3.3 to bind a `Deposit` action to the connected operational account, asset, amount and nonce. Any browser-wallet account can connect; connect before generating a proof. The Vault automatically verifies the returned proof, with no separate verification buttons. Changing account or network invalidates the current proof. It pins the CIP-4 test issuer root, current GIWA Sepolia verifier and 192-input format, then preflights the deployed Vault. Unlike the content-only demos, its explicit approve/deposit/withdraw buttons send testnet token transactions. See [GIWA-VAULT-DEMO.md](GIWA-VAULT-DEMO.md).
+Gotgan uses the SDK to bind a `Deposit` action to the connected operational account, asset, amount and nonce. Any browser-wallet account can connect; connect before generating a proof. The Vault automatically verifies the returned proof, with no separate verification buttons. Changing account or network invalidates the current proof. It pins the CIP-4 test issuer root, current GIWA Sepolia verifier, the 132-input format and the pinned OPRF key and domain, then preflights the deployed Vault. Unlike the content-only demos, its explicit approve/deposit/withdraw buttons send testnet token transactions. See [GIWA-VAULT-DEMO.md](GIWA-VAULT-DEMO.md).
 
 
 Country proofs must match the entire inclusion/exclusion policy. Email proofs

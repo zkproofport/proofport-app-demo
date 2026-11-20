@@ -21,8 +21,25 @@ interface IDojangPlaygroundVerifier {
 ///      The faucet wallet itself never appears on chain; only its per-drop nullifier does.
 contract SsiatDrop {
     uint256 public constant CHAIN_ID = 91342;
-    address public constant VERIFIER = 0xAD6C9bFA60F3ee618dee9DC2027a69C57f2aD816;
-    uint256 public constant PUBLIC_INPUT_COUNT = 160;
+    address public constant VERIFIER = 0x400474E78a793289D091A5F556F78158956B5D01;
+    uint256 public constant PUBLIC_INPUT_COUNT = 100;
+    /// @notice The OPRF key hash a testnet proof must carry: the OPRF test network's key,
+    ///         as the ZKProofport core package pins it (getPinnedOprfKeyHash('staging', 'dojang_playground')).
+    /// @dev The circuit accepts an OPRF answer from any self-consistent key. Under a key someone else
+    ///      holds, the nullifier is whatever they choose, so one faucet wallet could claim many times.
+    bytes32 public constant OPRF_KEY_HASH = 0x039ecd4ea1875bb5c7f7a1bfae692cab271e3f3f25df4e5ab691fcb17586e6d1;
+    /// @notice Pass this exact string as the request's `oprfDomain`. Fixed, because the nullifier is
+    ///         keyed by it: a second domain would give the same faucet wallet a second claim.
+    string public constant OPRF_DOMAIN = "demo.zkproofport.app";
+    /// @dev BN254 scalar field: the OPRF fields are elements of it, and a scope or domain string is
+    ///      published as keccak256(UTF-8) reduced modulo it.
+    uint256 public constant FIELD_MODULUS =
+        21888242871839275222246405745257275088548364400416034343698204186575808495617;
+    uint256 private constant BYTE_FIELDS = 96;
+    uint256 private constant OPRF_KEY_HASH_INDEX = 96;
+    uint256 private constant OPRF_DOMAIN_INDEX = 97;
+    uint256 private constant SCOPE_INDEX = 98;
+    uint256 private constant NULLIFIER_INDEX = 99;
     bytes32 private constant DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 private constant CLAIM_TYPEHASH = keccak256("Claim(address recipient)");
@@ -41,10 +58,13 @@ contract SsiatDrop {
     error ProofRequired();
     error InvalidPublicInputCount();
     error InvalidPublicInputByte(uint256 index);
+    error InvalidPublicInputField(uint256 index);
     error IdentityProofNotAllowed();
     error WrongClaimDomain();
     error WrongClaimAction();
     error WrongClaimScope();
+    error WrongOprfKey();
+    error WrongOprfDomain();
     error AlreadyClaimed(bytes32 nullifier);
     error DropExhausted();
     error InvalidProof();
@@ -85,6 +105,11 @@ contract SsiatDrop {
         return keccak256(abi.encode(CLAIM_TYPEHASH, recipient));
     }
 
+    /// @notice A scope or domain string as the proof publishes it: keccak256(UTF-8) mod the field.
+    function oprfName(string memory name) public pure returns (bytes32) {
+        return bytes32(uint256(keccak256(bytes(name))) % FIELD_MODULUS);
+    }
+
     /// @notice Pass this exact string as the `dojang_playground` request's `scope`; the app hashes it once.
     /// @dev Fixed per chain and contract and independent of the recipient: the nullifier is per
     ///      (faucet wallet, scope), so a recipient-dependent scope would allow one claim per recipient.
@@ -105,8 +130,9 @@ contract SsiatDrop {
     }
 
     /// @notice Read-only preflight: reverts with the reason a `claim` would fail, else returns true.
-    /// @dev `publicInputs` is 160 bytes32 fields holding ONE BYTE EACH, not five hashes.
-    ///      Layout: signal[0..31], domain[32..63], action[64..95], scope[96..127], nullifier[128..159].
+    /// @dev `publicInputs` is 100 bytes32 values. The first 96 hold ONE BYTE EACH of three hashes:
+    ///      signal[0..31], EIP-712 domain[32..63], action[64..95]. The last four are whole field
+    ///      elements: OPRF key hash[96], OPRF domain[97], scope[98], nullifier[99].
     function verifyClaim(address recipient, bytes calldata proof, bytes32[] calldata publicInputs)
         external
         view
@@ -138,17 +164,24 @@ contract SsiatDrop {
         if (proof.length == 0) revert ProofRequired();
         if (publicInputs.length != PUBLIC_INPUT_COUNT) revert InvalidPublicInputCount();
 
-        bytes32[5] memory fields;
-        for (uint256 i; i < PUBLIC_INPUT_COUNT; ++i) {
+        bytes32[3] memory fields;
+        for (uint256 i; i < BYTE_FIELDS; ++i) {
             uint256 value = uint256(publicInputs[i]);
             if (value > 255) revert InvalidPublicInputByte(i);
             fields[i / 32] = bytes32((uint256(fields[i / 32]) << 8) | value);
         }
+        // A value at or above the modulus aliases a smaller one inside the verifier, which would
+        // give one nullifier a second spelling and so a second claim.
+        for (uint256 i = BYTE_FIELDS; i < PUBLIC_INPUT_COUNT; ++i) {
+            if (uint256(publicInputs[i]) >= FIELD_MODULUS) revert InvalidPublicInputField(i);
+        }
         if (fields[0] != bytes32(0)) revert IdentityProofNotAllowed();
         if (fields[1] != domainSeparator()) revert WrongClaimDomain();
         if (fields[2] != claimActionHash(recipient)) revert WrongClaimAction();
-        if (fields[3] != keccak256(bytes(claimScope()))) revert WrongClaimScope();
-        nullifier = fields[4];
+        if (publicInputs[OPRF_KEY_HASH_INDEX] != OPRF_KEY_HASH) revert WrongOprfKey();
+        if (publicInputs[OPRF_DOMAIN_INDEX] != oprfName(OPRF_DOMAIN)) revert WrongOprfDomain();
+        if (publicInputs[SCOPE_INDEX] != oprfName(claimScope())) revert WrongClaimScope();
+        nullifier = publicInputs[NULLIFIER_INDEX];
         if (claimed[nullifier]) revert AlreadyClaimed(nullifier);
         if (token.balanceOf(address(this)) < CLAIM_AMOUNT) revert DropExhausted();
 

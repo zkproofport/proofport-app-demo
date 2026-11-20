@@ -66,10 +66,12 @@ const message = {
 | 32–63 | Domain separator | `Gotgan` version `2`, current chain and vault |
 | 64–95 | Action hash | `Deposit(account, asset, amount, current nonce)` |
 | 96–127 | Signer-list Merkle root | Pinned test issuer root |
-| 128–159 | Scope | `keccak256(UTF8(depositScope result))` |
-| 160–191 | Nullifier | Included in cryptographic verification |
+| 128 | OPRF key hash | `OPRF_KEY_HASH()`, the testnet key the ZKProofport core package pins for `giwa_attestation` |
+| 129 | OPRF domain | `keccak256(UTF8(OPRF_DOMAIN())) mod p`, with `OPRF_DOMAIN()` = `demo.zkproofport.app` |
+| 130 | Scope | `keccak256(UTF8(depositScope result)) mod p` |
+| 131 | Nullifier | Included in cryptographic verification |
 
-Supply **192 bytes32 values, each containing one byte left-padded with zeros**. Do not combine them into six hashes or send the old 128-input layout. Use the onchain proof already separated by the app (9,920 bytes with the beta.19 toolchain; it was 16,256 with the old one), without prepending public inputs. The verifier's `verify(bytes,bytes32[])` may return false or revert; the vault converts both outcomes to `InvalidProof()`.
+`p` is the BN254 scalar field modulus (`FIELD_MODULUS()`); `oprfName(string)` returns the reduced value. Supply **132 bytes32 values**: indices 0–127 each hold one byte left-padded with zeros, and 128–131 each hold one whole field element below `p` (`InvalidPublicInputField(index)` otherwise, so a value cannot alias a smaller one inside the verifier). A request for this vault passes `oprfDomain: "demo.zkproofport.app"` beside the scope. Do not send the 192-input layout of proofs made before the OPRF nullifier, or the old 128-input layout. Use the onchain proof already separated by the app (9,920 bytes with the beta.19 toolchain; it was 16,256 with the old one), without prepending public inputs. The verifier's `verify(bytes,bytes32[])` may return false or revert; the vault converts both outcomes to `InvalidProof()`.
 
 Each successful deposit increments the account nonce, preventing proof replay. A reverted deposit rolls back its nonce and balances. `verifyEligibility` is read-only and does not consume a nonce. Withdrawals need no new proof. The vault does not use nullifiers as permanent person identifiers or enforce one operational wallet per person.
 
@@ -151,7 +153,7 @@ not a GIWA, Upbit or Dojang airdrop.
 | Network | GIWA Sepolia, chain ID `91342` |
 | Verifier (`dojang_playground`, beta.19) | `0xAD6C9bFA60F3ee618dee9DC2027a69C57f2aD816` (`circuits/deployments/91342/DojangPlayground.json`) |
 | Playground faucet the circuit requires | `0x63CCe2b569A7bC35895ee24306c1512fefc06121`, `payAndIssueEAS()` |
-| Public inputs | 160, one byte per field: signal 0–31, domain 32–63, action 64–95, scope 96–127, nullifier 128–159 |
+| Public inputs | 100: one byte per input for signal 0–31, domain 32–63, action 64–95; then whole field elements: OPRF key hash 96 (`OPRF_KEY_HASH()`), OPRF domain 97 (`OPRF_DOMAIN()` = `demo.zkproofport.app`, reduced mod p), scope 98 (`claimScope()` reduced mod p), nullifier 99 |
 | Claim amount / supply (deploy script) | 100 SEED / 1,000,000 SEED (10,000 claims) |
 
 - `src/SsiatSeed.sol`: ERC-20 "Ssiat Seed" / `SEED`, 18 decimals. The whole

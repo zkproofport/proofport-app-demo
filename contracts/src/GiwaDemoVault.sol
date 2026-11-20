@@ -17,9 +17,24 @@ interface IGiwaVaultAsset {
 ///      This does not verify production Upbit KYC, live EAS status or revocation.
 contract GiwaDemoVault {
     uint256 public constant CHAIN_ID = 91342;
-    address public constant VERIFIER = 0xF6Edb9d6114B2546B6E559997fdDE08CAeEA83b3;
+    address public constant VERIFIER = 0xA272056866453F0182426A29B9Ca6382d6C6a060;
     address public constant TEST_ATTESTER = 0xEE099845CDfF93e73aDcBcB36A9B93578bcCed4b;
-    uint256 public constant PUBLIC_INPUT_COUNT = 192;
+    uint256 public constant PUBLIC_INPUT_COUNT = 132;
+    /// @notice The OPRF key hash a testnet proof must carry: the OPRF test network's key,
+    ///         as the ZKProofport core package pins it (getPinnedOprfKeyHash('staging', 'giwa_attestation')).
+    /// @dev The circuit accepts an OPRF answer from any self-consistent key, so a proof under another
+    ///      key hash carries a nullifier whoever holds that key chose.
+    bytes32 public constant OPRF_KEY_HASH = 0x039ecd4ea1875bb5c7f7a1bfae692cab271e3f3f25df4e5ab691fcb17586e6d1;
+    /// @notice Pass this exact string as the request's `oprfDomain`.
+    string public constant OPRF_DOMAIN = "demo.zkproofport.app";
+    /// @dev BN254 scalar field: the OPRF fields are elements of it, and a scope or domain string is
+    ///      published as keccak256(UTF-8) reduced modulo it.
+    uint256 public constant FIELD_MODULUS =
+        21888242871839275222246405745257275088548364400416034343698204186575808495617;
+    uint256 private constant BYTE_FIELDS = 128;
+    uint256 private constant OPRF_KEY_HASH_INDEX = 128;
+    uint256 private constant OPRF_DOMAIN_INDEX = 129;
+    uint256 private constant SCOPE_INDEX = 130;
     bytes32 private constant DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 private constant DEPOSIT_TYPEHASH =
@@ -39,11 +54,14 @@ contract GiwaDemoVault {
     error ProofRequired();
     error InvalidPublicInputCount();
     error InvalidPublicInputByte(uint256 index);
+    error InvalidPublicInputField(uint256 index);
     error IdentityProofNotAllowed();
     error WrongDepositDomain();
     error WrongDepositAction();
     error UntrustedIssuer();
     error WrongDepositScope();
+    error WrongOprfKey();
+    error WrongOprfDomain();
     error InvalidProof();
     error InsufficientBalance();
     error TokenTransferFailed();
@@ -96,10 +114,16 @@ contract GiwaDemoVault {
         return string.concat("giwa-vault:v1:", string(encoded));
     }
 
+    /// @notice A scope or domain string as the proof publishes it: keccak256(UTF-8) mod the field.
+    function oprfName(string memory name) public pure returns (bytes32) {
+        return bytes32(uint256(keccak256(bytes(name))) % FIELD_MODULUS);
+    }
+
     /// @notice Read-only preflight. Reverts on a policy mismatch or an invalid proof.
-    /// @dev `publicInputs` is 192 bytes32 fields containing ONE BYTE EACH, not six hashes.
-    ///      Layout: signal[0..31], domain[32..63], action[64..95], issuer root[96..127],
-    ///      scope[128..159], nullifier[160..191]. Identity-only proofs cannot authorize deposits.
+    /// @dev `publicInputs` is 132 bytes32 values. The first 128 hold ONE BYTE EACH of four hashes:
+    ///      signal[0..31], EIP-712 domain[32..63], action[64..95], issuer root[96..127].
+    ///      The last four are whole field elements: OPRF key hash[128], OPRF domain[129],
+    ///      scope[130], nullifier[131]. Identity-only proofs cannot authorize deposits.
     function verifyEligibility(address account, uint256 amount, bytes calldata proof, bytes32[] calldata publicInputs)
         public
         view
@@ -110,17 +134,23 @@ contract GiwaDemoVault {
         if (proof.length == 0) revert ProofRequired();
         if (publicInputs.length != PUBLIC_INPUT_COUNT) revert InvalidPublicInputCount();
 
-        bytes32[6] memory fields;
-        for (uint256 i; i < PUBLIC_INPUT_COUNT; ++i) {
+        bytes32[4] memory fields;
+        for (uint256 i; i < BYTE_FIELDS; ++i) {
             uint256 value = uint256(publicInputs[i]);
             if (value > 255) revert InvalidPublicInputByte(i);
             fields[i / 32] = bytes32((uint256(fields[i / 32]) << 8) | value);
+        }
+        // A value at or above the modulus aliases a smaller one inside the verifier.
+        for (uint256 i = BYTE_FIELDS; i < PUBLIC_INPUT_COUNT; ++i) {
+            if (uint256(publicInputs[i]) >= FIELD_MODULUS) revert InvalidPublicInputField(i);
         }
         if (fields[0] != bytes32(0)) revert IdentityProofNotAllowed();
         if (fields[1] != domainSeparator()) revert WrongDepositDomain();
         if (fields[2] != depositActionHash(account, amount)) revert WrongDepositAction();
         if (fields[3] != trustedSignerRoot) revert UntrustedIssuer();
-        if (fields[4] != keccak256(bytes(depositScope(account, amount)))) revert WrongDepositScope();
+        if (publicInputs[OPRF_KEY_HASH_INDEX] != OPRF_KEY_HASH) revert WrongOprfKey();
+        if (publicInputs[OPRF_DOMAIN_INDEX] != oprfName(OPRF_DOMAIN)) revert WrongOprfDomain();
+        if (publicInputs[SCOPE_INDEX] != oprfName(depositScope(account, amount))) revert WrongDepositScope();
 
         // The pinned Honk verifier can REVERT for invalid proofs, not just return false.
         try IGiwaEligibilityVerifier(VERIFIER).verify(proof, publicInputs) returns (bool valid) {

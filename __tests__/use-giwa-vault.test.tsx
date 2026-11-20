@@ -7,12 +7,12 @@ import type { RelayProofResult } from '@zkproofport-app/sdk';
 import { useGiwaVault } from '../lib/useGiwaVault';
 import GiwaDemo from '../app/components/GiwaDemo';
 import { TOKEN_ADDRESS, VAULT_ADDRESS } from '../lib/giwa-vault';
-import { depositAction, giwaResult, GIWA_TEST_ACCOUNT } from './fixtures/giwa';
+import { DEMO_DOMAIN, depositAction, giwaResult, GIWA_TEST_ACCOUNT, TESTNET_OPRF_KEY_HASH } from './fixtures/giwa';
 
 const external = vi.hoisted(() => ({
   sdkConfigs: [] as unknown[],
   signer: vi.fn(), create: vi.fn(), poll: vi.fn(), qr: vi.fn(), disconnect: vi.fn(),
-  getBlockNumber: vi.fn(), depositScope: vi.fn(), nonces: vi.fn(), domainSeparator: vi.fn(),
+  getBlockNumber: vi.fn(), depositScope: vi.fn(), nonces: vi.fn(), domainSeparator: vi.fn(), oprfDomain: vi.fn(), oprfKeyHash: vi.fn(),
   depositActionHash: vi.fn(), verifyEligibility: vi.fn(), balanceOf: vi.fn(),
   totalDeposits: vi.fn(), allowance: vi.fn(), destroy: vi.fn(),
   offchain: vi.fn(), onchain: vi.fn(), approve: vi.fn(), deposit: vi.fn(), depositPreflight: vi.fn(), withdraw: vi.fn(),
@@ -45,6 +45,8 @@ vi.mock('ethers', async importOriginal => {
       depositScope = external.depositScope;
       nonces = external.nonces;
       domainSeparator = external.domainSeparator;
+      OPRF_DOMAIN = external.oprfDomain;
+      OPRF_KEY_HASH = external.oprfKeyHash;
       depositActionHash = external.depositActionHash;
       verifyEligibility = external.verifyEligibility;
       balanceOf = external.balanceOf;
@@ -84,6 +86,8 @@ beforeEach(async () => {
   external.getBlockNumber.mockResolvedValue(321);
   external.depositScope.mockResolvedValue(scope);
   external.nonces.mockResolvedValue(BigInt(7));
+  external.oprfDomain.mockResolvedValue(DEMO_DOMAIN);
+  external.oprfKeyHash.mockResolvedValue(TESTNET_OPRF_KEY_HASH);
   const action = expectedAction();
   external.domainSeparator.mockResolvedValue(TypedDataEncoder.hashDomain(action.domain));
   external.depositActionHash.mockResolvedValue(TypedDataEncoder.hashStruct(action.primaryType, action.types, action.message));
@@ -115,6 +119,37 @@ async function connect() {
   expect(flow.account).toBe(GIWA_TEST_ACCOUNT);
 }
 
+describe('Gotgan vault pins the OPRF domain and key this page requests', () => {
+  it('reads OPRF_DOMAIN and OPRF_KEY_HASH at the same block as the scope', async () => {
+    await connect();
+    await act(async () => { await flow.requestProof(); });
+    expect(external.oprfDomain).toHaveBeenCalledWith({ blockTag: 321 });
+    expect(external.oprfKeyHash).toHaveBeenCalledWith({ blockTag: 321 });
+    expect(flow.phase).toBe('ready');
+  });
+
+  it.each([
+    ['another domain', () => external.oprfDomain.mockResolvedValue('stg-demo.zkproofport.app')],
+    ['an empty domain', () => external.oprfDomain.mockResolvedValue('')],
+    ['another key hash', () => external.oprfKeyHash.mockResolvedValue('0x' + '11'.repeat(32))],
+    ['a zero key hash', () => external.oprfKeyHash.mockResolvedValue('0x' + '00'.repeat(32))],
+  ])('refuses to request a proof from a vault pinning %s', async (_, arrange) => {
+    arrange();
+    await connect();
+    await act(async () => { await flow.requestProof(); });
+    expect(external.create).not.toHaveBeenCalled();
+    expect(flow.phase).toBe('blocked');
+    expect(flow.error).toMatch(/different deposit action/);
+  });
+
+  it('accepts the pinned key hash in any letter case', async () => {
+    external.oprfKeyHash.mockResolvedValue(TESTNET_OPRF_KEY_HASH.toUpperCase().replace('0X', '0x'));
+    await connect();
+    await act(async () => { await flow.requestProof(); });
+    expect(external.create).toHaveBeenCalled();
+  });
+});
+
 describe('Gotgan proof request orchestration', () => {
   it('reads only the vault total and requires a wallet before requesting a proof', async () => {
     expect(flow.balances).toMatchObject({ wallet: null, deposited: null, allowance: null, total: BigInt('11000000000') });
@@ -141,7 +176,7 @@ describe('Gotgan proof request orchestration', () => {
     expect(external.balanceOf).toHaveBeenCalledWith(account);
     expect(external.allowance).toHaveBeenCalledWith(account, VAULT_ADDRESS);
     await act(async () => { await flow.requestProof(); });
-    expect(external.create).toHaveBeenCalledWith('giwa_attestation', { scope, action }, expect.any(Object));
+    expect(external.create).toHaveBeenCalledWith('giwa_attestation', { scope, oprfDomain: DEMO_DOMAIN, action }, expect.any(Object));
     expect(flow.proof?.account).toBe(account);
   });
 
@@ -274,13 +309,13 @@ describe('Gotgan proof request orchestration', () => {
     expect(external.signer.mock.invocationCallOrder[0]).toBeLessThan(external.create.mock.invocationCallOrder[0]);
     // The browser talks to the relay itself, never through a route on this demo's server.
     expect(external.sdkConfigs.at(-1)).toEqual({ relayUrl: 'http://localhost:4001' });
-    expect(external.create).toHaveBeenCalledWith('giwa_attestation', { scope, action: expectedAction() }, expect.objectContaining({ dappName: 'Gotgan' }));
+    expect(external.create).toHaveBeenCalledWith('giwa_attestation', { scope, oprfDomain: DEMO_DOMAIN, action: expectedAction() }, expect.objectContaining({ dappName: 'Gotgan' }));
     expect(external.nonces).toHaveBeenCalledWith(GIWA_TEST_ACCOUNT, { blockTag: 321 });
     expect(external.depositScope).toHaveBeenCalledWith(GIWA_TEST_ACCOUNT, BigInt('10000000000'), { blockTag: 321 });
     expect(external.verifyEligibility).toHaveBeenCalledWith(GIWA_TEST_ACCOUNT, BigInt('10000000000'), '0x1234', expect.arrayContaining(['0x' + '00'.repeat(32)]));
     expect(flow.phase).toBe('ready');
     expect(flow.proof).toMatchObject({ account: GIWA_TEST_ACCOUNT, amount: BigInt('10000000000'), scope });
-    expect(flow.proof?.publicInputs).toHaveLength(192);
+    expect(flow.proof?.publicInputs).toHaveLength(132);
   });
 
   it('rejects a completed proof for a changed action before calling the vault verifier', async () => {

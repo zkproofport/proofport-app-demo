@@ -10,9 +10,10 @@ import {
 } from '@zkproofport-app/core';
 import { keccak256, toUtf8Bytes } from 'ethers';
 import { type DemoCircuit, type DemoDefinition } from './demo-catalog';
-import { GIWA_CHAIN_ID, GIWA_PUBLIC_INPUT_COUNT, prepareGiwaMembershipProof } from './giwa-membership';
+import { GIWA_PUBLIC_INPUT_COUNT, prepareGiwaMembershipProof } from './giwa-membership';
+import { DEMO_OPRF_DOMAIN, checkDemoOprfProof, hasOprfNullifier } from './oprf';
 import { SSIAT_PUBLIC_INPUT_COUNT } from './ssiat-drop';
-import { VERIFIER_DEPLOYMENTS, proofSignerVariant, variantVerifierAddress, verifierAddress } from './verifier-deployments';
+import { proofSignerVariant, variantVerifierAddress } from './verifier-deployments';
 
 export type DemoOptions = {
   countries: string; inclusion: boolean; domain: string; provider: 'google' | 'microsoft';
@@ -36,15 +37,6 @@ export function parseMinScore(text: string): number {
   return value;
 }
 
-// The allowlisted (circuit, chain) pairs, each resolved to core's pinned
-// verifier. Responses can select an allowlisted deployment, never supply an
-// arbitrary verifier contract.
-export const DEMO_VERIFIERS: Record<DemoCircuit, Record<number, string>> = Object.fromEntries(
-  Object.entries(VERIFIER_DEPLOYMENTS).map(([circuit, chains]) => [
-    circuit, Object.fromEntries(chains.map(chain => [chain, verifierAddress(circuit, chain)])),
-  ]),
-) as Record<DemoCircuit, Record<number, string>>;
-
 /**
  * The Coinbase signer-list root a KYC or Country proof must carry. Taken from
  * core, which derives it from the provers' own signer lists and which the SDK's
@@ -59,7 +51,7 @@ export function buildDemoInputs(demo: DemoDefinition, options: DemoOptions, scop
       if (!countryList.length || countryList.length > 10 || countryList.some(code => !/^[A-Z]{2}$/.test(code))) {
         throw new Error('Enter 1 to 10 two-letter country codes, separated by commas.');
       }
-      return { scope, countryList, isIncluded: options.inclusion };
+      return { scope, oprfDomain: DEMO_OPRF_DOMAIN, countryList, isIncluded: options.inclusion };
     }
     case 'email': {
       const domain = options.domain.trim().toLowerCase();
@@ -69,11 +61,12 @@ export function buildDemoInputs(demo: DemoDefinition, options: DemoOptions, scop
       if (!['google', 'microsoft'].includes(options.provider)) throw new Error('Select a supported sign-in provider.');
       return { scope, domain, provider: options.provider };
     }
-    case 'passport': return { scope, minScore: parseMinScore(options.minScore) };
-    // These requests carry only the scope. The Gotgan deposit flow builds its
-    // action-bound request in lib/useGiwaVault.ts, and the Ssiat claim builds
-    // its Claim(recipient) request in lib/useSsiatDrop.ts, not here.
-    case 'kyc': case 'giwa': case 'ssiat': return { scope };
+    case 'passport': return { scope, oprfDomain: DEMO_OPRF_DOMAIN, minScore: parseMinScore(options.minScore) };
+    // These requests carry only the scope and the OPRF domain. The Gotgan
+    // deposit flow builds its action-bound request in lib/useGiwaVault.ts, and
+    // the Ssiat claim builds its Claim(recipient) request in lib/useSsiatDrop.ts,
+    // not here.
+    case 'kyc': case 'giwa': case 'ssiat': return { scope, oprfDomain: DEMO_OPRF_DOMAIN };
     default: {
       const unknown: never = demo.id;
       throw new Error(`No inputs are defined for demo '${unknown}'.`);
@@ -81,8 +74,9 @@ export function buildDemoInputs(demo: DemoDefinition, options: DemoOptions, scop
   }
 }
 
-// Every count is the SDK's or core's: a v1 Coinbase proof (128 / 150) or a v1
-// OIDC proof (148) is refused here before the SDK refuses it by name.
+// Every count is the SDK's or core's: a Coinbase proof from before the OPRF
+// nullifier (193 / 215, or v1's 128 / 150) or a v1 OIDC proof (148) is refused
+// here before the SDK refuses it by name.
 const PUBLIC_COUNTS: Record<DemoCircuit, number> = {
   [CIRCUIT_IDS.GIWA_ATTESTATION]: GIWA_PUBLIC_INPUT_COUNT, [CIRCUIT_IDS.DOJANG_PLAYGROUND]: SSIAT_PUBLIC_INPUT_COUNT,
   [CIRCUIT_IDS.COINBASE_ATTESTATION]: COINBASE_ATTESTATION_PUBLIC_INPUT_COUNT,
@@ -130,10 +124,35 @@ function equalHash(inputs: string[], start: number, expected: string, name: stri
 
 export type DemoRequestContext = { demo: DemoDefinition; requestId: string; scope: string; options: DemoOptions };
 
+/**
+ * OIDC's scope is a 32-byte keccak256 laid out one byte per public input (it is
+ * not a wallet credential and has no OPRF fields). Where it sits is the SDK's
+ * answer for the circuit, never an offset guessed here.
+ */
+function checkHashedScope(inputs: string[], circuit: string, scope: string) {
+  const provenScope = extractScopeFromPublicInputs(inputs, circuit);
+  if (!provenScope) throw new Error('The proof carries no scope for this circuit.');
+  if (provenScope.toLowerCase() !== keccak256(toUtf8Bytes(scope))) {
+    // The scope is a hash decomposed into bytes, and the SDK quietly reads a
+    // value above 255 as zero — so a malformed input reaches here looking like
+    // an ordinary mismatch. Ask the SDK again with those values changed: if the
+    // scope it returns moves, the bad value is inside the scope and this is not
+    // a proof at all. Not every wide value is malformed — an email proof's
+    // RSA modulus limbs and its timestamp are wider than a byte on purpose —
+    // which is why the question is asked about the scope's own bytes and not
+    // about the array.
+    const repaired = inputs.map(value => (BigInt(value) > BigInt(255) ? '0x01' : value));
+    if (extractScopeFromPublicInputs(repaired, circuit) !== provenScope) {
+      throw new Error('The proof contains an invalid byte value.');
+    }
+    throw new Error('This proof does not match the requested session.');
+  }
+}
+
 /** Check the request and public predicate, before cryptographic verification. */
 export function prepareDemoProof(result: RelayProofResult, context: DemoRequestContext): ProofResponse {
   const { demo, requestId, scope, options } = context;
-  if (demo.id === 'giwa') return prepareGiwaMembershipProof(result, requestId, scope);
+  if (demo.id === 'giwa') return prepareGiwaMembershipProof(result, requestId, scope, DEMO_OPRF_DOMAIN);
   // A claim proof is only meaningful with its Claim(recipient) action, which this
   // generic path does not know. prepareSsiatClaimProof in lib/ssiat-drop.ts checks it.
   if (demo.id === 'ssiat') throw new Error('Ssiat claim proofs are checked by prepareSsiatClaimProof, with the claim action.');
@@ -153,26 +172,18 @@ export function prepareDemoProof(result: RelayProofResult, context: DemoRequestC
     throw new Error('The proof has an unexpected public-input format.');
   }
   const requested = buildDemoInputs(demo, options, scope);
-  // Where the scope sits differs per circuit, so the SDK is asked rather than
-  // guessed at here. A chain of `demo.id === …` used to end in one circuit's
-  // offset, which meant every circuit it did not name had its scope read from
-  // byte 0 and every returned proof refused.
-  const provenScope = extractScopeFromPublicInputs(inputs, demo.circuit);
-  if (!provenScope) throw new Error('The proof carries no scope for this circuit.');
-  if (provenScope.toLowerCase() !== keccak256(toUtf8Bytes(scope))) {
-    // The scope is a hash decomposed into bytes, and the SDK quietly reads a
-    // value above 255 as zero — so a malformed input reaches here looking like
-    // an ordinary mismatch. Ask the SDK again with those values changed: if the
-    // scope it returns moves, the bad value is inside the scope and this is not
-    // a proof at all. Not every wide value is malformed — an email proof's
-    // RSA modulus limbs and its timestamp are wider than a byte on purpose —
-    // which is why the question is asked about the scope's own bytes and not
-    // about the array.
-    const repaired = inputs.map(value => (BigInt(value) > BigInt(255) ? '0x01' : value));
-    if (extractScopeFromPublicInputs(repaired, demo.circuit) !== provenScope) {
-      throw new Error('The proof contains an invalid byte value.');
+  // A wallet credential proof publishes its scope as a field element beside the
+  // OPRF key hash, domain and nullifier. Core reads all four at the circuit's
+  // own offsets and compares them with the key pinned for the proof's chain and
+  // the scope and domain this request named.
+  if (hasOprfNullifier(demo.circuit)) {
+    try {
+      checkDemoOprfProof(demo.circuit, result.chainId, inputs, { scope, oprfDomain: DEMO_OPRF_DOMAIN });
+    } catch (cause) {
+      throw new Error(`This proof does not match the requested session: ${cause instanceof Error ? cause.message : String(cause)}`);
     }
-    throw new Error('This proof does not match the requested session.');
+  } else {
+    checkHashedScope(inputs, demo.circuit, scope);
   }
   const issuer = ISSUER_ROOTS[demo.circuit];
   if (issuer) equalHash(inputs, issuer.start, issuer.root, issuer.name);

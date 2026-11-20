@@ -13,7 +13,7 @@ import { cardScope } from '../lib/demo-scopes';
 const external = vi.hoisted(() => ({ create: vi.fn(), qr: vi.fn(), wait: vi.fn(), onchain: vi.fn(), offchain: vi.fn(), disconnect: vi.fn() }));
 vi.mock('../lib/sdk', () => ({
   createSDK: () => ({ createRelayRequest: external.create, generateQRCode: external.qr, waitForProof: external.wait, verifyResponseOffChain: external.offchain, disconnect: external.disconnect }),
-  createVerifierSDK: () => ({ verifyResponseOnChain: external.onchain }),
+  createVerifierSDK: () => ({ verifyResponseOnChain: external.onchain, verifyResponseOffChain: external.offchain }),
 }));
 
 const REQUEST_ID = '0b6f4c1e-8f5a-4d2b-9c3e-7a1d2f3b4c5d';

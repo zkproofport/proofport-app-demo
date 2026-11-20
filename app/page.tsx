@@ -17,6 +17,7 @@ import DemoTabs from './components/DemoTabs';
 import { APP_STORE_URL, GOOGLE_PLAY_URL } from '@/lib/app-stores';
 import { DEMO_PROOF_WAIT_MS, NO_RELAY_ANSWER_MESSAGE, isWaitTimeout, settleRelayResult } from '@/lib/relay-outcome';
 import { liveSectionScope } from '@/lib/demo-scopes';
+import { DEMO_OPRF_DOMAIN, hasOprfNullifier } from '@/lib/oprf';
 import { ZKPROOFPORT_SYMBOL } from '@/lib/brand';
 import ZKProofportWordmark from './components/ZKProofportWordmark';
 
@@ -523,7 +524,7 @@ const emptyDemoState: DemoState = {
 
     try {
       const sdk = getSDK();
-      const result = await sdk.createRelayRequest(CIRCUIT_IDS.COINBASE_ATTESTATION, { scope: liveSectionScope(CIRCUIT_IDS.COINBASE_ATTESTATION) }, {
+      const result = await sdk.createRelayRequest(CIRCUIT_IDS.COINBASE_ATTESTATION, { scope: liveSectionScope(CIRCUIT_IDS.COINBASE_ATTESTATION), oprfDomain: DEMO_OPRF_DOMAIN }, {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message: 'Prove your Coinbase KYC identity verification',
@@ -608,7 +609,7 @@ const emptyDemoState: DemoState = {
 
     try {
       const sdk = getSDK();
-      const result = await sdk.createRelayRequest(CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION, { scope: liveSectionScope(CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION), countryList: countries, isIncluded }, {
+      const result = await sdk.createRelayRequest(CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION, { scope: liveSectionScope(CIRCUIT_IDS.COINBASE_COUNTRY_ATTESTATION), oprfDomain: DEMO_OPRF_DOMAIN, countryList: countries, isIncluded }, {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message: 'Prove your Coinbase country of residence',
@@ -729,7 +730,7 @@ const emptyDemoState: DemoState = {
 
     try {
       const sdk = getSDK();
-      const result = await sdk.createRelayRequest(CIRCUIT_IDS.GIWA_ATTESTATION, { scope: liveSectionScope(CIRCUIT_IDS.GIWA_ATTESTATION) }, {
+      const result = await sdk.createRelayRequest(CIRCUIT_IDS.GIWA_ATTESTATION, { scope: liveSectionScope(CIRCUIT_IDS.GIWA_ATTESTATION), oprfDomain: DEMO_OPRF_DOMAIN }, {
         dappName: 'ZKProofport Demo',
         dappIcon: 'https://demo.zkproofport.app/icon.png',
         message: 'Prove your GIWA account verification',
@@ -796,14 +797,17 @@ const emptyDemoState: DemoState = {
       const madeRequestId = madeRequestIdsRef.current[prefix];
       // The SDK refuses a request whose id is not the response's.
       if (!madeRequestId) throw new Error('This proof does not answer a request this page made. Request a new proof.');
-      const request = { scope: liveSectionScope(proofResponse.circuit), requestId: madeRequestId };
+      // A wallet proof's OPRF domain is compared with the one the request named.
+      const request = hasOprfNullifier(proofResponse.circuit)
+        ? { scope: liveSectionScope(proofResponse.circuit), requestId: madeRequestId, oprfDomain: DEMO_OPRF_DOMAIN }
+        : { scope: liveSectionScope(proofResponse.circuit), requestId: madeRequestId };
       const countryCondition = madeCountryConditionRef.current;
       if (prefix === 'country' && !countryCondition) throw new Error('This proof does not answer a request this page made. Request a new proof.');
       const conditions = prefix === 'country' && countryCondition ? { countryCondition } : {};
       const result =
         type === 'onchain'
           ? await createVerifierSDK(proofResponse).verifyResponseOnChain(proofResponse, undefined, { request, ...conditions })
-          : await getSDK().verifyResponseOffChain(proofResponse, { request, ...conditions });
+          : await createVerifierSDK(proofResponse).verifyResponseOffChain(proofResponse, { request, ...conditions });
       if (result.valid) {
         setDemoState(prefix, (prev) => ({
           ...prev,
@@ -829,7 +833,7 @@ const emptyDemoState: DemoState = {
     // added, so verifying a GIWA proof could read whatever proof this callback
     // was built with — and a stale proof verifies as someone else's answer
     // rather than failing.
-  }, [kycState.proofObject, countryState.proofObject, emailState.proofObject, giwaState.proofObject, getSDK, setDemoState, launchConfetti]);
+  }, [kycState.proofObject, countryState.proofObject, emailState.proofObject, giwaState.proofObject, setDemoState, launchConfetti]);
 
   /* ── Smooth scroll ── */
   const scrollTo = useCallback((id: string) => {

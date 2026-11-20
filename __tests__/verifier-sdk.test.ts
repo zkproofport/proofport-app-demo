@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ALL_CIRCUIT_IDS, getPinnedVariantVerifier, getPinnedVerifier, HUMAN_PASSPORT_SCORE_PUBLIC_INPUT_COUNT, type ProofResponse } from '@zkproofport-app/sdk';
-import { COINBASE_ATTESTATION_PUBLIC_INPUT_COUNT } from '@zkproofport-app/core';
+import { COINBASE_ATTESTATION_PUBLIC_INPUT_COUNT, computeSignalHash, OPRF_PUBLIC_INPUT_LAYOUTS, reduceOprfName } from '@zkproofport-app/core';
+import { TESTNET_OPRF_KEY_HASH } from './fixtures/giwa';
 import { proofHex } from './fixtures/card-proofs';
-import { getAddress, keccak256 } from 'ethers';
+import { getAddress, getBytes, keccak256 } from 'ethers';
+import { DEMO_OPRF_DOMAIN } from '../lib/oprf';
 import { COINBASE_SIGNER_ROOT } from '../lib/demo-policy';
 import { GIWA_SIGNER_ROOT } from '../lib/giwa-membership';
 import { createVerifierSDK } from '../lib/sdk';
@@ -14,11 +16,34 @@ const known = (circuit: string) => (ALL_CIRCUIT_IDS as readonly string[]).includ
 function pinnedOrNone(circuit: string, chainId: number): string | undefined {
   try { return getPinnedVerifier(circuit, chainId).address; } catch { return undefined; }
 }
+/**
+ * The request every wallet proof below answers. Since SDK 0.5.0-beta.13 a fresh
+ * SDK refuses a wallet proof it cannot place, and compares its signal_hash
+ * (keccak256(scope, circuit, requestId)) with the request's; the inputs below
+ * carry the right one, so the checks after it are what each test reaches.
+ */
+const REQUEST = { scope: 's', requestId: 'r', oprfDomain: DEMO_OPRF_DOMAIN };
+/**
+ * Zero public inputs of `count`; for a wallet credential, the signal hash of
+ * REQUEST in bytes 0..31 and the testnet OPRF key, REQUEST's domain and scope
+ * and a nullifier at the circuit's own OPRF offsets.
+ */
+function inputsFor(circuit: string, count: number): string[] {
+  const inputs = Array.from({ length: count }, () => field(0));
+  const layout = known(circuit) ? (OPRF_PUBLIC_INPUT_LAYOUTS as Record<string, { keyHash: number; domain: number; scope: number; nullifier: number } | null>)[circuit] : null;
+  if (!layout) return inputs;
+  getBytes(computeSignalHash({ scope: REQUEST.scope, circuitId: circuit, requestId: REQUEST.requestId })).forEach((byte, index) => { inputs[index] = field(byte); });
+  inputs[layout.keyHash] = TESTNET_OPRF_KEY_HASH;
+  inputs[layout.domain] = reduceOprfName(REQUEST.oprfDomain);
+  inputs[layout.scope] = reduceOprfName(REQUEST.scope);
+  inputs[layout.nullifier] = field(7);
+  return inputs;
+}
 function proof(overrides: Partial<ProofResponse> = {}): ProofResponse {
   const circuit = overrides.circuit ?? 'coinbase_attestation';
   const chainId = 'chainId' in overrides ? overrides.chainId : 84532;
   return {
-    requestId: 'r', circuit, status: 'completed', proof: known(circuit) ? proofHex(circuit) : '0x1234', publicInputs: Array.from({ length: COINBASE_ATTESTATION_PUBLIC_INPUT_COUNT }, () => field(0)),
+    requestId: 'r', circuit, status: 'completed', proof: known(circuit) ? proofHex(circuit) : '0x1234', publicInputs: inputsFor(circuit, COINBASE_ATTESTATION_PUBLIC_INPUT_COUNT),
     chainId, verifierAddress: 'verifierAddress' in overrides || chainId === undefined ? overrides.verifierAddress : pinnedOrNone(circuit, chainId), ...overrides,
   };
 }
@@ -27,14 +52,34 @@ function proof(overrides: Partial<ProofResponse> = {}): ProofResponse {
 const untouchable = new Proxy({}, { get(_target, key) { throw new Error(`provider touched: ${String(key)}`); } });
 
 describe('createVerifierSDK: the on-chain verifier is core\'s pinned deployment', () => {
-  it.each([[84532], [8453]])('configures coinbase_attestation on chain %s with the pinned address', chainId => {
-    const sdk = createVerifierSDK(proof({ chainId }));
-    expect(sdk.getVerifierAddress('coinbase_attestation')).toBe(getPinnedVerifier('coinbase_attestation', chainId).address);
-    expect(sdk.getVerifierChainId('coinbase_attestation')).toBe(chainId);
+  it('configures coinbase_attestation on chain 84532 with the pinned address', () => {
+    const sdk = createVerifierSDK(proof({ chainId: 84532 }));
+    expect(sdk.getVerifierAddress('coinbase_attestation')).toBe(getPinnedVerifier('coinbase_attestation', 84532).address);
+    expect(sdk.getVerifierChainId('coinbase_attestation')).toBe(84532);
   });
 
-  it('configures only the proof\'s circuit, so another circuit is not silently verifiable', () => {
-    expect(() => createVerifierSDK(proof()).getVerifierAddress('oidc_domain_attestation')).toThrow(/No verifier configured for circuit 'oidc_domain_attestation'/);
+  it('refuses a Base mainnet proof by name while its verifier awaits a redeploy', () => {
+    expect(() => createVerifierSDK(proof({ chainId: 8453, verifierAddress: '0x6fc22d3576fb70457d1529b3f70f711a3cba7a7f' }))).toThrow(/awaits a redeploy/);
+  });
+
+  it('any other circuit resolves only to core\'s pin for the environment the proof\'s chain implies', () => {
+    // The SDK needs that environment to know whose OPRF key a wallet proof must carry.
+    expect(createVerifierSDK(proof()).getVerifierAddress('oidc_domain_attestation')).toBe(getPinnedVerifier('oidc_domain_attestation', 84532).address);
+  });
+
+  it('refuses a proof under another OPRF key before any chain is asked', async () => {
+    const foreign = proof();
+    foreign.publicInputs = [...foreign.publicInputs!];
+    foreign.publicInputs[OPRF_PUBLIC_INPUT_LAYOUTS.coinbase_attestation.keyHash] = field(1);
+    const result = await createVerifierSDK(foreign).verifyResponseOnChain(foreign, untouchable, { request: REQUEST });
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/OPRF key hash .* is not the key pinned for coinbase_attestation in 'staging'/);
+  });
+
+  it('refuses a proof keyed by another OPRF domain than the request named', async () => {
+    const result = await createVerifierSDK(proof()).verifyResponseOnChain(proof(), untouchable, { request: { ...REQUEST, oprfDomain: 'stg-demo.zkproofport.app' } });
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/OPRF domain/);
   });
 
   it.each([
@@ -52,18 +97,31 @@ describe('createVerifierSDK: the on-chain verifier is core\'s pinned deployment'
 
   it('refuses a response that names a different verifier, before any chain is asked', async () => {
     const tampered = proof({ verifierAddress: '0x000000000000000000000000000000000000dEaD' });
-    const result = await createVerifierSDK(tampered).verifyResponseOnChain(tampered, untouchable);
+    const result = await createVerifierSDK(tampered).verifyResponseOnChain(tampered, untouchable, { request: REQUEST });
     expect(result.valid).toBe(false);
     expect(result.error).toMatch(/0x000000000000000000000000000000000000dead/i);
   });
 
   it('accepts the pinned address in checksum case, then runs the signer-root check before the chain', async () => {
     const checksummed = proof({ verifierAddress: getAddress(getPinnedVerifier('coinbase_attestation', 84532).address) });
-    const result = await createVerifierSDK(checksummed).verifyResponseOnChain(checksummed, untouchable);
+    const result = await createVerifierSDK(checksummed).verifyResponseOnChain(checksummed, untouchable, { request: REQUEST });
     // All-zero public inputs carry a zero signer root: refused by the issuer check, not by the address.
     expect(result.valid).toBe(false);
     expect(result.error).toMatch(/Coinbase/);
     expect(result.error).not.toMatch(/provider touched/);
+  });
+});
+
+describe('a wallet proof is verified against the request it answers', () => {
+  it('the published SDK refuses a wallet proof a fresh SDK cannot place', async () => {
+    const result = await createVerifierSDK(proof()).verifyResponseOnChain(proof(), untouchable);
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/No request "r" was created by this SDK instance.*oprfDomain/);
+  });
+  it('and one whose signal hash belongs to another request', async () => {
+    const result = await createVerifierSDK(proof()).verifyResponseOnChain(proof(), untouchable, { request: { ...REQUEST, scope: 'another' } });
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/signal_hash/);
   });
 });
 
@@ -141,18 +199,18 @@ describe('every verification call passes the request', () => {
 // SDK refuses to verify until it is told what was asked.
 describe('a Human Passport proof is verified against the threshold the request asked for', () => {
   const passport = (chainId = 84532) => proof({
-    circuit: 'human_passport_score', chainId, publicInputs: Array.from({ length: HUMAN_PASSPORT_SCORE_PUBLIC_INPUT_COUNT }, () => field(0)),
+    circuit: 'human_passport_score', chainId, publicInputs: inputsFor('human_passport_score', HUMAN_PASSPORT_SCORE_PUBLIC_INPUT_COUNT),
   });
-  it.each([[84532], [8453]])('configures the pinned Human Passport verifier on chain %s', chainId => {
-    expect(createVerifierSDK(passport(chainId)).getVerifierAddress('human_passport_score')).toBe(getPinnedVerifier('human_passport_score', chainId).address);
+  it('configures the pinned Human Passport verifier on chain 84532', () => {
+    expect(createVerifierSDK(passport(84532)).getVerifierAddress('human_passport_score')).toBe(getPinnedVerifier('human_passport_score', 84532).address);
   });
   it('the published SDK refuses it without a threshold', async () => {
-    const result = await createVerifierSDK(passport()).verifyResponseOnChain(passport(), untouchable, { request: { scope: 's', requestId: 'r' } });
+    const result = await createVerifierSDK(passport()).verifyResponseOnChain(passport(), untouchable, { request: REQUEST });
     expect(result.valid).toBe(false);
     expect(result.error).toMatch(/minScore/);
   });
   it('with the threshold, it reaches the issuer check (all-zero inputs: refused there, never at the chain)', async () => {
-    const result = await createVerifierSDK(passport()).verifyResponseOnChain(passport(), untouchable, { request: { scope: 's', requestId: 'r' }, minScore: 20 });
+    const result = await createVerifierSDK(passport()).verifyResponseOnChain(passport(), untouchable, { request: REQUEST, minScore: 20 });
     expect(result.valid).toBe(false);
     expect(result.error).toMatch(/Human Passport/);
     expect(result.error).not.toMatch(/minScore|provider touched/);
@@ -166,16 +224,19 @@ describe('an Android-signed proof is verified against its own package\'s verifie
     chainId, signerVariant: 'android', proof: proofHex('coinbase_attestation', 'android'),
     verifierAddress: getPinnedVariantVerifier('coinbase_attestation', 'android', chainId).address,
   });
-  it.each([[84532], [8453]])('on chain %s: the Android verifier is accepted, then the issuer check runs before the chain', async chainId => {
-    const result = await createVerifierSDK(android(chainId)).verifyResponseOnChain(android(chainId), untouchable);
+  it.each([[84532]])('on chain %s: the Android verifier is accepted, then the issuer check runs before the chain', async chainId => {
+    const result = await createVerifierSDK(android(chainId)).verifyResponseOnChain(android(chainId), untouchable, { request: REQUEST });
     expect(result.valid).toBe(false);
     expect(result.error).toMatch(/Coinbase/);
     expect(result.error).not.toMatch(/provider touched|verifies against/);
   });
   it('refuses an Android proof that names the standard verifier', async () => {
     const tampered = { ...android(84532), verifierAddress: getPinnedVerifier('coinbase_attestation', 84532).address };
-    const result = await createVerifierSDK(tampered).verifyResponseOnChain(tampered, untouchable);
+    const result = await createVerifierSDK(tampered).verifyResponseOnChain(tampered, untouchable, { request: REQUEST });
     expect(result.valid).toBe(false);
     expect(result.error).toMatch(/verifies against/);
+  });
+  it('refuses a Base mainnet Android proof by name while its verifier awaits a redeploy', () => {
+    expect(() => getPinnedVariantVerifier('coinbase_attestation', 'android', 8453)).toThrow(/awaits a redeploy/);
   });
 });

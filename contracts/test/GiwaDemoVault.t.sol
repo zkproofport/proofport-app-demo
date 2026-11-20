@@ -22,7 +22,7 @@ contract VerifierDouble {
 
     function verify(bytes calldata proof, bytes32[] calldata inputs) external view returns (bool) {
         require(mode != 2, "Verifier reverted");
-        return mode != 1 && keccak256(proof) == keccak256(hex"cafe") && inputs.length == 192;
+        return mode != 1 && keccak256(proof) == keccak256(hex"cafe") && inputs.length == 132;
     }
 }
 
@@ -57,7 +57,12 @@ contract AdversarialAsset {
 
 contract GiwaDemoVaultTest {
     Vm constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-    address constant VERIFIER = 0xF6Edb9d6114B2546B6E559997fdDE08CAeEA83b3;
+    address constant VERIFIER = 0xA272056866453F0182426A29B9Ca6382d6C6a060;
+    // Written out, not read from the contract: core's getPinnedOprfKeyHash('staging', 'giwa_attestation').
+    bytes32 constant TESTNET_OPRF_KEY_HASH = 0x039ecd4ea1875bb5c7f7a1bfae692cab271e3f3f25df4e5ab691fcb17586e6d1;
+    // core's reduceOprfName("demo.zkproofport.app"); its raw keccak256 is above the field modulus.
+    bytes32 constant DEMO_DOMAIN_FIELD = 0x0fd195923d45a11d40ac6c6d66108ede0763262945cd8c62a90491a5e3c13a32;
+    uint256 constant P = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
     address constant ALICE = address(0xA11CE);
     address constant BOB = address(0xB0B);
     uint256 constant AMOUNT = 10_000_000; // 10 dKRW
@@ -76,18 +81,20 @@ contract GiwaDemoVaultTest {
     }
 
     function _inputs(GiwaDemoVault target, address account, uint256 amount) internal view returns (bytes32[] memory p) {
-        p = new bytes32[](192);
-        bytes32[6] memory fields = [
+        p = new bytes32[](132);
+        bytes32[4] memory fields = [
             bytes32(0),
             _domain(address(target), block.chainid),
             _action(account, address(target.asset()), amount, target.nonces(account)),
-            target.trustedSignerRoot(),
-            keccak256(bytes(target.depositScope(account, amount))),
-            bytes32(uint256(2))
+            target.trustedSignerRoot()
         ];
-        for (uint256 i; i < 192; ++i) {
+        for (uint256 i; i < 128; ++i) {
             p[i] = bytes32(uint256(uint8(fields[i / 32][i % 32])));
         }
+        p[128] = TESTNET_OPRF_KEY_HASH;
+        p[129] = DEMO_DOMAIN_FIELD;
+        p[130] = bytes32(uint256(keccak256(bytes(target.depositScope(account, amount)))) % P);
+        p[131] = bytes32(uint256(2));
     }
 
     function _domain(address target, uint256 chainId) internal pure returns (bytes32) {
@@ -186,8 +193,8 @@ contract GiwaDemoVaultTest {
 
     function testNonCanonicalPublicInputRejected() public {
         bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
-        p[191] = bytes32(uint256(256));
-        vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.InvalidPublicInputByte.selector, 191));
+        p[127] = bytes32(uint256(256));
+        vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.InvalidPublicInputByte.selector, 127));
         _deposit(vault, ALICE, AMOUNT, p);
     }
 
@@ -321,6 +328,82 @@ contract GiwaDemoVaultTest {
         _deposit(vault, ALICE, AMOUNT, new bytes32[](128));
     }
 
+    function testPreOprf192InputProofRejected() public {
+        vm.expectRevert(GiwaDemoVault.InvalidPublicInputCount.selector);
+        _deposit(vault, ALICE, AMOUNT, new bytes32[](192));
+    }
+
+    function testPinnedOprfKeyHashMatchesCore() public view {
+        require(vault.OPRF_KEY_HASH() == TESTNET_OPRF_KEY_HASH);
+        require(vault.oprfName(vault.OPRF_DOMAIN()) == DEMO_DOMAIN_FIELD);
+        require(keccak256(bytes(vault.OPRF_DOMAIN())) == keccak256("demo.zkproofport.app"));
+    }
+
+    function testPinnedOprfKeyHashAccepted() public {
+        bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
+        require(p[128] == TESTNET_OPRF_KEY_HASH);
+        require(vault.verifyEligibility(ALICE, AMOUNT, hex"cafe", p));
+        _deposit(vault, ALICE, AMOUNT, p);
+        require(vault.totalDeposits() == AMOUNT);
+    }
+
+    function testOtherOprfKeyHashRejected() public {
+        bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
+        p[128] = bytes32(uint256(TESTNET_OPRF_KEY_HASH) ^ 1);
+        vm.expectRevert(GiwaDemoVault.WrongOprfKey.selector);
+        _deposit(vault, ALICE, AMOUNT, p);
+        require(vault.nonces(ALICE) == 0 && vault.totalDeposits() == 0);
+    }
+
+    function testZeroOprfKeyHashRejected() public {
+        bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
+        p[128] = bytes32(0);
+        vm.expectRevert(GiwaDemoVault.WrongOprfKey.selector);
+        _deposit(vault, ALICE, AMOUNT, p);
+    }
+
+    function testOprfKeyHashAtFieldModulusRejected() public {
+        bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
+        p[128] = bytes32(uint256(TESTNET_OPRF_KEY_HASH) + P);
+        vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.InvalidPublicInputField.selector, 128));
+        _deposit(vault, ALICE, AMOUNT, p);
+    }
+
+    function testOtherOprfDomainRejected() public {
+        bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
+        p[129] = bytes32(uint256(keccak256("stg-demo.zkproofport.app")) % P);
+        vm.expectRevert(GiwaDemoVault.WrongOprfDomain.selector);
+        _deposit(vault, ALICE, AMOUNT, p);
+    }
+
+    function testUnreducedOprfDomainRejected() public {
+        bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
+        p[129] = keccak256("demo.zkproofport.app");
+        vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.InvalidPublicInputField.selector, 129));
+        _deposit(vault, ALICE, AMOUNT, p);
+    }
+
+    function testNullifierAtFieldModulusRejected() public {
+        bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
+        p[131] = bytes32(P);
+        vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.InvalidPublicInputField.selector, 131));
+        _deposit(vault, ALICE, AMOUNT, p);
+    }
+
+    function testFuzzOnlyThePinnedKeyHashPasses(bytes32 keyHash) public {
+        bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
+        p[128] = keyHash;
+        if (keyHash == TESTNET_OPRF_KEY_HASH) {
+            require(vault.verifyEligibility(ALICE, AMOUNT, hex"cafe", p));
+        } else if (uint256(keyHash) >= P) {
+            vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.InvalidPublicInputField.selector, 128));
+            vault.verifyEligibility(ALICE, AMOUNT, hex"cafe", p);
+        } else {
+            vm.expectRevert(GiwaDemoVault.WrongOprfKey.selector);
+            vault.verifyEligibility(ALICE, AMOUNT, hex"cafe", p);
+        }
+    }
+
     function testIdentityOnlyProofRejected() public {
         bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
         _put(p, 0, keccak256("identity challenge"));
@@ -424,7 +507,7 @@ contract GiwaDemoVaultTest {
 
     function testScopeStillCheckedAfterSignedAction() public {
         bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
-        _put(p, 128, keccak256("giwa-membership"));
+        p[130] = bytes32(uint256(keccak256("giwa-membership")) % P);
         vm.expectRevert(GiwaDemoVault.WrongDepositScope.selector);
         _deposit(vault, ALICE, AMOUNT, p);
     }
@@ -440,12 +523,12 @@ contract GiwaDemoVaultTest {
 
     function testZeroAccountRejected() public {
         vm.expectRevert(GiwaDemoVault.ZeroAddress.selector);
-        vault.verifyEligibility(address(0), AMOUNT, hex"cafe", new bytes32[](192));
+        vault.verifyEligibility(address(0), AMOUNT, hex"cafe", new bytes32[](132));
     }
 
     function testZeroDepositRejected() public {
         vm.expectRevert(GiwaDemoVault.ZeroAmount.selector);
-        _deposit(vault, ALICE, 0, new bytes32[](192));
+        _deposit(vault, ALICE, 0, new bytes32[](132));
     }
 
     function testZeroWithdrawalRejected() public {

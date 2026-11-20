@@ -1,10 +1,14 @@
 import { CIRCUIT_IDS, type RelayProofResult, type TypedAction } from '@zkproofport-app/sdk';
+import { reduceOprfName } from '@zkproofport-app/core';
 import { keccak256, toUtf8Bytes, TypedDataEncoder } from 'ethers';
+import { DEMO_DOMAIN_FIELD, TESTNET_OPRF_KEY_HASH } from './giwa';
 
 export const SSIAT_TEST_DROP = '0x1111111111111111111111111111111111111111';
 export const SSIAT_TEST_RECIPIENT = '0x00000000000000000000000000000000000A11CE';
-export const SSIAT_TEST_VERIFIER = '0xad6c9bfa60f3ee618dee9dc2027a69c57f2ad816';
-export const SSIAT_TEST_NULLIFIER = '0x' + 'ab'.repeat(32);
+export const SSIAT_TEST_VERIFIER = '0x400474e78a793289d091a5f556f78158956b5d01';
+/** An OPRF nullifier is a field element, below the BN254 modulus. */
+export const SSIAT_TEST_NULLIFIER = '0x0' + 'ab'.repeat(31) + 'a';
+export const SSIAT_OPRF = { keyHash: 96, domain: 97, scope: 98, nullifier: 99 } as const;
 const ZERO_WORD = '0x' + '00'.repeat(32);
 export const byteFields = (hex: string) => hex.slice(2).match(/../g)!.map(byte => `0x${byte.padStart(64, '0')}`);
 
@@ -26,6 +30,8 @@ export const SSIAT_TEST_SCOPE = 'ssiat-drop:v1:c9530063dbdc15541fb42838f47b7e100
 
 // Policy fixture only: the bytes are not a cryptographic proof, and nothing here
 // stands in for the phone generating one or the verifier accepting it.
+// 96 byte-valued inputs (signal, EIP-712 domain, action), then the OPRF key
+// hash, domain, scope and nullifier as whole field elements.
 export function ssiatResult(scope: string, action?: TypedAction, nullifier = SSIAT_TEST_NULLIFIER): RelayProofResult {
   return {
     requestId: 'current-request', status: 'completed', circuit: CIRCUIT_IDS.DOJANG_PLAYGROUND,
@@ -34,7 +40,6 @@ export function ssiatResult(scope: string, action?: TypedAction, nullifier = SSI
       action ? ZERO_WORD : keccak256(toUtf8Bytes('identity signal')),
       action ? TypedDataEncoder.hashDomain(action.domain) : ZERO_WORD,
       action ? TypedDataEncoder.hashStruct(action.primaryType, action.types, action.message) : ZERO_WORD,
-      keccak256(toUtf8Bytes(scope)), nullifier,
-    ].flatMap(byteFields),
+    ].flatMap(byteFields).concat([TESTNET_OPRF_KEY_HASH, DEMO_DOMAIN_FIELD, reduceOprfName(scope), nullifier]),
   };
 }

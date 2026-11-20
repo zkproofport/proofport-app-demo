@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BrowserProvider, Contract, JsonRpcProvider, TypedDataEncoder, isAddress, type Eip1193Provider } from 'ethers';
 import { ProofportSDK, type RelayProofResult } from '@zkproofport-app/sdk';
+import { getPinnedOprfKeyHash } from '@zkproofport-app/core';
 import { GIWA_CHAIN_ID } from './giwa-membership';
+import { DEMO_OPRF_DOMAIN, oprfEnvironmentForChain } from './oprf';
 import { createSDK } from './sdk';
 import { EXPLORER, GIWA_RPC, guardGiwaWalletProvider, waitForVaultReceipt } from './giwa-vault';
 import { DEMO_PROOF_WAIT_MS, describeFailure, isPendingRelayStatus, settleRelayResult } from './relay-outcome';
@@ -165,13 +167,16 @@ export function useSsiatDrop() {
       const recipient = account;
       const reader = contract(address);
       const blockTag = await timeout(readProvider().getBlockNumber());
-      const [scope, domainHash, actionHash, remaining, claimAmount] = await timeout(Promise.all([
+      const [scope, domainHash, actionHash, remaining, claimAmount, oprfDomain, oprfKeyHash] = await timeout(Promise.all([
         reader.claimScope({ blockTag }), reader.domainSeparator({ blockTag }), reader.claimActionHash(recipient, { blockTag }),
-        reader.remaining({ blockTag }), reader.CLAIM_AMOUNT({ blockTag }),
+        reader.remaining({ blockTag }), reader.CLAIM_AMOUNT({ blockTag }), reader.OPRF_DOMAIN({ blockTag }), reader.OPRF_KEY_HASH({ blockTag }),
       ]));
       if (current !== version.current) return;
       const action = buildSsiatClaimAction(recipient, address);
-      if (typeof scope !== 'string' || !SSIAT_SCOPE_PATTERN.test(scope) || scope !== expectedSsiatScope(address) ||
+      // The drop pins the OPRF domain and key its nullifiers are keyed by; a drop
+      // pinning others would refuse every proof this page asks for.
+      if (oprfDomain !== DEMO_OPRF_DOMAIN || String(oprfKeyHash).toLowerCase() !== getPinnedOprfKeyHash(oprfEnvironmentForChain(GIWA_CHAIN_ID), SSIAT_CIRCUIT) ||
+          typeof scope !== 'string' || !SSIAT_SCOPE_PATTERN.test(scope) || scope !== expectedSsiatScope(address) ||
           TypedDataEncoder.hashDomain(action.domain) !== domainHash ||
           TypedDataEncoder.hashStruct(action.primaryType, action.types, action.message) !== actionHash) {
         throw new Error('The configured drop contract is not the Ssiat drop this page expects. Please reload the demo.');
@@ -182,7 +187,7 @@ export function useSsiatDrop() {
       // Claim(recipient); the connected recipient wallet sends the claim transaction.
       client = createSDK();
       sdk.current = client;
-      const pending = await timeout(client.createRelayRequest(SSIAT_CIRCUIT, { scope, action }, {
+      const pending = await timeout(client.createRelayRequest(SSIAT_CIRCUIT, { scope, oprfDomain, action }, {
         dappName: 'Ssiat', dappIcon: `${window.location.origin}/brand/ssiat-app-icon.png`,
         message: 'Claim Ssiat test seeds for the wallet you connected. Sign with the wallet you used on the GIWA Playground faucet.',
       }));
@@ -206,7 +211,7 @@ export function useSsiatDrop() {
         setQr(''); setDeepLink(''); setNotice(outcome.message); setPhase('ended'); return;
       }
       if (outcome.kind !== 'proof') throw new Error(describeFailure(outcome));
-      const bound = prepareSsiatClaimProof(outcome.result, pending.requestId, scope, action);
+      const bound = prepareSsiatClaimProof(outcome.result, pending.requestId, scope, oprfDomain, action);
       setQr(''); setDeepLink(''); setPhase('verifying');
       const reread = contract(address);
       if (await timeout(reread.claimed(bound.nullifier))) {

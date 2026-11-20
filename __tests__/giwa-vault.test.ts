@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Interface, MaxUint256 } from 'ethers';
 import { buildGiwaDepositAction, displayKRW, parseVaultAmount, vaultErrorMessage, vaultErrorName, waitForVaultReceipt, VAULT_ABI } from '../lib/giwa-vault';
 import { prepareGiwaMembershipProof } from '../lib/giwa-membership';
-import { depositAction, giwaResult, GIWA_TEST_ACCOUNT, GIWA_TEST_VAULT } from './fixtures/giwa';
+import { DEMO_DOMAIN, depositAction, giwaResult, GIWA_TEST_ACCOUNT, GIWA_TEST_VAULT } from './fixtures/giwa';
 
 describe('dKRW amounts are exact six-decimal integers', () => {
   it('converts the institutional deposit amount without floating point', () => {
@@ -45,10 +45,10 @@ describe('Vault mobile proof binding', () => {
   const action = depositAction();
   const result = giwaResult(scope, action);
   it('accepts the exact scope returned by depositScope for policy preflight', () => {
-    expect(prepareGiwaMembershipProof(result, result.requestId, scope, action).publicInputs).toHaveLength(192);
+    expect(prepareGiwaMembershipProof(result, result.requestId, scope, DEMO_DOMAIN, action).publicInputs).toHaveLength(132);
   });
   it('rejects proof reuse for a changed amount, wallet or consumed nonce scope', () => {
-    expect(() => prepareGiwaMembershipProof(result, result.requestId, 'giwa-vault:v1:' + 'cd'.repeat(32), action)).toThrow();
+    expect(() => prepareGiwaMembershipProof(result, result.requestId, 'giwa-vault:v1:' + 'cd'.repeat(32), DEMO_DOMAIN, action)).toThrow(/scope/);
   });
 });
 

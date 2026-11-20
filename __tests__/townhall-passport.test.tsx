@@ -6,6 +6,7 @@ import { CIRCUIT_IDS } from '@zkproofport-app/sdk';
 import CircuitDemo from '../app/components/CircuitDemo';
 import { demoById } from '../lib/demo-catalog';
 import { cardScope } from '../lib/demo-scopes';
+import { DEMO_OPRF_DOMAIN } from '../lib/oprf';
 import { DEFAULT_OPTIONS } from '../lib/demo-policy';
 import { cardResult } from './fixtures/card-proofs';
 
@@ -17,7 +18,7 @@ import { cardResult } from './fixtures/card-proofs';
 const external = vi.hoisted(() => ({ create: vi.fn(), qr: vi.fn(), wait: vi.fn(), onchain: vi.fn(), offchain: vi.fn(), disconnect: vi.fn() }));
 vi.mock('../lib/sdk', () => ({
   createSDK: () => ({ createRelayRequest: external.create, generateQRCode: external.qr, waitForProof: external.wait, verifyResponseOffChain: external.offchain, disconnect: external.disconnect }),
-  createVerifierSDK: () => ({ verifyResponseOnChain: external.onchain }),
+  createVerifierSDK: () => ({ verifyResponseOnChain: external.onchain, verifyResponseOffChain: external.offchain }),
 }));
 
 const REQUEST_ID = '0b6f4c1e-8f5a-4d2b-9c3e-7a1d2f3b4c5d';
@@ -104,7 +105,7 @@ describe('Townhall: a Human Passport score threshold', () => {
     expect(external.create).toHaveBeenCalledTimes(1);
     const [circuit, inputs, options] = external.create.mock.calls[0];
     expect(circuit).toBe('human_passport_score');
-    expect(inputs).toEqual({ scope: cardScope('passport'), minScore: 25.5 });
+    expect(inputs).toEqual({ scope: cardScope('passport'), oprfDomain: DEMO_OPRF_DOMAIN, minScore: 25.5 });
     expect(options).toMatchObject({ dappName: 'Townhall' });
     expect(options).not.toHaveProperty('returnScheme');
     expect(external.qr).toHaveBeenCalledWith('zkproofport://proof-request?test=1', expect.anything());
@@ -126,7 +127,7 @@ describe('Townhall: a Human Passport score threshold', () => {
     await click(label);
     await click('Verify proof');
     const call = path === 'onchain' ? external.onchain.mock.calls[0][2] : external.offchain.mock.calls[0][1];
-    expect(call).toEqual({ request: { scope: cardScope('passport'), requestId: REQUEST_ID }, minScore: 30 });
+    expect(call).toEqual({ request: { scope: cardScope('passport'), requestId: REQUEST_ID, oprfDomain: DEMO_OPRF_DOMAIN }, minScore: 30 });
     expect(host.textContent).toContain('Proof accepted.');
     expect(host.textContent).toContain('Above the threshold.');
     expect(board().reply.disabled).toBe(false);
@@ -175,7 +176,7 @@ describe('Borderless: the country condition reaches the fresh verifier SDK', () 
     await submit();
     await click('Verify proof');
     expect(external.onchain.mock.calls[0][2]).toEqual({
-      request: { scope: cardScope('country'), requestId: REQUEST_ID },
+      request: { scope: cardScope('country'), requestId: REQUEST_ID, oprfDomain: DEMO_OPRF_DOMAIN },
       countryCondition: { countryList: ['KP', 'IR'], isIncluded: false },
     });
   });

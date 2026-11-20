@@ -13,11 +13,11 @@ import { verifierAddress } from './verifier-deployments';
  */
 
 /**
- * The deployed SsiatDrop on GIWA Sepolia (2026-10-23, beta.19 verifier; see contracts/README.md).
+ * The deployed SsiatDrop on GIWA Sepolia (2026-11-21, bb 6.0.0 verifier; see contracts/README.md).
  * `ssiatDropAddress()` refuses an empty or malformed value, so the tab can never
  * read from or send to a placeholder.
  */
-export const SSIAT_DROP_ADDRESS: string = '0xA7D93C4699e86AF9f60EcBe1A1D90297fcc57dFf';
+export const SSIAT_DROP_ADDRESS: string = '0x4691533b0981e03830ddcD76A3cd38d6CCB35235';
 
 /** `dojang_playground` verifier: circuits/deployments/91342/DojangPlayground.json. */
 export const SSIAT_VERIFIER = verifierAddress(CIRCUIT_IDS.DOJANG_PLAYGROUND, GIWA_CHAIN_ID);
@@ -60,7 +60,7 @@ const dropInterface = new Interface(SSIAT_DROP_ABI);
 /** The configured drop, or an error saying it has not been deployed. Never a stand-in address. */
 export function ssiatDropAddress(configured: string = SSIAT_DROP_ADDRESS): string {
   if (!configured) {
-    throw new Error('The Ssiat drop contract is not deployed yet. Set SSIAT_DROP_ADDRESS in lib/ssiat-drop.ts after broadcasting contracts/script/DeploySsiatDrop.s.sol.');
+    throw new Error('The Ssiat drop contract is not deployed yet. Set SSIAT_DROP_ADDRESS in lib/ssiat-drop.ts after running scripts/deploy-demo-contract.sh ssiat-drop --broadcast.');
   }
   if (!isAddress(configured) || configured.toLowerCase() === ZeroAddress) {
     throw new Error(`SSIAT_DROP_ADDRESS '${configured}' is not a usable contract address.`);

@@ -2,7 +2,7 @@ import { Interface, formatUnits, isAddress, isError, MaxUint256, parseUnits, Zer
 import { type TypedAction } from '@zkproofport-app/sdk';
 import { GIWA_CHAIN_ID } from './giwa-membership';
 
-export const VAULT_ADDRESS = '0x79e327731172EA4b522dD1c7Df6e61d1D3fB2620';
+export const VAULT_ADDRESS = '0xAbc9a559967d6670257189B1dAd9d397f79a849e';
 export const TOKEN_ADDRESS = '0x417573024528f3c9daD782eF5316E992F3029e81';
 export const GIWA_RPC = 'https://sepolia-rpc.giwa.io';
 export const EXPLORER = 'https://sepolia-explorer.giwa.io';

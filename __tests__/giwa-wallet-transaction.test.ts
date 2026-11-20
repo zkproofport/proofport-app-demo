@@ -4,7 +4,7 @@ import { guardGiwaWalletProvider } from '../lib/giwa-vault';
 
 const account = '0x3fee628efe472ff6a6dce527523b131f2d973afb';
 const tokenAddress = '0x417573024528f3c9daD782eF5316E992F3029e81';
-const vaultAddress = '0x79e327731172EA4b522dD1c7Df6e61d1D3fB2620';
+const vaultAddress = '0xAbc9a559967d6670257189B1dAd9d397f79a849e';
 
 describe('GIWA transaction provider guard', () => {
   it('blocks the final send when the wallet changes during real ethers gas estimation', async () => {

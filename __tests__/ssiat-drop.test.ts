@@ -18,9 +18,9 @@ const prepare = (result = ssiatResult(SSIAT_TEST_SCOPE, claimAction()), action =
 
 describe('the drop address is the deployed one, and a missing one fails loudly', () => {
   it('ships the drop deployed on GIWA Sepolia, whose claimScope() read over RPC was this string', () => {
-    expect(SSIAT_DROP_ADDRESS).toBe('0xA7D93C4699e86AF9f60EcBe1A1D90297fcc57dFf');
+    expect(SSIAT_DROP_ADDRESS).toBe('0x4691533b0981e03830ddcD76A3cd38d6CCB35235');
     expect(ssiatDropAddress()).toBe(SSIAT_DROP_ADDRESS);
-    expect(expectedSsiatScope(SSIAT_DROP_ADDRESS)).toBe('ssiat-drop:v1:2ed6472da94b57988b11e3d8239f5bef6bf31be1ef984cf4c9adac300479eacf');
+    expect(expectedSsiatScope(SSIAT_DROP_ADDRESS)).toBe('ssiat-drop:v1:a4ec295c09997a77ff42ff05fdc4d53b242ba3741d22f47fea1cecb732c69dee');
   });
   it('an empty address is refused rather than replaced', () => {
     expect(() => ssiatDropAddress('')).toThrow(/not deployed yet.*SSIAT_DROP_ADDRESS/);

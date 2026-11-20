@@ -6,11 +6,11 @@ Start the parent workspace with `./scripts/dev.sh`, then open `http://localhost:
 
 - Operational wallet A: any connected Ethereum account on GIWA Sepolia
 - dKRW (6 decimals): `0x417573024528f3c9daD782eF5316E992F3029e81`
-- Vault v2: `0x79e327731172EA4b522dD1c7Df6e61d1D3fB2620`
-- Verifier (beta.19): `0xF6Edb9d6114B2546B6E559997fdDE08CAeEA83b3`
+- Vault v2: `0xAbc9a559967d6670257189B1dAd9d397f79a849e`
+- Verifier (bb 6.0.0): `0xA272056866453F0182426A29B9Ca6382d6C6a060`
 - GIWA Sepolia chain ID: `91342`
 
-The current vault was deployed in transaction `0xadb6093ebecd473bd9154f01e4c6e20cded2aacf045abe4ff1e6fad9a30df3c3` on 2026-10-23 KST, against the beta.19 GIWA verifier. The vault deployed on 2026-09-23 at `0x0036B61dBFaB8f3CfEEF77dD5D45F7EFBFE2035c` (transaction `0xcac293988fbc00d30082db58beec4c1fdb396c1b5811c769364bd1d359cca0da`) is retired: its verifier `0x5Da234546874304F8c51BBEed00fC632938211c1` is compiled in and refuses beta.19 proofs. Deposits in it stay withdrawable through its own `withdraw(uint256)`. The old v1 vault `0x18F72bF293E96117AF2641F304B5F1f274864EC8` remains unchanged: its owner can withdraw existing demo deposits by calling its `withdraw(uint256)` through the GIWA explorer or contract tooling. The new screen uses v2; it does not migrate balances or allowances.
+The current vault was deployed in transaction `0xf6e1944753e7cf23b9a271456224126d0c7d458153bacc8c42b1b84c64f13b73` (block 41848318) on 2026-11-21 KST with `scripts/deploy-demo-contract.sh giwa-vault --broadcast`, against the bb 6.0.0 GIWA verifier and the 132-input OPRF layout; `contracts/README.md` has the RPC readback and the deploy procedure. The vaults deployed on 2026-10-23 at `0x79e327731172EA4b522dD1c7Df6e61d1D3fB2620` (transaction `0xadb6093ebecd473bd9154f01e4c6e20cded2aacf045abe4ff1e6fad9a30df3c3`, beta.19 verifier `0xF6Edb9d6114B2546B6E559997fdDE08CAeEA83b3`) and on 2026-09-23 at `0x0036B61dBFaB8f3CfEEF77dD5D45F7EFBFE2035c` (transaction `0xcac293988fbc00d30082db58beec4c1fdb396c1b5811c769364bd1d359cca0da`, old-toolchain verifier `0x5Da234546874304F8c51BBEed00fC632938211c1`) are retired: their verifiers are compiled in and refuse current proofs. Deposits in them stay withdrawable through each one's own `withdraw(uint256)`. The old v1 vault `0x18F72bF293E96117AF2641F304B5F1f274864EC8` remains unchanged: its owner can withdraw existing demo deposits by calling its `withdraw(uint256)` through the GIWA explorer or contract tooling. The new screen uses v2; it does not migrate balances or allowances.
 
 ## Recording sequence
 

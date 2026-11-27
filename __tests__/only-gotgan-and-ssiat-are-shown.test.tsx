@@ -162,3 +162,19 @@ describe('in the browser', () => {
     expect(tabButtons()).toEqual(SHOWN);
   });
 });
+
+describe('the navigation keeps the shown tabs together', () => {
+  // With six tabs the last one was "All demos", set apart by `:last-child {
+  // margin-left: auto }`. Showing Gotgan and Ssiat alone made Ssiat the last
+  // tab, and that rule pushed it to the far end beside the theme menu
+  // (2026-11-27). Only the All demos tab may be set apart.
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../app/components/demos.css'), 'utf8') as string;
+  it("no rule sets a tab apart by being the last tab", () => {
+    expect(css).not.toMatch(/\[role='tab'\]:last-child/);
+    expect(css).not.toMatch(/\[role="tab"\]:last-child/);
+  });
+  it('the All demos tab is the one set apart, at both widths', () => {
+    expect(css).toMatch(/\.demo-switcher #demo-tab-all \{ margin-left: auto; \}/);
+    expect(css).toMatch(/\.demo-switcher #demo-tab-all \{ margin-left: 12px; \}/);
+  });
+});

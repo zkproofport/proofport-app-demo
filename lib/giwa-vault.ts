@@ -2,7 +2,7 @@ import { Interface, formatUnits, isAddress, isError, MaxUint256, parseUnits, Zer
 import { type TypedAction } from '@zkproofport-app/sdk';
 import { GIWA_CHAIN_ID } from './giwa-membership';
 
-export const VAULT_ADDRESS = '0xAbc9a559967d6670257189B1dAd9d397f79a849e';
+export const VAULT_ADDRESS = '0x41d707cD61847bB6939F3F1182eC96EFE6AaA983';
 export const TOKEN_ADDRESS = '0x417573024528f3c9daD782eF5316E992F3029e81';
 export const GIWA_RPC = 'https://sepolia-rpc.giwa.io';
 export const EXPLORER = 'https://sepolia-explorer.giwa.io';
@@ -21,14 +21,16 @@ export const VAULT_ABI = [
   'function nonces(address) view returns (uint256)',
   'function domainSeparator() view returns (bytes32)',
   'function depositActionHash(address,uint256) view returns (bytes32)',
-  'function verifyEligibility(address,uint256,bytes,bytes32[]) view returns (bool)',
-  'function deposit(uint256,bytes,bytes32[])',
+  'function verifyEligibility(address,uint256,uint8,bytes,bytes32[]) view returns (bool)',
+  'function deposit(uint256,uint8,bytes,bytes32[])',
   'function withdraw(uint256)',
   'error ProofRequired()', 'error WrongDepositScope()', 'error InvalidProof()',
   'error UntrustedIssuer()', 'error InsufficientBalance()', 'error TokenTransferFailed()',
   'error IdentityProofNotAllowed()', 'error WrongDepositDomain()', 'error WrongDepositAction()',
   'error WrongOprfKey()', 'error WrongOprfDomain()', 'error InvalidPublicInputCount()',
   'error InvalidPublicInputByte(uint256)', 'error InvalidPublicInputField(uint256)',
+  'error UnknownSignerVariant(uint8)', 'error AttestedAtNotUint64(uint256)',
+  'error AttestedAtTooOld(uint256,uint256)', 'error AttestedAtInFuture(uint256,uint256)',
 ];
 const vaultInterface = new Interface(VAULT_ABI);
 
@@ -111,12 +113,23 @@ export function vaultErrorName(cause: unknown): string | undefined {
   try { return typeof data === 'string' ? vaultInterface.parseError(data)?.name : undefined; } catch { return undefined; }
 }
 
+/** Vault errors that mean the proof itself must be replaced. */
+export const VAULT_PROOF_ERRORS = [
+  'WrongDepositScope', 'WrongDepositDomain', 'WrongDepositAction', 'IdentityProofNotAllowed', 'InvalidProof', 'UntrustedIssuer',
+  'WrongOprfKey', 'WrongOprfDomain', 'InvalidPublicInputCount', 'InvalidPublicInputByte', 'InvalidPublicInputField',
+  'UnknownSignerVariant', 'AttestedAtNotUint64', 'AttestedAtTooOld', 'AttestedAtInFuture',
+];
+
 export function vaultErrorMessage(cause: unknown): string {
   const error = cause as { code?: string | number; shortMessage?: string; message?: string };
   if (error?.code === 'ACTION_REJECTED' || error?.code === 4001) return 'The wallet request was declined. You can try again.';
   const name = vaultErrorName(cause);
   if (['WrongDepositScope', 'WrongDepositDomain', 'WrongDepositAction', 'IdentityProofNotAllowed', 'WrongOprfDomain'].includes(name ?? '')) return 'This proof no longer matches the deposit. Generate a new proof.';
-  if (['InvalidProof', 'UntrustedIssuer', 'WrongOprfKey', 'InvalidPublicInputCount', 'InvalidPublicInputByte', 'InvalidPublicInputField'].includes(name ?? '')) return 'The eligibility proof did not pass the Vault check. Generate a new proof.';
+  // The vault accepts a proof only within 15 minutes of the attestation check it carries.
+  if (name === 'AttestedAtTooOld') return 'This proof has expired: the attestation check inside it is more than 15 minutes old. Generate a new proof.';
+  if (name === 'AttestedAtInFuture') return 'This proof carries an attestation check time ahead of the chain clock. Check the phone\'s date and time, then generate a new proof.';
+  if (name === 'UnknownSignerVariant') return 'This proof came from a signer the Vault has no verifier for. Generate a new proof with a current ZKProofport app.';
+  if (['InvalidProof', 'UntrustedIssuer', 'WrongOprfKey', 'InvalidPublicInputCount', 'InvalidPublicInputByte', 'InvalidPublicInputField', 'AttestedAtNotUint64'].includes(name ?? '')) return 'The eligibility proof did not pass the Vault check. Generate a new proof.';
   if (name === 'TokenTransferFailed') return 'Token transfer failed. Check your dKRW balance and Vault allowance.';
   return error?.shortMessage || error?.message || 'The request could not finish. Please try again.';
 }

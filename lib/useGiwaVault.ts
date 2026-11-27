@@ -2,17 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BrowserProvider, Contract, JsonRpcProvider, TypedDataEncoder, isAddress, toBeHex, type Eip1193Provider } from 'ethers';
-import { CIRCUIT_IDS, ProofportSDK, type RelayProofResult } from '@zkproofport-app/sdk';
+import { CIRCUIT_IDS, ProofportSDK, type RelayProofResult, type SignerVariant } from '@zkproofport-app/sdk';
 import { getPinnedOprfKeyHash } from '@zkproofport-app/core';
 import { GIWA_CHAIN_ID, prepareGiwaMembershipProof } from './giwa-membership';
 import { DEMO_OPRF_DOMAIN, oprfEnvironmentForChain } from './oprf';
+import { signerVariantArgument } from './verifier-deployments';
 import { createSDK } from './sdk';
 import { DEMO_PROOF_WAIT_MS, describeFailure, isPendingRelayStatus, settleRelayResult } from './relay-outcome';
-import { EXPLORER, GIWA_RPC, TOKEN_ABI, TOKEN_ADDRESS, VAULT_ABI, VAULT_ADDRESS, buildGiwaDepositAction, guardGiwaWalletProvider, parseVaultAmount, vaultErrorMessage, vaultErrorName, waitForVaultReceipt } from './giwa-vault';
+import { EXPLORER, GIWA_RPC, TOKEN_ABI, TOKEN_ADDRESS, VAULT_ABI, VAULT_ADDRESS, VAULT_PROOF_ERRORS, buildGiwaDepositAction, guardGiwaWalletProvider, parseVaultAmount, vaultErrorMessage, vaultErrorName, waitForVaultReceipt } from './giwa-vault';
 
 type WalletProvider = Eip1193Provider & { on?: (event: string, listener: (...args: unknown[]) => void) => void; removeListener?: (event: string, listener: (...args: unknown[]) => void) => void };
 type Phase = 'idle' | 'checking' | 'blocked' | 'requesting' | 'waiting' | 'verifying' | 'ready' | 'approving' | 'depositing' | 'withdrawing' | 'success';
-type BoundProof = { proof: string; publicInputs: string[]; scope: string; amount: bigint; account: string };
+type BoundProof = { proof: string; publicInputs: string[]; scope: string; amount: bigint; account: string; signerVariant: SignerVariant };
 type Balances = { wallet: bigint | null; deposited: bigint | null; total: bigint; allowance: bigint | null };
 const injected = () => (window as Window & { ethereum?: WalletProvider }).ethereum;
 const timeout = async <T,>(promise: Promise<T>, ms = 30000): Promise<T> => {
@@ -169,9 +170,12 @@ export function useGiwaVault() {
       const outcome = settleRelayResult(result);
       if (outcome.kind !== 'proof') throw new Error(describeFailure(outcome));
       const response = prepareGiwaMembershipProof(outcome.result, pending.requestId, scope, oprfDomain, action);
-      const bound: BoundProof = { proof: response.proof!, publicInputs: response.publicInputs!.map(value => toBeHex(BigInt(value), 32)), scope, amount: units, account: target };
+      const bound: BoundProof = {
+        proof: response.proof!, publicInputs: response.publicInputs!.map(value => toBeHex(BigInt(value), 32)), scope, amount: units, account: target,
+        signerVariant: response.signerVariant,
+      };
       setPhase('verifying');
-      const valid = await timeout(vault().verifyEligibility(target, units, bound.proof, bound.publicInputs));
+      const valid = await timeout(vault().verifyEligibility(target, units, signerVariantArgument(bound.signerVariant), bound.proof, bound.publicInputs));
       if (current !== version.current) return;
       if (!valid) throw new Error('The Vault did not accept this proof.');
       setProof(bound); setPhase('ready'); setQr(''); setDeepLink('');
@@ -190,8 +194,10 @@ export function useGiwaVault() {
       const contract = vault();
       // A real eth_call against deposit exercises the exact missing-proof branch,
       // without prompting for or broadcasting a transaction destined to revert.
+      // The vault refuses an empty proof before it reads the signer package, so
+      // there is no package to name; the standard one is passed only to fill the slot.
       if (action === 'deposit' && !proof) {
-        await timeout(contract.deposit.staticCall(units, '0x', [], { from: account }));
+        await timeout(contract.deposit.staticCall(units, signerVariantArgument('standard'), '0x', [], { from: account }));
         throw new Error('Unexpected Vault response. No transaction was sent.');
       }
       const connectedSigner = await signer(isCurrent);
@@ -214,7 +220,7 @@ export function useGiwaVault() {
       // Each write is a distinct user action with a wallet confirmation.
       const transaction = { chainId: GIWA_CHAIN_ID };
       const tx = action === 'approve' ? await token.approve(VAULT_ADDRESS, units, transaction)
-        : action === 'deposit' ? await writable.deposit(units, proof!.proof, proof!.publicInputs, transaction)
+        : action === 'deposit' ? await writable.deposit(units, signerVariantArgument(proof!.signerVariant), proof!.proof, proof!.publicInputs, transaction)
         : await writable.withdraw(units, transaction);
       if (isCurrent()) setTxHash(tx.hash);
       const confirmed = await waitForVaultReceipt(tx, hash => {
@@ -229,10 +235,7 @@ export function useGiwaVault() {
       if (!isCurrent()) return;
       if (action === 'deposit' && !proof && vaultErrorName(cause) === 'ProofRequired') setPhase('blocked');
       else {
-        const invalidProof = [
-          'WrongDepositScope', 'WrongDepositDomain', 'WrongDepositAction', 'IdentityProofNotAllowed', 'InvalidProof', 'UntrustedIssuer',
-          'WrongOprfKey', 'WrongOprfDomain', 'InvalidPublicInputCount', 'InvalidPublicInputByte', 'InvalidPublicInputField',
-        ].includes(vaultErrorName(cause) ?? '');
+        const invalidProof = VAULT_PROOF_ERRORS.includes(vaultErrorName(cause) ?? '');
         if (invalidProof) setProof(null);
         setError(vaultErrorMessage(cause)); setPhase(invalidProof ? 'blocked' : proof ? 'ready' : 'idle');
       }

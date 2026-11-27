@@ -6,6 +6,7 @@ import {SsiatSeed} from "../src/SsiatSeed.sol";
 
 interface Vm {
     function chainId(uint256) external;
+    function warp(uint256) external;
     function etch(address, bytes calldata) external;
     function prank(address) external;
     function expectRevert(bytes4) external;
@@ -24,7 +25,7 @@ contract DojangVerifierDouble {
 
     function verify(bytes calldata proof, bytes32[] calldata inputs) external view returns (bool) {
         require(mode != 2, "Verifier reverted");
-        return mode != 1 && keccak256(proof) == keccak256(hex"cafe") && inputs.length == 100;
+        return mode != 1 && keccak256(proof) == keccak256(hex"cafe") && inputs.length == 101;
     }
 }
 
@@ -47,7 +48,7 @@ contract AdversarialSeed {
         if (mode == 1) return false;
         if (mode == 2) {
             (bool success, bytes memory data) =
-                address(drop).call(abi.encodeCall(SsiatDrop.claim, (address(1), hex"cafe", new bytes32[](0))));
+                address(drop).call(abi.encodeCall(SsiatDrop.claim, (address(1), uint8(0), hex"cafe", new bytes32[](0))));
             // Only a Reentrancy refusal lets the outer claim finish.
             require(!success && bytes4(data) == SsiatDrop.Reentrancy.selector, "reentry was not refused");
             return true;
@@ -59,7 +60,12 @@ contract AdversarialSeed {
 
 contract SsiatDropTest {
     Vm constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-    address constant VERIFIER = 0x400474E78a793289D091A5F556F78158956B5D01;
+    // Written out, not read from the contract: circuits/deployments/91342/DojangPlaygroundV2*.json.
+    address constant VERIFIER_STANDARD = 0xC1c42ade7C31aFDf99FbaEDF97dA5b07fCCba724;
+    address constant VERIFIER_ANDROID = 0x7fc2059a73cEF2b572C8deEe911c72963dCB4A8a;
+    address constant VERIFIER_ANDROID_FACTORY = 0x0b3Af3DFc67dC65E0145c37ee00230139d579F64;
+    // A realistic block time, so `NOW - 900` does not underflow.
+    uint256 constant NOW = 1_795_000_000;
     address constant ALICE = address(0xA11CE);
     address constant BOB = address(0xB0B);
     uint256 constant P = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
@@ -80,8 +86,11 @@ contract SsiatDropTest {
 
     function setUp() public {
         vm.chainId(91342);
-        DojangVerifierDouble verifier = new DojangVerifierDouble();
-        vm.etch(VERIFIER, address(verifier).code);
+        vm.warp(NOW);
+        bytes memory double = address(new DojangVerifierDouble()).code;
+        vm.etch(VERIFIER_STANDARD, double);
+        vm.etch(VERIFIER_ANDROID, double);
+        vm.etch(VERIFIER_ANDROID_FACTORY, double);
         drop = new SsiatDrop(CLAIM, SUPPLY);
         seed = drop.token();
     }
@@ -120,17 +129,18 @@ contract SsiatDropTest {
         view
         returns (bytes32[] memory p)
     {
-        p = new bytes32[](100);
+        p = new bytes32[](101);
         _put(p, 32, _domain(address(target), "Ssiat", "1", block.chainid));
         _put(p, 64, _action(recipient));
         p[96] = TESTNET_OPRF_KEY_HASH;
         p[97] = DEMO_DOMAIN_FIELD;
         p[98] = bytes32(uint256(keccak256(bytes(target.claimScope()))) % P);
         p[99] = nullifier;
+        p[100] = bytes32(block.timestamp);
     }
 
     function _claim(SsiatDrop target, address recipient, bytes32[] memory p) internal {
-        target.claim(recipient, hex"cafe", p);
+        target.claim(recipient, 0, hex"cafe", p);
     }
 
     // ---------- the happy path ----------
@@ -165,14 +175,14 @@ contract SsiatDropTest {
 
     function testVerifierReceivesExactlyTheSubmittedProofAndInputs() public {
         bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
-        vm.expectCall(VERIFIER, abi.encodeCall(DojangVerifierDouble.verify, (hex"cafe", p)));
+        vm.expectCall(VERIFIER_STANDARD, abi.encodeCall(DojangVerifierDouble.verify, (hex"cafe", p)));
         _claim(drop, ALICE, p);
     }
 
     function testPreflightDoesNotConsumeTheNullifier() public {
         bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
-        require(drop.verifyClaim(ALICE, hex"cafe", p), "preflight refused");
-        require(drop.verifyClaim(ALICE, hex"cafe", p), "preflight consumed state");
+        require(drop.verifyClaim(ALICE, 0, hex"cafe", p), "preflight refused");
+        require(drop.verifyClaim(ALICE, 0, hex"cafe", p), "preflight consumed state");
         require(!drop.claimed(FAUCET_WALLET_1) && drop.totalClaims() == 0, "preflight changed state");
         _claim(drop, ALICE, p);
     }
@@ -199,7 +209,7 @@ contract SsiatDropTest {
         bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
         _claim(drop, ALICE, p);
         vm.expectRevert(abi.encodeWithSelector(SsiatDrop.AlreadyClaimed.selector, FAUCET_WALLET_1));
-        drop.verifyClaim(ALICE, hex"cafe", p);
+        drop.verifyClaim(ALICE, 0, hex"cafe", p);
     }
 
     function testScopeIsFixedAndIndependentOfRecipient() public view {
@@ -248,11 +258,11 @@ contract SsiatDropTest {
     function testEmptyProofRejected() public {
         bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
         vm.expectRevert(SsiatDrop.ProofRequired.selector);
-        drop.claim(ALICE, hex"", p);
+        drop.claim(ALICE, 0, hex"", p);
     }
 
     function testWrongInputCountsRejected() public {
-        uint256[6] memory counts = [uint256(0), 1, 99, 101, 160, 192];
+        uint256[7] memory counts = [uint256(0), 1, 99, 100, 102, 160, 192];
         for (uint256 i; i < counts.length; ++i) {
             vm.expectRevert(SsiatDrop.InvalidPublicInputCount.selector);
             _claim(drop, ALICE, new bytes32[](counts[i]));
@@ -314,7 +324,7 @@ contract SsiatDropTest {
     function testPinnedOprfKeyHashAccepted() public {
         bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
         require(p[96] == TESTNET_OPRF_KEY_HASH, "fixture");
-        require(drop.verifyClaim(ALICE, hex"cafe", p), "preflight");
+        require(drop.verifyClaim(ALICE, 0, hex"cafe", p), "preflight");
         _claim(drop, ALICE, p);
         require(drop.claimed(FAUCET_WALLET_1) && seed.balanceOf(ALICE) == CLAIM, "not paid");
     }
@@ -341,13 +351,13 @@ contract SsiatDropTest {
         bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
         p[96] = keyHash;
         if (keyHash == TESTNET_OPRF_KEY_HASH) {
-            require(drop.verifyClaim(ALICE, hex"cafe", p), "pinned key refused");
+            require(drop.verifyClaim(ALICE, 0, hex"cafe", p), "pinned key refused");
         } else if (uint256(keyHash) >= P) {
             vm.expectRevert(abi.encodeWithSelector(SsiatDrop.InvalidPublicInputField.selector, 96));
-            drop.verifyClaim(ALICE, hex"cafe", p);
+            drop.verifyClaim(ALICE, 0, hex"cafe", p);
         } else {
             vm.expectRevert(SsiatDrop.WrongOprfKey.selector);
-            drop.verifyClaim(ALICE, hex"cafe", p);
+            drop.verifyClaim(ALICE, 0, hex"cafe", p);
         }
     }
 
@@ -460,7 +470,7 @@ contract SsiatDropTest {
         _claim(small, ALICE, _inputs(small, ALICE, FAUCET_WALLET_2));
         bytes32[] memory third = _inputs(small, BOB, bytes32(uint256(keccak256("third")) % P));
         vm.expectRevert(SsiatDrop.DropExhausted.selector);
-        small.verifyClaim(BOB, hex"cafe", third);
+        small.verifyClaim(BOB, 0, hex"cafe", third);
         vm.expectRevert(SsiatDrop.DropExhausted.selector);
         _claim(small, BOB, third);
         require(small.remaining() == 1 && small.totalClaims() == 2, "remainder");
@@ -478,7 +488,7 @@ contract SsiatDropTest {
 
     function testVerifierReturningFalseRejected() public {
         bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
-        DojangVerifierDouble(VERIFIER).setMode(1);
+        DojangVerifierDouble(VERIFIER_STANDARD).setMode(1);
         vm.expectRevert(SsiatDrop.InvalidProof.selector);
         _claim(drop, ALICE, p);
         require(!drop.claimed(FAUCET_WALLET_1) && seed.balanceOf(ALICE) == 0, "state changed");
@@ -486,7 +496,7 @@ contract SsiatDropTest {
 
     function testVerifierRevertingRejected() public {
         bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
-        DojangVerifierDouble(VERIFIER).setMode(2);
+        DojangVerifierDouble(VERIFIER_STANDARD).setMode(2);
         vm.expectRevert(SsiatDrop.InvalidProof.selector);
         _claim(drop, ALICE, p);
     }
@@ -494,7 +504,7 @@ contract SsiatDropTest {
     function testTamperedProofRejected() public {
         bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
         vm.expectRevert(SsiatDrop.InvalidProof.selector);
-        drop.claim(ALICE, hex"dead", p);
+        drop.claim(ALICE, 0, hex"dead", p);
     }
 
     // ---------- the token transfer ----------
@@ -529,8 +539,12 @@ contract SsiatDropTest {
         require(keccak256(bytes(seed.name())) == keccak256("Ssiat Seed"), "name");
         require(keccak256(bytes(seed.symbol())) == keccak256("SEED") && seed.decimals() == 18, "symbol");
         require(
-            drop.VERIFIER() == VERIFIER && drop.PUBLIC_INPUT_COUNT() == 100 && drop.CHAIN_ID() == 91342, "constants"
+            drop.VERIFIER_STANDARD() == VERIFIER_STANDARD && drop.VERIFIER_ANDROID() == VERIFIER_ANDROID
+                && drop.VERIFIER_ANDROID_FACTORY() == VERIFIER_ANDROID_FACTORY,
+            "verifiers"
         );
+        require(drop.PUBLIC_INPUT_COUNT() == 101 && drop.CHAIN_ID() == 91342, "constants");
+        require(drop.ATTESTED_AT_MAX_AGE() == 900 && drop.ATTESTED_AT_MAX_FUTURE() == 300, "windows");
     }
 
     function testTokenHasNoMint() public {
@@ -546,8 +560,14 @@ contract SsiatDropTest {
     }
 
     function testMissingVerifierRejected() public {
-        vm.etch(VERIFIER, hex"");
-        vm.expectRevert(abi.encodeWithSelector(SsiatDrop.ContractNotDeployed.selector, VERIFIER));
+        address[3] memory verifiers = [VERIFIER_STANDARD, VERIFIER_ANDROID, VERIFIER_ANDROID_FACTORY];
+        for (uint256 i; i < verifiers.length; ++i) {
+            bytes memory code = verifiers[i].code;
+            vm.etch(verifiers[i], hex"");
+            vm.expectRevert(abi.encodeWithSelector(SsiatDrop.ContractNotDeployed.selector, verifiers[i]));
+            new SsiatDrop(CLAIM, SUPPLY);
+            vm.etch(verifiers[i], code);
+        }
         new SsiatDrop(CLAIM, SUPPLY);
     }
 
@@ -625,6 +645,210 @@ contract SsiatDropTest {
         _claim(drop, recipient, _inputs(drop, recipient, nullifier));
         require(drop.remaining() + seed.balanceOf(recipient) == SUPPLY || recipient == address(drop), "supply leaked");
         require(drop.claimed(nullifier) && drop.totalClaims() == 1, "claim not recorded");
+    }
+
+    // ---------- signer packages: one verifier each ----------
+
+    function _verifiers() internal pure returns (address[3] memory) {
+        return [VERIFIER_STANDARD, VERIFIER_ANDROID, VERIFIER_ANDROID_FACTORY];
+    }
+
+    function _nullifier(uint256 i) internal pure returns (bytes32) {
+        return bytes32(uint256(keccak256(abi.encode("faucet wallet", i))) % P);
+    }
+
+    function testPublishesTheThreeVerifiers() public view {
+        require(drop.SIGNER_STANDARD() == 0 && drop.SIGNER_ANDROID() == 1 && drop.SIGNER_ANDROID_FACTORY() == 2, "ids");
+        for (uint8 v; v < 3; ++v) {
+            require(drop.verifierFor(v) == _verifiers()[v], "verifierFor");
+        }
+    }
+
+    // Only the selected package's verifier answers: the others are set to refuse, so a
+    // claim passes exactly when the call went to the selected one.
+    function testEachVariantRoutesToItsOwnVerifier() public {
+        address[3] memory verifiers = _verifiers();
+        for (uint8 v; v < 3; ++v) {
+            for (uint256 j; j < 3; ++j) {
+                DojangVerifierDouble(verifiers[j]).setMode(j == v ? 0 : 1);
+            }
+            bytes32[] memory p = _inputs(drop, ALICE, _nullifier(v));
+            vm.expectCall(verifiers[v], abi.encodeCall(DojangVerifierDouble.verify, (hex"cafe", p)));
+            drop.claim(ALICE, v, hex"cafe", p);
+            require(drop.claimed(_nullifier(v)), "not claimed");
+        }
+        require(drop.totalClaims() == 3 && seed.balanceOf(ALICE) == 3 * CLAIM, "claims");
+    }
+
+    function testAProofIsRefusedOnAnotherPackagesVerifier() public {
+        address[3] memory verifiers = _verifiers();
+        for (uint8 v; v < 3; ++v) {
+            for (uint256 j; j < 3; ++j) {
+                DojangVerifierDouble(verifiers[j]).setMode(j == v ? 1 : 0);
+            }
+            bytes32[] memory p = _inputs(drop, ALICE, _nullifier(v));
+            vm.expectRevert(SsiatDrop.InvalidProof.selector);
+            drop.claim(ALICE, v, hex"cafe", p);
+            require(!drop.claimed(_nullifier(v)), "nullifier burnt by a refused claim");
+        }
+        require(drop.totalClaims() == 0, "claims");
+    }
+
+    function testUnknownVariantRejectedByName() public {
+        uint8[4] memory unknown = [uint8(3), 4, 128, 255];
+        for (uint256 i; i < unknown.length; ++i) {
+            bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
+            vm.expectRevert(abi.encodeWithSelector(SsiatDrop.UnknownSignerVariant.selector, unknown[i]));
+            drop.claim(ALICE, unknown[i], hex"cafe", p);
+            vm.expectRevert(abi.encodeWithSelector(SsiatDrop.UnknownSignerVariant.selector, unknown[i]));
+            drop.verifyClaim(ALICE, unknown[i], hex"cafe", p);
+            vm.expectRevert(abi.encodeWithSelector(SsiatDrop.UnknownSignerVariant.selector, unknown[i]));
+            drop.verifierFor(unknown[i]);
+        }
+        require(!drop.claimed(FAUCET_WALLET_1) && drop.totalClaims() == 0, "state moved");
+    }
+
+    function testUnknownVariantReportedBeforeLayout() public {
+        vm.expectRevert(abi.encodeWithSelector(SsiatDrop.UnknownSignerVariant.selector, uint8(3)));
+        drop.verifyClaim(ALICE, 3, hex"cafe", new bytes32[](4));
+    }
+
+    function testVariantOutsideUint8IsNotAccepted() public {
+        bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
+        bytes memory data = abi.encodeCall(SsiatDrop.claim, (ALICE, 0, hex"cafe", p));
+        // Overwrite the variant word (second argument) with 256, which no uint8 can hold.
+        assembly {
+            mstore(add(data, add(32, add(4, 32))), 256)
+        }
+        (bool success,) = address(drop).call(data);
+        require(!success, "variant 256 accepted");
+        require(!drop.claimed(FAUCET_WALLET_1) && drop.totalClaims() == 0, "state moved");
+    }
+
+    function testFuzzOnlyKnownVariantsResolve(uint8 variant) public {
+        bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
+        if (variant < 3) {
+            require(drop.verifyClaim(ALICE, variant, hex"cafe", p), "known variant refused");
+        } else {
+            vm.expectRevert(abi.encodeWithSelector(SsiatDrop.UnknownSignerVariant.selector, variant));
+            drop.verifyClaim(ALICE, variant, hex"cafe", p);
+        }
+    }
+
+    // The nullifier is per faucet wallet and drop, whichever package made the proof.
+    function testNullifierReplayRefusedAcrossVariants() public {
+        drop.claim(ALICE, 0, hex"cafe", _inputs(drop, ALICE, FAUCET_WALLET_1));
+        for (uint8 v; v < 3; ++v) {
+            bytes32[] memory again = _inputs(drop, BOB, FAUCET_WALLET_1);
+            vm.expectRevert(abi.encodeWithSelector(SsiatDrop.AlreadyClaimed.selector, FAUCET_WALLET_1));
+            drop.claim(BOB, v, hex"cafe", again);
+        }
+        require(drop.totalClaims() == 1 && seed.balanceOf(BOB) == 0, "paid twice");
+    }
+
+    // ---------- layout: 101 inputs ----------
+
+    function testOneInputShortOrOverRejected() public {
+        uint256[2] memory counts = [uint256(100), 102];
+        bytes32[] memory full = _inputs(drop, ALICE, FAUCET_WALLET_1);
+        for (uint256 i; i < counts.length; ++i) {
+            bytes32[] memory p = new bytes32[](counts[i]);
+            for (uint256 j; j < counts[i] && j < full.length; ++j) {
+                p[j] = full[j];
+            }
+            vm.expectRevert(SsiatDrop.InvalidPublicInputCount.selector);
+            _claim(drop, ALICE, p);
+        }
+    }
+
+    // ---------- attested_at freshness ----------
+
+    function _at(uint256 attestedAt) internal view returns (bytes32[] memory p) {
+        p = _inputs(drop, ALICE, FAUCET_WALLET_1);
+        p[100] = bytes32(attestedAt);
+    }
+
+    function testAttestedAtExactlyMaxAgeAccepted() public {
+        _claim(drop, ALICE, _at(NOW - 900));
+        require(drop.claimed(FAUCET_WALLET_1), "not claimed");
+    }
+
+    function testAttestedAtOneSecondPastMaxAgeRejected() public {
+        bytes32[] memory p = _at(NOW - 901);
+        vm.expectRevert(abi.encodeWithSelector(SsiatDrop.AttestedAtTooOld.selector, NOW - 901, NOW));
+        _claim(drop, ALICE, p);
+        require(!drop.claimed(FAUCET_WALLET_1) && drop.totalClaims() == 0, "stale proof burnt the nullifier");
+    }
+
+    function testAttestedAtExactlyMaxFutureAccepted() public {
+        _claim(drop, ALICE, _at(NOW + 300));
+        require(drop.claimed(FAUCET_WALLET_1), "not claimed");
+    }
+
+    function testAttestedAtOneSecondPastMaxFutureRejected() public {
+        bytes32[] memory p = _at(NOW + 301);
+        vm.expectRevert(abi.encodeWithSelector(SsiatDrop.AttestedAtInFuture.selector, NOW + 301, NOW));
+        _claim(drop, ALICE, p);
+    }
+
+    function testAttestedAtZeroRejected() public {
+        bytes32[] memory p = _at(0);
+        vm.expectRevert(abi.encodeWithSelector(SsiatDrop.AttestedAtTooOld.selector, 0, NOW));
+        drop.verifyClaim(ALICE, 0, hex"cafe", p);
+    }
+
+    function testAProofGoesStaleWhileWaiting() public {
+        bytes32[] memory p = _inputs(drop, ALICE, FAUCET_WALLET_1);
+        require(drop.verifyClaim(ALICE, 0, hex"cafe", p), "fresh proof refused");
+        vm.warp(NOW + 900);
+        require(drop.verifyClaim(ALICE, 0, hex"cafe", p), "proof at the edge refused");
+        vm.warp(NOW + 901);
+        vm.expectRevert(abi.encodeWithSelector(SsiatDrop.AttestedAtTooOld.selector, NOW, NOW + 901));
+        _claim(drop, ALICE, p);
+    }
+
+    function testAlreadyClaimedReportedBeforeStaleness() public {
+        _claim(drop, ALICE, _inputs(drop, ALICE, FAUCET_WALLET_1));
+        bytes32[] memory stale = _at(NOW - 901);
+        vm.expectRevert(abi.encodeWithSelector(SsiatDrop.AlreadyClaimed.selector, FAUCET_WALLET_1));
+        _claim(drop, ALICE, stale);
+    }
+
+    function testAttestedAtMaxUint64IsInTheFuture() public {
+        bytes32[] memory p = _at(type(uint64).max);
+        vm.expectRevert(abi.encodeWithSelector(SsiatDrop.AttestedAtInFuture.selector, uint256(type(uint64).max), NOW));
+        drop.verifyClaim(ALICE, 0, hex"cafe", p);
+    }
+
+    function testAttestedAtAtOrAbove2To64Rejected() public {
+        uint256[3] memory wrong = [uint256(1) << 64, (uint256(1) << 64) + NOW, P - 1];
+        for (uint256 i; i < wrong.length; ++i) {
+            bytes32[] memory p = _at(wrong[i]);
+            vm.expectRevert(abi.encodeWithSelector(SsiatDrop.AttestedAtNotUint64.selector, wrong[i]));
+            drop.verifyClaim(ALICE, 0, hex"cafe", p);
+        }
+    }
+
+    function testAttestedAtAtOrAboveFieldModulusRejected() public {
+        uint256[3] memory wrong = [P, P + NOW, type(uint256).max];
+        for (uint256 i; i < wrong.length; ++i) {
+            bytes32[] memory p = _at(wrong[i]);
+            vm.expectRevert(abi.encodeWithSelector(SsiatDrop.InvalidPublicInputField.selector, 100));
+            _claim(drop, ALICE, p);
+        }
+    }
+
+    function testFuzzAttestedAtWindow(uint64 attestedAt) public {
+        bytes32[] memory p = _at(attestedAt);
+        if (uint256(attestedAt) + 900 < NOW) {
+            vm.expectRevert(abi.encodeWithSelector(SsiatDrop.AttestedAtTooOld.selector, uint256(attestedAt), NOW));
+            drop.verifyClaim(ALICE, 0, hex"cafe", p);
+        } else if (uint256(attestedAt) > NOW + 300) {
+            vm.expectRevert(abi.encodeWithSelector(SsiatDrop.AttestedAtInFuture.selector, uint256(attestedAt), NOW));
+            drop.verifyClaim(ALICE, 0, hex"cafe", p);
+        } else {
+            require(drop.verifyClaim(ALICE, 0, hex"cafe", p), "in-window time refused");
+        }
     }
 
     function _hex(bytes32 value) internal pure returns (string memory) {

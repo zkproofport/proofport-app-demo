@@ -4,12 +4,13 @@ import { reduceOprfName } from '@zkproofport-app/core';
 import { getBytes, Interface, keccak256, MaxUint256, toUtf8Bytes, TypedDataEncoder } from 'ethers';
 import {
   buildSsiatClaimAction, displaySeed, expectedSsiatScope, prepareSsiatClaimProof, SSIAT_DROP_ABI, SSIAT_DROP_ADDRESS,
-  SSIAT_SCOPE_PATTERN, ssiatDropAddress, ssiatErrorMessage, ssiatErrorName, ssiatScopeHash,
+  SSIAT_PROOF_ERRORS, SSIAT_SCOPE_PATTERN, ssiatDropAddress, ssiatErrorMessage, ssiatErrorName, ssiatScopeHash,
 } from '../lib/ssiat-drop';
 import {
-  byteFields, claimAction, SSIAT_OPRF, SSIAT_TEST_DROP, SSIAT_TEST_NULLIFIER, SSIAT_TEST_RECIPIENT, SSIAT_TEST_SCOPE, ssiatResult,
+  byteFields, claimAction, SSIAT_ATTESTED_AT_INDEX, SSIAT_OPRF, SSIAT_RETIRED_VERIFIER, SSIAT_TEST_DROP, SSIAT_TEST_NULLIFIER, SSIAT_TEST_RECIPIENT,
+  SSIAT_TEST_SCOPE, SSIAT_TEST_VERIFIERS, ssiatResult,
 } from './fixtures/ssiat';
-import { DEMO_DOMAIN, DEMO_DOMAIN_FIELD, TESTNET_OPRF_KEY_HASH } from './fixtures/giwa';
+import { DEMO_DOMAIN, DEMO_DOMAIN_FIELD, packageProofHex, TEST_ATTESTED_AT, TESTNET_OPRF_KEY_HASH } from './fixtures/giwa';
 
 const BOB = '0x0000000000000000000000000000000000000B0B';
 const abi = new Interface(SSIAT_DROP_ABI);
@@ -18,9 +19,10 @@ const prepare = (result = ssiatResult(SSIAT_TEST_SCOPE, claimAction()), action =
 
 describe('the drop address is the deployed one, and a missing one fails loudly', () => {
   it('ships the drop deployed on GIWA Sepolia, whose claimScope() read over RPC was this string', () => {
-    expect(SSIAT_DROP_ADDRESS).toBe('0x4691533b0981e03830ddcD76A3cd38d6CCB35235');
+    // Deployed 2026-11-27 (block 42423547); claimScope() read back from GIWA Sepolia.
+    expect(SSIAT_DROP_ADDRESS).toBe('0x55d63a1B8762bd4dbA30dcA74a4C138681FdCFd1');
     expect(ssiatDropAddress()).toBe(SSIAT_DROP_ADDRESS);
-    expect(expectedSsiatScope(SSIAT_DROP_ADDRESS)).toBe('ssiat-drop:v1:a4ec295c09997a77ff42ff05fdc4d53b242ba3741d22f47fea1cecb732c69dee');
+    expect(expectedSsiatScope(SSIAT_DROP_ADDRESS)).toBe('ssiat-drop:v1:f957370b63a0edd389c013b3a7e60f03309619c1f70f6b7488d144a21821220c');
   });
   it('an empty address is refused rather than replaced', () => {
     expect(() => ssiatDropAddress('')).toThrow(/not deployed yet.*SSIAT_DROP_ADDRESS/);
@@ -89,7 +91,9 @@ describe('a returned proof is checked against the requested claim', () => {
     const accepted = prepare();
     expect(accepted.nullifier).toBe(SSIAT_TEST_NULLIFIER);
     expect(accepted.recipient).toBe(SSIAT_TEST_RECIPIENT);
-    expect(accepted.publicInputs).toHaveLength(100);
+    expect(accepted.publicInputs).toHaveLength(101);
+    expect(accepted.publicInputs[SSIAT_ATTESTED_AT_INDEX]).toBe(TEST_ATTESTED_AT);
+    expect(accepted.signerVariant).toBe('standard');
     for (const input of accepted.publicInputs) expect(input).toMatch(/^0x[0-9a-f]{64}$/);
     const raw = ssiatResult(SSIAT_TEST_SCOPE, claimAction()).publicInputs!;
     expect(extractNullifierFromPublicInputs(raw, 'dojang_playground')).toBe(SSIAT_TEST_NULLIFIER);
@@ -159,9 +163,14 @@ describe('a returned proof is checked against the requested claim', () => {
     ['no circuit', { circuit: undefined }, /dojang_playground proof is required/],
     ['another chain', { chainId: 84532 }, /Dojang Playground verifier/],
     ['another verifier', { verifierAddress: '0x2d01c2fe3445b7dde60118f956bb14e84fd64724' }, /Dojang Playground verifier/],
+    ['the retired 100-input verifier', { verifierAddress: SSIAT_RETIRED_VERIFIER }, /Dojang Playground verifier/],
+    ['the android verifier for a standard proof', { verifierAddress: SSIAT_TEST_VERIFIERS.android }, /Dojang Playground verifier/],
+    ['an unknown signer package', { signerVariant: 'ios' }, /no "ios" signer variant/],
+    ['a standard-length proof that claims android', { signerVariant: 'android', verifierAddress: SSIAT_TEST_VERIFIERS.android }, /length|bytes/],
     ['no public inputs', { publicInputs: undefined }, /public-input format/],
     ['99 public inputs', { publicInputs: Array(99).fill('0x00') }, /public-input format/],
-    ['101 public inputs', { publicInputs: Array(101).fill('0x00') }, /public-input format/],
+    ['100 public inputs (before the device statement)', { publicInputs: Array(100).fill('0x00') }, /public-input format/],
+    ['102 public inputs', { publicInputs: Array(102).fill('0x00') }, /public-input format/],
     ['160 public inputs (before the OPRF nullifier)', { publicInputs: Array(160).fill('0x00') }, /public-input format/],
     ['132 public inputs (the GIWA layout)', { publicInputs: Array(132).fill('0x00') }, /public-input format/],
   ])('refuses %s', (_, patch, message) => {
@@ -182,6 +191,39 @@ describe('a returned proof is checked against the requested claim', () => {
   it('refuses a structurally invalid expected action instead of comparing against it', () => {
     const broken = { ...claimAction(), primaryType: 'Missing' };
     expect(() => prepare(ssiatResult(SSIAT_TEST_SCOPE, claimAction()), broken)).toThrow(/Invalid claim action/);
+  });
+});
+
+describe('a claim proof names the signer package that made it', () => {
+  it.each(['standard', 'android', 'android_factory'] as const)('accepts a %s proof on that package\'s verifier and keeps the package', variant => {
+    const accepted = prepare(ssiatResult(SSIAT_TEST_SCOPE, claimAction(), SSIAT_TEST_NULLIFIER, variant));
+    expect(accepted.signerVariant).toBe(variant);
+  });
+  it('refuses an android proof that names the standard verifier', () => {
+    const result = { ...ssiatResult(SSIAT_TEST_SCOPE, claimAction(), SSIAT_TEST_NULLIFIER, 'android'), verifierAddress: SSIAT_TEST_VERIFIERS.standard };
+    expect(() => prepare(result)).toThrow(/Dojang Playground verifier/);
+  });
+  it('refuses an android-length proof whose result names no package', () => {
+    const result = { ...ssiatResult(SSIAT_TEST_SCOPE, claimAction()), proof: packageProofHex('dojang_playground', 'android'), verifierAddress: SSIAT_TEST_VERIFIERS.android };
+    expect(() => prepare(result)).toThrow(/does not say which signer/);
+  });
+});
+
+describe('the v2 drop takes the signer package beside every proof', () => {
+  it('declares verifyClaim and claim with the uint8 signerVariant before the proof', () => {
+    expect(abi.getFunction('verifyClaim')!.format('sighash')).toBe('verifyClaim(address,uint8,bytes,bytes32[])');
+    expect(abi.getFunction('claim')!.format('sighash')).toBe('claim(address,uint8,bytes,bytes32[])');
+  });
+  it.each([
+    ['UnknownSignerVariant', [3], /signer the drop has no verifier for/],
+    ['AttestedAtTooOld', [1795768654, 1795769655], /more than 15 minutes old.*new proof/],
+    ['AttestedAtInFuture', [1795769655, 1795768654], /ahead of the chain clock.*new proof/],
+    ['AttestedAtNotUint64', [BigInt(2) ** BigInt(64)], /malformed attestation check time.*new proof/],
+  ] as const)('decodes %s into words and counts it as a proof to replace', (name, args, message) => {
+    const data = abi.encodeErrorResult(name, args as unknown as unknown[]);
+    expect(ssiatErrorName({ data })).toBe(name);
+    expect(ssiatErrorMessage({ data })).toMatch(message);
+    expect(SSIAT_PROOF_ERRORS).toContain(name);
   });
 });
 
@@ -227,11 +269,11 @@ describe('SEED amounts are exact 18-decimal integers', () => {
 });
 
 describe('fixtures put each field where the circuit declares it', () => {
-  it('lays out signal, domain, action at 0/32/64 and the OPRF key hash, domain, scope, nullifier at 96..99', () => {
+  it('lays out signal, domain, action at 0/32/64, the OPRF key hash, domain, scope, nullifier at 96..99 and attested_at at 100', () => {
     const inputs = ssiatResult(SSIAT_TEST_SCOPE, claimAction()).publicInputs!;
-    expect(inputs).toHaveLength(100);
+    expect(inputs).toHaveLength(101);
     expect(inputs.slice(64, 96)).toEqual(byteFields(TypedDataEncoder.hashStruct('Claim', claimAction().types, claimAction().message)));
-    expect(inputs.slice(96)).toEqual([TESTNET_OPRF_KEY_HASH, DEMO_DOMAIN_FIELD, ssiatScopeHash(SSIAT_TEST_SCOPE), SSIAT_TEST_NULLIFIER]);
+    expect(inputs.slice(96)).toEqual([TESTNET_OPRF_KEY_HASH, DEMO_DOMAIN_FIELD, ssiatScopeHash(SSIAT_TEST_SCOPE), SSIAT_TEST_NULLIFIER, TEST_ATTESTED_AT]);
     expect(extractNullifierFromPublicInputs(inputs, 'dojang_playground')).toBe(SSIAT_TEST_NULLIFIER);
     expect(extractScopeFromPublicInputs(inputs, 'dojang_playground')).toBe(ssiatScopeHash(SSIAT_TEST_SCOPE));
     expect(getBytes(SSIAT_TEST_NULLIFIER)).toHaveLength(32);

@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest';
 import { GIWA_PUBLIC_INPUT_COUNT, GIWA_VERIFIER } from '../lib/giwa-membership';
 import { SSIAT_PUBLIC_INPUT_COUNT, SSIAT_VERIFIER } from '../lib/ssiat-drop';
 import { PINNED_VERIFIERS, getPinnedVariantVerifier, getPinnedVerifier, signerVariantsOf } from '@zkproofport-app/sdk';
-import { VERIFIER_DEPLOYMENTS, variantVerifierAddress, verifierAddress } from '../lib/verifier-deployments';
-import { getPinnedOprfKeyHash, OPRF_FIELD_MODULUS, OPRF_PUBLIC_INPUT_LAYOUTS } from '@zkproofport-app/core';
+import { VERIFIER_DEPLOYMENTS, signerVariantArgument, variantVerifierAddress, verifierAddress } from '../lib/verifier-deployments';
+import {
+  DOJANG_PLAYGROUND_PUBLIC_INPUT_LAYOUT, GIWA_ATTESTATION_PUBLIC_INPUT_LAYOUT, getPinnedOprfKeyHash, OPRF_FIELD_MODULUS, OPRF_PUBLIC_INPUT_LAYOUTS,
+} from '@zkproofport-app/core';
 import { DEMO_OPRF_DOMAIN, oprfEnvironmentForChain } from '../lib/oprf';
 
 // The circuits repository is a sibling checkout. Its records are read from
@@ -120,12 +122,43 @@ function solidityString(file: string, name: string): string {
   if (!match) throw new Error(`${name} not found in contracts/src/${file}.`);
   return match[1];
 }
+// Contract constant name for each signer package, and the argument value that selects it.
+const CONTRACT_PACKAGES = [
+  ['standard', 'VERIFIER_STANDARD', 'SIGNER_STANDARD'],
+  ['android', 'VERIFIER_ANDROID', 'SIGNER_ANDROID'],
+  ['android_factory', 'VERIFIER_ANDROID_FACTORY', 'SIGNER_ANDROID_FACTORY'],
+] as const;
+
+describe('the signerVariant argument table', () => {
+  it.each([['standard', 0], ['android', 1], ['android_factory', 2]] as const)('maps %s to %s', (variant, argument) => {
+    expect(signerVariantArgument(variant)).toBe(argument);
+  });
+  it('covers every package core knows for the two GIWA circuits, and nothing else', () => {
+    for (const circuit of ['giwa_attestation', 'dojang_playground']) {
+      expect([...signerVariantsOf(circuit)].sort()).toEqual(['android', 'android_factory', 'standard']);
+    }
+  });
+  it.each([
+    'ios', 'Android', 'STANDARD', 'android-factory', 'androidFactory', '', ' ', 'standard ', '__proto__', 'constructor', 'toString',
+    '안드로이드', '<script>', '%_\\', 0, 1, 2, null, undefined, {}, [],
+  ])('throws naming an unknown package: %j', value => {
+    expect(() => signerVariantArgument(value)).toThrow(/^Unknown signer variant '.*'\. Known: standard, android, android_factory\.$/);
+  });
+});
+
 describe('demo contracts are built against the table', () => {
   it.each([
     ['GiwaDemoVault.sol', 'giwa_attestation', GIWA_PUBLIC_INPUT_COUNT],
     ['SsiatDrop.sol', 'dojang_playground', SSIAT_PUBLIC_INPUT_COUNT],
-  ] as const)('%s uses the %s verifier, its public-input count, and the pinned OPRF key and demo domain', (file, circuit, count) => {
-    expect(solidityConstant(file, 'VERIFIER').toLowerCase()).toBe(verifierAddress(circuit, 91342));
+  ] as const)('%s uses the %s verifiers, its public-input count, and the pinned OPRF key and demo domain', (file, circuit, count) => {
+    // One verifier per signer package, each core's pinned address for that package,
+    // and the argument the demo sends for a package is the one the contract maps to it.
+    for (const [variant, verifierName, signerName] of CONTRACT_PACKAGES) {
+      expect(solidityConstant(file, verifierName).toLowerCase(), `${file} ${verifierName}`).toBe(variantVerifierAddress(circuit, 91342, variant));
+      expect(Number(solidityConstant(file, signerName)), `${file} ${signerName}`).toBe(signerVariantArgument(variant));
+    }
+    expect(solidityConstant(file, 'VERIFIER_STANDARD').toLowerCase()).toBe(verifierAddress(circuit, 91342));
+    expect(readFileSync(`contracts/src/${file}`, 'utf8')).not.toMatch(/\bVERIFIER\s*=/);
     expect(Number(solidityConstant(file, 'PUBLIC_INPUT_COUNT'))).toBe(count);
     expect(solidityConstant(file, 'OPRF_KEY_HASH').toLowerCase()).toBe(getPinnedOprfKeyHash(oprfEnvironmentForChain(91342), circuit));
     expect(solidityString(file, 'OPRF_DOMAIN')).toBe(DEMO_OPRF_DOMAIN);
@@ -139,6 +172,13 @@ describe('demo contracts are built against the table', () => {
   });
   it('SsiatDrop reads the nullifier where core says it is', () => {
     expect(Number(solidityConstant('SsiatDrop.sol', 'NULLIFIER_INDEX'))).toBe(OPRF_PUBLIC_INPUT_LAYOUTS.dojang_playground.nullifier);
+  });
+  it.each([
+    ['GiwaDemoVault.sol', GIWA_ATTESTATION_PUBLIC_INPUT_LAYOUT.ATTESTED_AT],
+    ['SsiatDrop.sol', DOJANG_PLAYGROUND_PUBLIC_INPUT_LAYOUT.ATTESTED_AT],
+  ] as const)('%s reads attested_at where core says it is, the last input', (file, index) => {
+    expect(Number(solidityConstant(file, 'ATTESTED_AT_INDEX'))).toBe(index);
+    expect(index).toBe(Number(solidityConstant(file, 'PUBLIC_INPUT_COUNT')) - 1);
   });
 });
 

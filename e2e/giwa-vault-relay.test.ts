@@ -10,11 +10,11 @@
  * and therefore does not claim phone generation or onchain proof success.
  */
 import { describe, expect, it } from 'vitest';
-import { CIRCUIT_IDS, ProofportSDK } from '@zkproofport-app/sdk';
+import { CIRCUIT_IDS, ProofportSDK, type SignerVariant } from '@zkproofport-app/sdk';
 import { AbiCoder, Contract, hexlify, JsonRpcProvider, keccak256, randomBytes, TypedDataEncoder, Wallet } from 'ethers';
 import { buildGiwaDepositAction, GIWA_RPC, TOKEN_ADDRESS, VAULT_ABI, VAULT_ADDRESS, vaultErrorName } from '../lib/giwa-vault';
-import { verifierAddress } from '../lib/verifier-deployments';
-import { getPinnedOprfKeyHash } from '@zkproofport-app/core';
+import { signerVariantArgument, variantVerifierAddress } from '../lib/verifier-deployments';
+import { getPinnedOprfKeyHash, GIWA_ATTESTATION_PUBLIC_INPUT_COUNT } from '@zkproofport-app/core';
 import { DEMO_OPRF_DOMAIN, oprfEnvironmentForChain } from '../lib/oprf';
 
 const relayUrl = process.env.RELAY_URL;
@@ -94,25 +94,36 @@ describe('the deployed GIWA vault agrees with the SDK deposit action', () => {
     const contract = new Contract(VAULT_ADDRESS, [
       ...VAULT_ABI,
       'function asset() view returns (address)',
-      'function VERIFIER() view returns (address)',
+      'function VERIFIER_STANDARD() view returns (address)',
+      'function VERIFIER_ANDROID() view returns (address)',
+      'function VERIFIER_ANDROID_FACTORY() view returns (address)',
+      'function verifierFor(uint8) view returns (address)',
+      'function PUBLIC_INPUT_COUNT() view returns (uint256)',
     ], provider);
     try {
       expect(Number(await provider.send('eth_chainId', []))).toBe(91342);
       const blockTag = await provider.getBlockNumber();
       const amount = BigInt(1000000);
-      const [code, nonce, scope, domainHash, actionHash, asset, verifier, oprfDomain, oprfKeyHash] = await Promise.all([
+      const [code, nonce, scope, domainHash, actionHash, asset, standard, android, androidFactory, inputCount, oprfDomain, oprfKeyHash] = await Promise.all([
         provider.getCode(VAULT_ADDRESS, blockTag),
         contract.nonces(account, { blockTag }),
         contract.depositScope(account, amount, { blockTag }),
         contract.domainSeparator({ blockTag }),
         contract.depositActionHash(account, amount, { blockTag }),
-        contract.asset({ blockTag }), contract.VERIFIER({ blockTag }),
+        contract.asset({ blockTag }), contract.VERIFIER_STANDARD({ blockTag }),
+        contract.VERIFIER_ANDROID({ blockTag }), contract.VERIFIER_ANDROID_FACTORY({ blockTag }), contract.PUBLIC_INPUT_COUNT({ blockTag }),
         contract.OPRF_DOMAIN({ blockTag }), contract.OPRF_KEY_HASH({ blockTag }),
       ]);
       expect(code).not.toBe('0x');
       expect(asset.toLowerCase()).toBe(TOKEN_ADDRESS.toLowerCase());
-      // The vault's immutable VERIFIER must be the one the demo's proof allowlist names.
-      expect(verifier.toLowerCase()).toBe(verifierAddress(CIRCUIT_IDS.GIWA_ATTESTATION, 91342));
+      // Each of the vault's compiled-in verifiers must be the one the demo's allowlist names for that package,
+      // and the signerVariant the demo sends for a package must select that verifier.
+      const verifiers = { standard, android, android_factory: androidFactory } as const;
+      for (const [variant, address] of Object.entries(verifiers) as [SignerVariant, string][]) {
+        expect(address.toLowerCase(), variant).toBe(variantVerifierAddress(CIRCUIT_IDS.GIWA_ATTESTATION, 91342, variant));
+        expect((await contract.verifierFor(signerVariantArgument(variant), { blockTag })).toLowerCase(), variant).toBe(address.toLowerCase());
+      }
+      expect(Number(inputCount)).toBe(GIWA_ATTESTATION_PUBLIC_INPUT_COUNT);
       // And it pins the OPRF domain the demo requests and the key core pins for this chain.
       expect(oprfDomain).toBe(DEMO_OPRF_DOMAIN);
       expect(oprfKeyHash.toLowerCase()).toBe(getPinnedOprfKeyHash(oprfEnvironmentForChain(91342), CIRCUIT_IDS.GIWA_ATTESTATION));
@@ -127,7 +138,7 @@ describe('the deployed GIWA vault agrees with the SDK deposit action', () => {
 
       // eth_call only: no wallet key, transfer, approval or transaction broadcast.
       let rejection: unknown;
-      try { await contract.deposit.staticCall(amount, '0x', [], { from: account, blockTag }); }
+      try { await contract.deposit.staticCall(amount, signerVariantArgument('standard'), '0x', [], { from: account, blockTag }); }
       catch (error) { rejection = error; }
       expect(rejection, 'an unproved deposit must revert').toBeDefined();
       expect(vaultErrorName(rejection), 'a network failure is not proof-policy enforcement').toBe('ProofRequired');

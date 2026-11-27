@@ -1,14 +1,14 @@
-import { CIRCUIT_IDS, validateTypedAction, type TypedAction, type ProofResponse, type RelayProofResult } from '@zkproofport-app/sdk';
+import { CIRCUIT_IDS, validateTypedAction, type TypedAction, type ProofResponse, type RelayProofResult, type SignerVariant } from '@zkproofport-app/sdk';
 import { TypedDataEncoder, ZeroHash } from 'ethers';
 import { GIWA_ATTESTATION_PUBLIC_INPUT_COUNT, GIWA_ATTESTATION_PUBLIC_INPUT_LAYOUT as GIWA, GIWA_SIGNER_SET } from '@zkproofport-app/core';
 import { checkDemoOprfProof } from './oprf';
-import { verifierAddress } from './verifier-deployments';
+import { proofSignerVariant, variantVerifierAddress, verifierAddress } from './verifier-deployments';
 
 // CIP-4 PoC profile. Keep these aligned with the mobile app's giwaKyc.ts
 // and circuits/giwa-attestation. The response never chooses our trust anchor.
 export const GIWA_CHAIN_ID = 91342;
 export const GIWA_VERIFIER = verifierAddress(CIRCUIT_IDS.GIWA_ATTESTATION, GIWA_CHAIN_ID);
-/** 128 byte-valued inputs (signal, EIP-712 domain, action, issuer root), then the four OPRF fields. Core's count. */
+/** 128 byte-valued inputs (signal, EIP-712 domain, action, issuer root), the four OPRF fields, then attested_at. Core's count. */
 export const GIWA_PUBLIC_INPUT_COUNT = GIWA_ATTESTATION_PUBLIC_INPUT_COUNT;
 /** The GIWA attester's signer-list root, from core (the set the SDK's verify functions check). */
 export const GIWA_SIGNER_ROOT = GIWA_SIGNER_SET.root;
@@ -31,13 +31,16 @@ function readBytes(inputs: string[], start: number): string {
  */
 export function prepareGiwaMembershipProof(
   result: RelayProofResult, requestId: string, scope: string, oprfDomain: string, expectedAction?: TypedAction,
-): ProofResponse {
+): ProofResponse & { signerVariant: SignerVariant } {
   if (result.requestId !== requestId) throw new Error('This proof belongs to a different request. Please try again.');
   if (result.status !== 'completed' || !result.proof || !/^0x(?:[0-9a-f]{2})+$/i.test(result.proof)) {
     throw new Error(result.error || 'No completed proof was received. Please try again.');
   }
   if (result.circuit !== CIRCUIT_IDS.GIWA_ATTESTATION) throw new Error('A GIWA account proof is required.');
-  if (result.chainId !== GIWA_CHAIN_ID || result.verifierAddress?.toLowerCase() !== GIWA_VERIFIER) {
+  // Each signer package has its own verifier; the SDK decides the package from
+  // the result's claim and the proof's length, and the address must be that package's.
+  const variant = proofSignerVariant(CIRCUIT_IDS.GIWA_ATTESTATION, result.signerVariant, result.proof);
+  if (result.chainId !== GIWA_CHAIN_ID || result.verifierAddress?.toLowerCase() !== variantVerifierAddress(CIRCUIT_IDS.GIWA_ATTESTATION, GIWA_CHAIN_ID, variant)) {
     throw new Error('This proof does not use the GIWA Sepolia demo verifier.');
   }
   if (!Array.isArray(result.publicInputs) || result.publicInputs.length !== GIWA_PUBLIC_INPUT_COUNT) throw new Error('The GIWA proof has an unexpected public-input format.');
@@ -58,5 +61,8 @@ export function prepareGiwaMembershipProof(
   } else if (domain !== ZeroHash || action !== ZeroHash) {
     throw new Error('An identity proof cannot contain an unrequested action.');
   }
-  return { requestId, circuit: CIRCUIT_IDS.GIWA_ATTESTATION, status: 'completed', proof: result.proof, publicInputs: result.publicInputs, chainId: GIWA_CHAIN_ID, verifierAddress: GIWA_VERIFIER };
+  return {
+    requestId, circuit: CIRCUIT_IDS.GIWA_ATTESTATION, status: 'completed', proof: result.proof, publicInputs: result.publicInputs,
+    chainId: GIWA_CHAIN_ID, verifierAddress: variantVerifierAddress(CIRCUIT_IDS.GIWA_ATTESTATION, GIWA_CHAIN_ID, variant), signerVariant: variant,
+  };
 }

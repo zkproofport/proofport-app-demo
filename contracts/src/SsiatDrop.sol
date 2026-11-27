@@ -10,10 +10,12 @@ interface IDojangPlaygroundVerifier {
 /// @title Ssiat: a seed drop for GIWA Sepolia Playground faucet participants (testnet demo)
 /// @notice Pays a fixed amount of SEED, a valueless test token, once per Playground faucet wallet.
 ///         Ssiat is a fictional brand. This is not a GIWA, Upbit or Dojang airdrop.
-/// @dev Uses the deployed `dojang_playground` verifier. What that proof establishes:
-///      - the faucet wallet signed this drop's EIP-712 `Claim(recipient)` action, and
+/// @dev Uses the deployed `dojang_playground` v2 verifiers. What that proof establishes:
+///      - the faucet wallet signed this drop's EIP-712 `Claim(recipient)` action,
 ///      - the SAME key signed a GIWA Sepolia `payAndIssueEAS()` transaction to the Playground faucet
-///        `0x63CCe2b569A7bC35895ee24306c1512fefc06121`.
+///        `0x63CCe2b569A7bC35895ee24306c1512fefc06121`, and
+///      - a device-signed statement says that wallet's attestation was neither revoked nor expired
+///        at the public `attested_at`, which this drop requires to be recent against `block.timestamp`.
 ///      What it does NOT establish: that the faucet transaction was ever included or succeeded.
 ///      The official app checks inclusion before proving, but a hand-built prover can sign an
 ///      unbroadcast faucet call from a fresh key. One claim per faucet wallet is therefore
@@ -21,8 +23,20 @@ interface IDojangPlaygroundVerifier {
 ///      The faucet wallet itself never appears on chain; only its per-drop nullifier does.
 contract SsiatDrop {
     uint256 public constant CHAIN_ID = 91342;
-    address public constant VERIFIER = 0x400474E78a793289D091A5F556F78158956B5D01;
-    uint256 public constant PUBLIC_INPUT_COUNT = 100;
+    /// @notice One verifier per signer package. A proof verifies only on the verifier of the package
+    ///         that made it; the relay result's `signerVariant` names that package.
+    address public constant VERIFIER_STANDARD = 0xC1c42ade7C31aFDf99FbaEDF97dA5b07fCCba724;
+    address public constant VERIFIER_ANDROID = 0x7fc2059a73cEF2b572C8deEe911c72963dCB4A8a;
+    address public constant VERIFIER_ANDROID_FACTORY = 0x0b3Af3DFc67dC65E0145c37ee00230139d579F64;
+    /// @notice `signerVariant` argument values for the relay's `standard`, `android` and `android_factory`.
+    uint8 public constant SIGNER_STANDARD = 0;
+    uint8 public constant SIGNER_ANDROID = 1;
+    uint8 public constant SIGNER_ANDROID_FACTORY = 2;
+    uint256 public constant PUBLIC_INPUT_COUNT = 101;
+    /// @notice `attested_at` may be at most this many seconds behind `block.timestamp`.
+    uint256 public constant ATTESTED_AT_MAX_AGE = 900;
+    /// @notice `attested_at` may be at most this many seconds ahead of `block.timestamp`.
+    uint256 public constant ATTESTED_AT_MAX_FUTURE = 300;
     /// @notice The OPRF key hash a testnet proof must carry: the OPRF test network's key,
     ///         as the ZKProofport core package pins it (getPinnedOprfKeyHash('staging', 'dojang_playground')).
     /// @dev The circuit accepts an OPRF answer from any self-consistent key. Under a key someone else
@@ -40,6 +54,7 @@ contract SsiatDrop {
     uint256 private constant OPRF_DOMAIN_INDEX = 97;
     uint256 private constant SCOPE_INDEX = 98;
     uint256 private constant NULLIFIER_INDEX = 99;
+    uint256 private constant ATTESTED_AT_INDEX = 100;
     bytes32 private constant DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 private constant CLAIM_TYPEHASH = keccak256("Claim(address recipient)");
@@ -67,6 +82,10 @@ contract SsiatDrop {
     error WrongOprfDomain();
     error AlreadyClaimed(bytes32 nullifier);
     error DropExhausted();
+    error UnknownSignerVariant(uint8 signerVariant);
+    error AttestedAtNotUint64(uint256 value);
+    error AttestedAtTooOld(uint256 attestedAt, uint256 blockTimestamp);
+    error AttestedAtInFuture(uint256 attestedAt, uint256 blockTimestamp);
     error InvalidProof();
     error TokenTransferFailed();
     error Reentrancy();
@@ -78,7 +97,9 @@ contract SsiatDrop {
     /// @param supply Total SEED minted straight into this contract; nothing is minted later.
     constructor(uint256 claimAmount, uint256 supply) {
         if (block.chainid != CHAIN_ID) revert WrongChain();
-        if (VERIFIER.code.length == 0) revert ContractNotDeployed(VERIFIER);
+        if (VERIFIER_STANDARD.code.length == 0) revert ContractNotDeployed(VERIFIER_STANDARD);
+        if (VERIFIER_ANDROID.code.length == 0) revert ContractNotDeployed(VERIFIER_ANDROID);
+        if (VERIFIER_ANDROID_FACTORY.code.length == 0) revert ContractNotDeployed(VERIFIER_ANDROID_FACTORY);
         if (claimAmount == 0) revert ZeroAmount();
         if (supply < claimAmount) revert SupplyBelowClaimAmount();
         CLAIM_AMOUNT = claimAmount;
@@ -129,22 +150,35 @@ contract SsiatDrop {
         return token.balanceOf(address(this));
     }
 
+    /// @notice The verifier for a signer package: 0 standard, 1 android, 2 android_factory.
+    /// @dev Any other value reverts; it never resolves to another package's verifier.
+    function verifierFor(uint8 signerVariant) public pure returns (address) {
+        if (signerVariant == SIGNER_STANDARD) return VERIFIER_STANDARD;
+        if (signerVariant == SIGNER_ANDROID) return VERIFIER_ANDROID;
+        if (signerVariant == SIGNER_ANDROID_FACTORY) return VERIFIER_ANDROID_FACTORY;
+        revert UnknownSignerVariant(signerVariant);
+    }
+
     /// @notice Read-only preflight: reverts with the reason a `claim` would fail, else returns true.
-    /// @dev `publicInputs` is 100 bytes32 values. The first 96 hold ONE BYTE EACH of three hashes:
-    ///      signal[0..31], EIP-712 domain[32..63], action[64..95]. The last four are whole field
-    ///      elements: OPRF key hash[96], OPRF domain[97], scope[98], nullifier[99].
-    function verifyClaim(address recipient, bytes calldata proof, bytes32[] calldata publicInputs)
+    /// @dev `publicInputs` is 101 bytes32 values. The first 96 hold ONE BYTE EACH of three hashes:
+    ///      signal[0..31], EIP-712 domain[32..63], action[64..95]. Then whole field elements:
+    ///      OPRF key hash[96], OPRF domain[97], scope[98], nullifier[99], and attested_at[100]
+    ///      (unix seconds, u64). `signerVariant` selects the verifier of the package that made the proof.
+    function verifyClaim(address recipient, uint8 signerVariant, bytes calldata proof, bytes32[] calldata publicInputs)
         external
         view
         returns (bool)
     {
-        _check(recipient, proof, publicInputs);
+        _check(recipient, signerVariant, proof, publicInputs);
         return true;
     }
 
     /// @notice Pays CLAIM_AMOUNT SEED to `recipient`. Anyone may submit; the proof decides who receives.
-    function claim(address recipient, bytes calldata proof, bytes32[] calldata publicInputs) external nonReentrant {
-        bytes32 nullifier = _check(recipient, proof, publicInputs);
+    function claim(address recipient, uint8 signerVariant, bytes calldata proof, bytes32[] calldata publicInputs)
+        external
+        nonReentrant
+    {
+        bytes32 nullifier = _check(recipient, signerVariant, proof, publicInputs);
         claimed[nullifier] = true;
         totalClaims += 1;
         (bool success, bytes memory returned) =
@@ -155,13 +189,14 @@ contract SsiatDrop {
         emit Claimed(nullifier, recipient, CLAIM_AMOUNT);
     }
 
-    function _check(address recipient, bytes calldata proof, bytes32[] calldata publicInputs)
+    function _check(address recipient, uint8 signerVariant, bytes calldata proof, bytes32[] calldata publicInputs)
         private
         view
         returns (bytes32 nullifier)
     {
         if (recipient == address(0)) revert ZeroAddress();
         if (proof.length == 0) revert ProofRequired();
+        address verifier = verifierFor(signerVariant);
         if (publicInputs.length != PUBLIC_INPUT_COUNT) revert InvalidPublicInputCount();
 
         bytes32[3] memory fields;
@@ -184,12 +219,25 @@ contract SsiatDrop {
         nullifier = publicInputs[NULLIFIER_INDEX];
         if (claimed[nullifier]) revert AlreadyClaimed(nullifier);
         if (token.balanceOf(address(this)) < CLAIM_AMOUNT) revert DropExhausted();
+        // Checked after the outcomes a new proof cannot change (already claimed, pool empty).
+        _checkAttestedAt(publicInputs[ATTESTED_AT_INDEX]);
 
         // The pinned Honk verifier can REVERT on an invalid proof, not only return false.
-        try IDojangPlaygroundVerifier(VERIFIER).verify(proof, publicInputs) returns (bool valid) {
+        try IDojangPlaygroundVerifier(verifier).verify(proof, publicInputs) returns (bool valid) {
             if (!valid) revert InvalidProof();
         } catch {
             revert InvalidProof();
+        }
+    }
+
+    /// @dev The chain has no other clock for the device's status statement, so its time must be
+    ///      close to the block's: at most ATTESTED_AT_MAX_AGE behind, ATTESTED_AT_MAX_FUTURE ahead.
+    function _checkAttestedAt(bytes32 value) private view {
+        uint256 attestedAt = uint256(value);
+        if (attestedAt > type(uint64).max) revert AttestedAtNotUint64(attestedAt);
+        if (attestedAt + ATTESTED_AT_MAX_AGE < block.timestamp) revert AttestedAtTooOld(attestedAt, block.timestamp);
+        if (attestedAt > block.timestamp + ATTESTED_AT_MAX_FUTURE) {
+            revert AttestedAtInFuture(attestedAt, block.timestamp);
         }
     }
 }

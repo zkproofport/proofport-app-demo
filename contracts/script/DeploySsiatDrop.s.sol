@@ -22,7 +22,9 @@ contract DeploySsiatDrop {
     /// 100 SEED per faucet wallet; 1,000,000 SEED in the pool, i.e. 10,000 claims.
     uint256 public constant CLAIM_AMOUNT = 100 ether;
     uint256 public constant SUPPLY = 1_000_000 ether;
-    address public constant VERIFIER = 0x400474E78a793289D091A5F556F78158956B5D01;
+    address public constant VERIFIER_STANDARD = 0xC1c42ade7C31aFDf99FbaEDF97dA5b07fCCba724;
+    address public constant VERIFIER_ANDROID = 0x7fc2059a73cEF2b572C8deEe911c72963dCB4A8a;
+    address public constant VERIFIER_ANDROID_FACTORY = 0x0b3Af3DFc67dC65E0145c37ee00230139d579F64;
     bytes32 public constant OPRF_KEY_HASH = 0x039ecd4ea1875bb5c7f7a1bfae692cab271e3f3f25df4e5ab691fcb17586e6d1;
 
     event SsiatDropDeployed(address indexed drop, address indexed token, string scope, bytes32 domainSeparator);
@@ -35,8 +37,11 @@ contract DeploySsiatDrop {
         SsiatSeed token = drop.token();
         require(address(drop).code.length != 0, "Drop deployment has no bytecode");
         require(address(token).code.length != 0, "Token deployment has no bytecode");
-        require(drop.VERIFIER() == VERIFIER, "Drop verifier mismatch");
-        require(drop.PUBLIC_INPUT_COUNT() == 100, "Drop public input layout mismatch");
+        require(drop.VERIFIER_STANDARD() == VERIFIER_STANDARD, "Drop standard verifier mismatch");
+        require(drop.VERIFIER_ANDROID() == VERIFIER_ANDROID, "Drop android verifier mismatch");
+        require(drop.VERIFIER_ANDROID_FACTORY() == VERIFIER_ANDROID_FACTORY, "Drop android factory verifier mismatch");
+        require(drop.PUBLIC_INPUT_COUNT() == 101, "Drop public input layout mismatch");
+        require(drop.ATTESTED_AT_MAX_AGE() == 900 && drop.ATTESTED_AT_MAX_FUTURE() == 300, "Drop freshness mismatch");
         require(drop.OPRF_KEY_HASH() == OPRF_KEY_HASH, "Drop OPRF key hash mismatch");
         require(keccak256(bytes(drop.OPRF_DOMAIN())) == keccak256("demo.zkproofport.app"), "Drop OPRF domain mismatch");
         require(drop.CLAIM_AMOUNT() == CLAIM_AMOUNT, "Claim amount mismatch");

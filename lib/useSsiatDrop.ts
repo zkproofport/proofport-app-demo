@@ -6,6 +6,7 @@ import { ProofportSDK, type RelayProofResult } from '@zkproofport-app/sdk';
 import { getPinnedOprfKeyHash } from '@zkproofport-app/core';
 import { GIWA_CHAIN_ID } from './giwa-membership';
 import { DEMO_OPRF_DOMAIN, oprfEnvironmentForChain } from './oprf';
+import { signerVariantArgument } from './verifier-deployments';
 import { createSDK } from './sdk';
 import { EXPLORER, GIWA_RPC, guardGiwaWalletProvider, waitForVaultReceipt } from './giwa-vault';
 import { DEMO_PROOF_WAIT_MS, describeFailure, isPendingRelayStatus, settleRelayResult } from './relay-outcome';
@@ -219,7 +220,7 @@ export function useSsiatDrop() {
         return;
       }
       if (current !== version.current) return;
-      const accepted = await timeout(reread.verifyClaim(recipient, bound.proof, bound.publicInputs));
+      const accepted = await timeout(reread.verifyClaim(recipient, signerVariantArgument(bound.signerVariant), bound.proof, bound.publicInputs));
       if (current !== version.current) return;
       if (accepted !== true) throw new Error('The drop did not accept this proof.');
       setProof({ ...bound, amount: claimAmount }); setPhase('ready');
@@ -257,7 +258,7 @@ export function useSsiatDrop() {
       const signer = await new BrowserProvider(guardGiwaWalletProvider(provider, isCurrent, STALE_WALLET)).getSigner(account);
       if (!isCurrent()) return;
       const writable = new Contract(address, SSIAT_DROP_ABI, signer);
-      const tx = await writable.claim(account, bound.proof, bound.publicInputs, { chainId: GIWA_CHAIN_ID });
+      const tx = await writable.claim(account, signerVariantArgument(bound.signerVariant), bound.proof, bound.publicInputs, { chainId: GIWA_CHAIN_ID });
       if (isCurrent()) setTxHash(tx.hash);
       const confirmed = await waitForVaultReceipt(tx, hash => { if (isCurrent()) setTxHash(hash); });
       if (!isCurrent()) return;

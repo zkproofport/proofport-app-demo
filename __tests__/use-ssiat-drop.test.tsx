@@ -9,7 +9,9 @@ import { useSsiatDrop } from '../lib/useSsiatDrop';
 import SsiatDemo from '../app/components/SsiatDemo';
 import { SSIAT_DROP_ABI } from '../lib/ssiat-drop';
 import { claimAction, SSIAT_TEST_DROP, SSIAT_TEST_NULLIFIER, SSIAT_TEST_RECIPIENT, SSIAT_TEST_SCOPE, ssiatResult } from './fixtures/ssiat';
-import { DEMO_DOMAIN, TESTNET_OPRF_KEY_HASH } from './fixtures/giwa';
+import { DEMO_DOMAIN, packageProofHex, TESTNET_OPRF_KEY_HASH } from './fixtures/giwa';
+
+const STANDARD_PROOF = packageProofHex('dojang_playground', 'standard');
 
 const external = vi.hoisted(() => ({
   dropAddress: '' as string,
@@ -182,9 +184,9 @@ describe('Ssiat claim orchestration', () => {
     expect(external.sdkConfigs.at(-1)).toEqual({ relayUrl: 'http://localhost:4001' });
     expect(external.create).toHaveBeenCalledWith('dojang_playground', { scope: SSIAT_TEST_SCOPE, oprfDomain: DEMO_DOMAIN, action: claimAction() }, expect.objectContaining({ dappName: 'Ssiat' }));
     expect(external.claimed).toHaveBeenCalledWith(SSIAT_TEST_NULLIFIER);
-    expect(external.verifyClaim).toHaveBeenCalledWith(SSIAT_TEST_RECIPIENT, '0x1234', expect.any(Array));
-    expect(external.verifyClaim.mock.calls[0][2]).toHaveLength(100);
-    expect(flow.proof).toMatchObject({ recipient: SSIAT_TEST_RECIPIENT, nullifier: SSIAT_TEST_NULLIFIER, amount: CLAIM });
+    expect(external.verifyClaim).toHaveBeenCalledWith(SSIAT_TEST_RECIPIENT, 0, STANDARD_PROOF, expect.any(Array));
+    expect(external.verifyClaim.mock.calls[0][3]).toHaveLength(101);
+    expect(flow.proof).toMatchObject({ recipient: SSIAT_TEST_RECIPIENT, nullifier: SSIAT_TEST_NULLIFIER, amount: CLAIM, signerVariant: 'standard' });
     expect(external.contracts.every(address => address === SSIAT_TEST_DROP || address === SEED_TOKEN)).toBe(true);
   });
 
@@ -205,7 +207,7 @@ describe('Ssiat claim orchestration', () => {
     const hash = '0x' + '12'.repeat(32);
     external.claim.mockResolvedValue({ hash, wait: async () => ({ hash, status: 1 }) });
     await act(async () => { await flow.claim(); });
-    expect(external.claim).toHaveBeenCalledWith(SSIAT_TEST_RECIPIENT, '0x1234', expect.any(Array), { chainId: 91342 });
+    expect(external.claim).toHaveBeenCalledWith(SSIAT_TEST_RECIPIENT, 0, STANDARD_PROOF, expect.any(Array), { chainId: 91342 });
     expect(flow.phase).toBe('claimed');
     expect(flow.receipt).toEqual({ hash, amount: CLAIM, recipient: SSIAT_TEST_RECIPIENT });
     expect(flow.proof).toBeNull();
@@ -342,9 +344,13 @@ describe('Ssiat claim orchestration', () => {
     expect(flow.proof).not.toBeNull();
   });
 
-  it.each(['InvalidProof', 'WrongClaimAction', 'WrongClaimScope', 'WrongClaimDomain'])('drops the proof when the claim reverts with %s', async name => {
+  it.each([
+    ['InvalidProof', []], ['WrongClaimAction', []], ['WrongClaimScope', []], ['WrongClaimDomain', []],
+    ['UnknownSignerVariant', [3]], ['AttestedAtTooOld', [1795768654, 1795769655]],
+    ['AttestedAtInFuture', [1795769655, 1795768654]], ['AttestedAtNotUint64', [BigInt(2) ** BigInt(64)]],
+  ] as const)('drops the proof when the claim reverts with %s', async (name, args) => {
     await proveReady();
-    external.claim.mockRejectedValue(revert(name));
+    external.claim.mockRejectedValue(revert(name, args as unknown as unknown[]));
     await act(async () => { await flow.claim(); });
     expect(flow.phase).toBe('blocked');
     expect(flow.proof).toBeNull();
@@ -516,5 +522,40 @@ describe('Ssiat through the page', () => {
     await act(async () => { button('Prove faucet participation')!.click(); });
     await vi.waitFor(async () => { await act(async () => {}); expect(host.querySelector('[role="alert"]')?.textContent).toContain('발급 기록을 찾을 수 없습니다 🌱 <b>x</b>'); });
     expect(host.querySelector('[role="alert"] b')).toBeNull();
+  });
+});
+
+describe('Ssiat tells the drop which signer package made the proof', () => {
+  it.each([
+    ['standard', 0], ['android', 1], ['android_factory', 2],
+  ] as const)('passes a %s proof to verifyClaim and claim as signerVariant %s', async (variant, argument) => {
+    external.poll.mockResolvedValue(ssiatResult(SSIAT_TEST_SCOPE, claimAction(), SSIAT_TEST_NULLIFIER, variant));
+    await proveReady();
+    expect(flow.proof?.signerVariant).toBe(variant);
+    const proofHex = packageProofHex('dojang_playground', variant);
+    expect(external.verifyClaim).toHaveBeenCalledWith(SSIAT_TEST_RECIPIENT, argument, proofHex, expect.any(Array));
+    const hash = '0x' + '12'.repeat(32);
+    external.claim.mockResolvedValue({ hash, wait: async () => ({ hash, status: 1 }) });
+    await act(async () => { await flow.claim(); });
+    expect(external.claim).toHaveBeenCalledWith(SSIAT_TEST_RECIPIENT, argument, proofHex, expect.any(Array), { chainId: 91342 });
+    expect(flow.phase).toBe('claimed');
+  });
+
+  it('refuses a result naming an unknown package before calling the drop', async () => {
+    external.poll.mockResolvedValue({ ...ssiatResult(SSIAT_TEST_SCOPE, claimAction()), signerVariant: 'ios' });
+    await connect();
+    await act(async () => { await flow.requestProof(); });
+    expect(flow.phase).toBe('blocked');
+    expect(flow.error).toMatch(/no "ios" signer variant/);
+    expect(external.verifyClaim).not.toHaveBeenCalled();
+  });
+
+  it('asks for a new proof when verifyClaim says the attestation check is too old', async () => {
+    external.verifyClaim.mockRejectedValue(revert('AttestedAtTooOld', [1795768654, 1795769655]));
+    await connect();
+    await act(async () => { await flow.requestProof(); });
+    expect(flow.phase).toBe('blocked');
+    expect(flow.proof).toBeNull();
+    expect(flow.error).toMatch(/more than 15 minutes old.*new proof/);
   });
 });

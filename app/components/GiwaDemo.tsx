@@ -95,7 +95,7 @@ export default function GiwaDemo() {
           <a href={addressLink(TOKEN_ADDRESS)} target="_blank" rel="noreferrer">dKRW token<ArrowUpRight size={16} /></a>
           <a href={addressLink(GIWA_VERIFIER)} target="_blank" rel="noreferrer">Verifier<ArrowUpRight size={16} /></a>
         </div>
-        <p>dKRW is a freely mintable test token with no KRW backing or monetary value. No yield is generated. Eligibility uses a test attestation modeling Upbit KYC; production KYC, current revocation and expiry are not verified. Transactions and public inputs remain public.</p>
+        <p>dKRW is a freely mintable test token with no KRW backing or monetary value. No yield is generated. Eligibility uses a test attestation modeling Upbit KYC, not production KYC. Each proof also shows the attestation was neither revoked nor expired when it was made, and the vault accepts it for 15 minutes. Transactions and public inputs remain public.</p>
       </details>
     </div>
   </main>;

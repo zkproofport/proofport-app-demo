@@ -5,7 +5,8 @@ import {
 import { AbiCoder, Interface, formatUnits, isAddress, keccak256, toBeHex, TypedDataEncoder, ZeroAddress, ZeroHash } from 'ethers';
 import { GIWA_CHAIN_ID } from './giwa-membership';
 import { checkDemoOprfProof } from './oprf';
-import { verifierAddress } from './verifier-deployments';
+import { proofSignerVariant, variantVerifierAddress, verifierAddress } from './verifier-deployments';
+import type { SignerVariant } from '@zkproofport-app/sdk';
 
 /**
  * Ssiat (씨앗, "seed"): a fictional seed drop for GIWA Sepolia Playground faucet
@@ -13,16 +14,17 @@ import { verifierAddress } from './verifier-deployments';
  */
 
 /**
- * The deployed SsiatDrop on GIWA Sepolia (2026-11-21, bb 6.0.0 verifier; see contracts/README.md).
+ * The deployed SsiatDrop on GIWA Sepolia (2026-11-27, the three dojang_playground v2
+ * verifiers; see contracts/README.md).
  * `ssiatDropAddress()` refuses an empty or malformed value, so the tab can never
  * read from or send to a placeholder.
  */
-export const SSIAT_DROP_ADDRESS: string = '0x4691533b0981e03830ddcD76A3cd38d6CCB35235';
+export const SSIAT_DROP_ADDRESS: string = '0x55d63a1B8762bd4dbA30dcA74a4C138681FdCFd1';
 
-/** `dojang_playground` verifier: circuits/deployments/91342/DojangPlayground.json. */
+/** `dojang_playground` standard-package verifier: circuits/deployments/91342/DojangPlaygroundV2.json. */
 export const SSIAT_VERIFIER = verifierAddress(CIRCUIT_IDS.DOJANG_PLAYGROUND, GIWA_CHAIN_ID);
 export const SSIAT_CIRCUIT = CIRCUIT_IDS.DOJANG_PLAYGROUND;
-/** 96 byte-valued inputs (signal, EIP-712 domain, action), then the four OPRF fields. Core's count. */
+/** 96 byte-valued inputs (signal, EIP-712 domain, action), the four OPRF fields, then attested_at. Core's count. */
 export const SSIAT_PUBLIC_INPUT_COUNT = DOJANG_PLAYGROUND_PUBLIC_INPUT_COUNT;
 export const SSIAT_TOKEN_DECIMALS = 18;
 export const SSIAT_SCOPE_PATTERN = /^ssiat-drop:v1:[0-9a-f]{64}$/;
@@ -48,12 +50,14 @@ export const SSIAT_DROP_ABI = [
   'function domainSeparator() view returns (bytes32)',
   'function claimActionHash(address) view returns (bytes32)',
   'function claimed(bytes32) view returns (bool)',
-  'function verifyClaim(address,bytes,bytes32[]) view returns (bool)',
-  'function claim(address,bytes,bytes32[])',
+  'function verifyClaim(address,uint8,bytes,bytes32[]) view returns (bool)',
+  'function claim(address,uint8,bytes,bytes32[])',
   'error ZeroAddress()', 'error ProofRequired()', 'error InvalidPublicInputCount()', 'error InvalidPublicInputByte(uint256)',
   'error InvalidPublicInputField(uint256)', 'error WrongOprfKey()', 'error WrongOprfDomain()',
   'error IdentityProofNotAllowed()', 'error WrongClaimDomain()', 'error WrongClaimAction()', 'error WrongClaimScope()',
   'error AlreadyClaimed(bytes32)', 'error DropExhausted()', 'error InvalidProof()', 'error TokenTransferFailed()', 'error Reentrancy()',
+  'error UnknownSignerVariant(uint8)', 'error AttestedAtNotUint64(uint256)',
+  'error AttestedAtTooOld(uint256,uint256)', 'error AttestedAtInFuture(uint256,uint256)',
 ];
 const dropInterface = new Interface(SSIAT_DROP_ABI);
 
@@ -98,7 +102,11 @@ function field(inputs: string[], start: number): string {
   return '0x' + Array.from({ length: 32 }, (_, index) => BigInt(inputs[start + index]).toString(16).padStart(2, '0')).join('');
 }
 
-export type SsiatClaimProof = { requestId: string; proof: string; publicInputs: string[]; nullifier: string; scope: string; recipient: string };
+export type SsiatClaimProof = {
+  requestId: string; proof: string; publicInputs: string[]; nullifier: string; scope: string; recipient: string;
+  /** The package that made the proof; the drop is told it so it picks that package's verifier. */
+  signerVariant: SignerVariant;
+};
 
 /**
  * Check a returned proof against the claim this page asked for, before any
@@ -113,7 +121,10 @@ export function prepareSsiatClaimProof(
     throw new Error('No completed proof was received. Please try again.');
   }
   if (result.circuit !== SSIAT_CIRCUIT) throw new Error(`A ${SSIAT_CIRCUIT} proof is required; this one is '${String(result.circuit)}'.`);
-  if (result.chainId !== GIWA_CHAIN_ID || result.verifierAddress?.toLowerCase() !== SSIAT_VERIFIER) {
+  // Each signer package has its own verifier; the SDK decides the package from
+  // the result's claim and the proof's length, and the address must be that package's.
+  const signerVariant = proofSignerVariant(SSIAT_CIRCUIT, result.signerVariant, result.proof);
+  if (result.chainId !== GIWA_CHAIN_ID || result.verifierAddress?.toLowerCase() !== variantVerifierAddress(SSIAT_CIRCUIT, GIWA_CHAIN_ID, signerVariant)) {
     throw new Error('This proof does not use the GIWA Sepolia Dojang Playground verifier.');
   }
   const inputs = result.publicInputs;
@@ -138,7 +149,7 @@ export function prepareSsiatClaimProof(
   }
   return {
     requestId, proof: result.proof, publicInputs: inputs.map(value => toBeHex(BigInt(value), 32)), nullifier, scope,
-    recipient: String(action.message.recipient),
+    recipient: String(action.message.recipient), signerVariant,
   };
 }
 
@@ -146,6 +157,7 @@ export function prepareSsiatClaimProof(
 export const SSIAT_PROOF_ERRORS = [
   'IdentityProofNotAllowed', 'WrongClaimDomain', 'WrongClaimAction', 'WrongClaimScope', 'WrongOprfKey', 'WrongOprfDomain',
   'InvalidProof', 'InvalidPublicInputCount', 'InvalidPublicInputByte', 'InvalidPublicInputField', 'ProofRequired',
+  'UnknownSignerVariant', 'AttestedAtNotUint64', 'AttestedAtTooOld', 'AttestedAtInFuture',
 ];
 
 export function ssiatErrorName(cause: unknown): string | undefined {
@@ -172,6 +184,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   ZeroAddress: 'A recipient address is required.',
   TokenTransferFailed: 'The SEED transfer failed. Nothing was claimed.',
   Reentrancy: 'The claim was refused. Try again.',
+  // The drop accepts a proof only within 15 minutes of the attestation check it carries.
+  AttestedAtTooOld: 'This proof has expired: the attestation check inside it is more than 15 minutes old. Generate a new proof.',
+  AttestedAtInFuture: 'This proof carries an attestation check time ahead of the chain clock. Check the phone\'s date and time, then generate a new proof.',
+  AttestedAtNotUint64: 'The proof has a malformed attestation check time. Generate a new proof.',
+  UnknownSignerVariant: 'This proof came from a signer the drop has no verifier for. Generate a new proof with a current ZKProofport app.',
 };
 
 export function ssiatErrorMessage(cause: unknown): string {

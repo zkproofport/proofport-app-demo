@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Interface, MaxUint256 } from 'ethers';
-import { buildGiwaDepositAction, displayKRW, parseVaultAmount, vaultErrorMessage, vaultErrorName, waitForVaultReceipt, VAULT_ABI } from '../lib/giwa-vault';
+import { buildGiwaDepositAction, displayKRW, parseVaultAmount, vaultErrorMessage, vaultErrorName, waitForVaultReceipt, VAULT_ABI, VAULT_ADDRESS, VAULT_PROOF_ERRORS } from '../lib/giwa-vault';
 import { prepareGiwaMembershipProof } from '../lib/giwa-membership';
 import { DEMO_DOMAIN, depositAction, giwaResult, GIWA_TEST_ACCOUNT, GIWA_TEST_VAULT } from './fixtures/giwa';
 
@@ -45,7 +45,7 @@ describe('Vault mobile proof binding', () => {
   const action = depositAction();
   const result = giwaResult(scope, action);
   it('accepts the exact scope returned by depositScope for policy preflight', () => {
-    expect(prepareGiwaMembershipProof(result, result.requestId, scope, DEMO_DOMAIN, action).publicInputs).toHaveLength(132);
+    expect(prepareGiwaMembershipProof(result, result.requestId, scope, DEMO_DOMAIN, action).publicInputs).toHaveLength(133);
   });
   it('rejects proof reuse for a changed amount, wallet or consumed nonce scope', () => {
     expect(() => prepareGiwaMembershipProof(result, result.requestId, 'giwa-vault:v1:' + 'cd'.repeat(32), DEMO_DOMAIN, action)).toThrow(/scope/);
@@ -109,5 +109,37 @@ describe('wallet transaction replacement', () => {
   it('preserves other wallet and network errors', async () => {
     const failure = new Error('RPC unavailable');
     await expect(waitForVaultReceipt({ wait: async () => { throw failure; } }, vi.fn())).rejects.toBe(failure);
+  });
+});
+
+describe('the v2 vault takes the signer package beside every proof', () => {
+  const abi = new Interface(VAULT_ABI);
+  it('points at the 2026-11-27 vault', () => {
+    expect(VAULT_ADDRESS).toBe('0x41d707cD61847bB6939F3F1182eC96EFE6AaA983');
+  });
+  it('declares verifyEligibility and deposit with the uint8 signerVariant before the proof', () => {
+    expect(abi.getFunction('verifyEligibility')!.format('sighash')).toBe('verifyEligibility(address,uint256,uint8,bytes,bytes32[])');
+    expect(abi.getFunction('deposit')!.format('sighash')).toBe('deposit(uint256,uint8,bytes,bytes32[])');
+  });
+
+  it.each([
+    ['UnknownSignerVariant', [3], /signer the Vault has no verifier for/],
+    ['AttestedAtTooOld', [1795768654, 1795769655], /more than 15 minutes old.*new proof/],
+    ['AttestedAtInFuture', [1795769655, 1795768654], /ahead of the chain clock.*new proof/],
+    ['AttestedAtNotUint64', [BigInt(2) ** BigInt(64)], /did not pass the Vault check/],
+  ] as const)('decodes %s into a readable message that asks for a new proof', (name, args, message) => {
+    const data = abi.encodeErrorResult(name, args as unknown as unknown[]);
+    expect(vaultErrorName({ data })).toBe(name);
+    expect(vaultErrorName({ info: { error: { data: { data } } } })).toBe(name);
+    expect(vaultErrorMessage({ data })).toMatch(message);
+    expect(VAULT_PROOF_ERRORS).toContain(name);
+  });
+
+  it('treats every proof-shaped revert the ABI declares as a proof to replace', () => {
+    const proofErrors = ['UnknownSignerVariant', 'AttestedAtNotUint64', 'AttestedAtTooOld', 'AttestedAtInFuture', 'InvalidProof', 'InvalidPublicInputCount'];
+    for (const name of proofErrors) expect(VAULT_PROOF_ERRORS, name).toContain(name);
+    for (const name of VAULT_PROOF_ERRORS) expect(abi.getError(name), name).not.toBeNull();
+    expect(VAULT_PROOF_ERRORS).not.toContain('ProofRequired');
+    expect(VAULT_PROOF_ERRORS).not.toContain('TokenTransferFailed');
   });
 });

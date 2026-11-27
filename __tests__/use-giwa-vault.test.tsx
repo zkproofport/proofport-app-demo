@@ -6,8 +6,10 @@ import { Interface, TypedDataEncoder } from 'ethers';
 import type { RelayProofResult } from '@zkproofport-app/sdk';
 import { useGiwaVault } from '../lib/useGiwaVault';
 import GiwaDemo from '../app/components/GiwaDemo';
-import { TOKEN_ADDRESS, VAULT_ADDRESS } from '../lib/giwa-vault';
-import { DEMO_DOMAIN, depositAction, giwaResult, GIWA_TEST_ACCOUNT, TESTNET_OPRF_KEY_HASH } from './fixtures/giwa';
+import { TOKEN_ADDRESS, VAULT_ABI, VAULT_ADDRESS } from '../lib/giwa-vault';
+import { DEMO_DOMAIN, depositAction, giwaResult, GIWA_TEST_ACCOUNT, packageProofHex, TESTNET_OPRF_KEY_HASH } from './fixtures/giwa';
+
+const STANDARD_PROOF = packageProofHex('giwa_attestation', 'standard');
 
 const external = vi.hoisted(() => ({
   sdkConfigs: [] as unknown[],
@@ -267,7 +269,7 @@ describe('Gotgan proof request orchestration', () => {
     await click('Connect operational wallet');
     expect(host.querySelector('[aria-label="Connected operational wallet"]')?.getAttribute('title')).toBe(GIWA_TEST_ACCOUNT);
     await click('Deposit dKRW');
-    expect(external.depositPreflight).toHaveBeenCalledWith(units, '0x', [], { from: GIWA_TEST_ACCOUNT });
+    expect(external.depositPreflight).toHaveBeenCalledWith(units, 0, '0x', [], { from: GIWA_TEST_ACCOUNT });
     expect(host.textContent).toContain('Deposit blocked');
     expect(external.deposit).not.toHaveBeenCalled();
     await click('Generate eligibility proof');
@@ -286,7 +288,7 @@ describe('Gotgan proof request orchestration', () => {
     expect(external.deposit).not.toHaveBeenCalled();
     await click('Deposit dKRW');
     await act(async () => { await vi.waitFor(() => expect(confirmDeposit).toBeTypeOf('function')); });
-    expect(external.deposit).toHaveBeenCalledWith(units, '0x1234', expect.any(Array), { chainId: 91342 });
+    expect(external.deposit).toHaveBeenCalledWith(units, 0, STANDARD_PROOF, expect.any(Array), { chainId: 91342 });
     expect(host.textContent).not.toContain('Deposit confirmed');
     await act(async () => { confirmDeposit({ hash: depositHash, status: 1 }); });
     expect(host.textContent).toContain('Deposit confirmed');
@@ -312,10 +314,10 @@ describe('Gotgan proof request orchestration', () => {
     expect(external.create).toHaveBeenCalledWith('giwa_attestation', { scope, oprfDomain: DEMO_DOMAIN, action: expectedAction() }, expect.objectContaining({ dappName: 'Gotgan' }));
     expect(external.nonces).toHaveBeenCalledWith(GIWA_TEST_ACCOUNT, { blockTag: 321 });
     expect(external.depositScope).toHaveBeenCalledWith(GIWA_TEST_ACCOUNT, BigInt('10000000000'), { blockTag: 321 });
-    expect(external.verifyEligibility).toHaveBeenCalledWith(GIWA_TEST_ACCOUNT, BigInt('10000000000'), '0x1234', expect.arrayContaining(['0x' + '00'.repeat(32)]));
+    expect(external.verifyEligibility).toHaveBeenCalledWith(GIWA_TEST_ACCOUNT, BigInt('10000000000'), 0, STANDARD_PROOF, expect.arrayContaining(['0x' + '00'.repeat(32)]));
     expect(flow.phase).toBe('ready');
-    expect(flow.proof).toMatchObject({ account: GIWA_TEST_ACCOUNT, amount: BigInt('10000000000'), scope });
-    expect(flow.proof?.publicInputs).toHaveLength(132);
+    expect(flow.proof).toMatchObject({ account: GIWA_TEST_ACCOUNT, amount: BigInt('10000000000'), scope, signerVariant: 'standard' });
+    expect(flow.proof?.publicInputs).toHaveLength(133);
   });
 
   it('rejects a completed proof for a changed action before calling the vault verifier', async () => {
@@ -521,5 +523,52 @@ describe('Gotgan proof request orchestration', () => {
     expect(flow.error).toMatch(message);
     expect(flow.proof).toBeNull();
     expect(external.verifyEligibility).not.toHaveBeenCalled();
+  });
+});
+
+describe('Gotgan tells the vault which signer package made the proof', () => {
+  it.each([
+    ['standard', 0], ['android', 1], ['android_factory', 2],
+  ] as const)('passes a %s proof to verifyEligibility and deposit as signerVariant %s', async (variant, argument) => {
+    const units = BigInt('10000000000');
+    external.poll.mockResolvedValue(giwaResult(scope, expectedAction(), variant));
+    external.allowance.mockResolvedValue(units);
+    external.deposit.mockResolvedValue({ hash: '0x' + '12'.repeat(32), wait: async () => ({ hash: '0x' + '12'.repeat(32), status: 1 }) });
+    await connect();
+    await act(async () => { await flow.requestProof(); });
+    expect(flow.phase).toBe('ready');
+    expect(flow.proof?.signerVariant).toBe(variant);
+    const proofHex = packageProofHex('giwa_attestation', variant);
+    expect(external.verifyEligibility).toHaveBeenCalledWith(GIWA_TEST_ACCOUNT, units, argument, proofHex, expect.any(Array));
+    await act(async () => { await flow.act('deposit'); });
+    expect(external.deposit).toHaveBeenCalledWith(units, argument, proofHex, expect.any(Array), { chainId: 91342 });
+    expect(flow.phase).toBe('success');
+  });
+
+  it('refuses a result naming an unknown package before calling the vault', async () => {
+    external.poll.mockResolvedValue({ ...giwaResult(scope, expectedAction()), signerVariant: 'ios' });
+    await connect();
+    await act(async () => { await flow.requestProof(); });
+    expect(flow.phase).toBe('blocked');
+    expect(flow.error).toMatch(/no "ios" signer variant/);
+    expect(external.verifyEligibility).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['AttestedAtTooOld', [1795768654, 1795769655], /more than 15 minutes old/],
+    ['AttestedAtInFuture', [1795769655, 1795768654], /ahead of the chain clock/],
+    ['UnknownSignerVariant', [3], /no verifier for/],
+  ] as const)('drops the proof and asks for a new one when the deposit reverts with %s', async (name, args, message) => {
+    const units = BigInt('10000000000');
+    external.allowance.mockResolvedValue(units);
+    external.deposit.mockRejectedValue({ data: new Interface(VAULT_ABI).encodeErrorResult(name, args as unknown as unknown[]) });
+    await connect();
+    await act(async () => { await flow.requestProof(); });
+    expect(flow.proof).not.toBeNull();
+    await act(async () => { await flow.act('deposit'); });
+    expect(flow.proof).toBeNull();
+    expect(flow.phase).toBe('blocked');
+    expect(flow.error).toMatch(message);
+    expect(flow.error).toMatch(/new proof/);
   });
 });

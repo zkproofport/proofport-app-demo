@@ -53,6 +53,25 @@ export function proofSignerVariant(circuit: string, claimed: unknown, proofHex: 
   return resolved.variant;
 }
 
+/**
+ * The `uint8 signerVariant` argument the Gotgan vault and the Ssiat drop take
+ * beside every proof: which of their three compiled-in verifiers checks it
+ * (contracts/src/GiwaDemoVault.sol and SsiatDrop.sol, `SIGNER_*`).
+ */
+const SIGNER_VARIANT_ARGUMENTS: Readonly<Record<SignerVariant, number>> = Object.freeze({
+  standard: 0,
+  android: 1,
+  android_factory: 2,
+});
+
+/** The contract argument for a package. A value with no row is an error, never another package's number. */
+export function signerVariantArgument(variant: unknown): number {
+  if (typeof variant !== 'string' || !own(SIGNER_VARIANT_ARGUMENTS, variant)) {
+    throw new Error(`Unknown signer variant '${String(variant)}'. Known: ${Object.keys(SIGNER_VARIANT_ARGUMENTS).join(', ')}.`);
+  }
+  return SIGNER_VARIANT_ARGUMENTS[variant as SignerVariant];
+}
+
 /** The verifier for one package of one circuit on one accepted chain. */
 export function variantVerifierAddress(circuit: string, chainId: number, variant: SignerVariant): string {
   acceptedChain(circuit, chainId);

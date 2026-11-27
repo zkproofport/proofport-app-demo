@@ -31,12 +31,12 @@ case "$target" in
     record=DeployGiwaDemoVault.s.sol
     # The existing dKRW test token the vault holds (contracts/README.md).
     export GIWA_VAULT_ASSET=0x417573024528f3c9daD782eF5316E992F3029e81
-    reads=("VERIFIER()(address)" "PUBLIC_INPUT_COUNT()(uint256)" "OPRF_KEY_HASH()(bytes32)" "OPRF_DOMAIN()(string)" "asset()(address)" "domainSeparator()(bytes32)")
+    reads=("VERIFIER_STANDARD()(address)" "VERIFIER_ANDROID()(address)" "VERIFIER_ANDROID_FACTORY()(address)" "PUBLIC_INPUT_COUNT()(uint256)" "OPRF_KEY_HASH()(bytes32)" "OPRF_DOMAIN()(string)" "asset()(address)" "domainSeparator()(bytes32)")
     ;;
   ssiat-drop)
     script=script/DeploySsiatDrop.s.sol:DeploySsiatDrop
     record=DeploySsiatDrop.s.sol
-    reads=("VERIFIER()(address)" "PUBLIC_INPUT_COUNT()(uint256)" "OPRF_KEY_HASH()(bytes32)" "OPRF_DOMAIN()(string)" "token()(address)" "remaining()(uint256)")
+    reads=("VERIFIER_STANDARD()(address)" "VERIFIER_ANDROID()(address)" "VERIFIER_ANDROID_FACTORY()(address)" "PUBLIC_INPUT_COUNT()(uint256)" "OPRF_KEY_HASH()(bytes32)" "OPRF_DOMAIN()(string)" "token()(address)" "remaining()(uint256)")
     ;;
   *)
     echo "Unknown contract '$target'. Known: giwa-vault, ssiat-drop." >&2

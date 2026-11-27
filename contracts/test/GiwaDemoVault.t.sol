@@ -6,6 +6,8 @@ import {DemoKRW} from "../src/DemoKRW.sol";
 
 interface Vm {
     function chainId(uint256) external;
+    function warp(uint256) external;
+    function expectCall(address, bytes calldata) external;
     function etch(address, bytes calldata) external;
     function prank(address) external;
     function expectRevert(bytes4) external;
@@ -22,7 +24,7 @@ contract VerifierDouble {
 
     function verify(bytes calldata proof, bytes32[] calldata inputs) external view returns (bool) {
         require(mode != 2, "Verifier reverted");
-        return mode != 1 && keccak256(proof) == keccak256(hex"cafe") && inputs.length == 132;
+        return mode != 1 && keccak256(proof) == keccak256(hex"cafe") && inputs.length == 133;
     }
 }
 
@@ -57,7 +59,12 @@ contract AdversarialAsset {
 
 contract GiwaDemoVaultTest {
     Vm constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-    address constant VERIFIER = 0xA272056866453F0182426A29B9Ca6382d6C6a060;
+    // Written out, not read from the contract: circuits/deployments/91342/GiwaAttestationV2*.json.
+    address constant VERIFIER_STANDARD = 0x55E7b9d9F2E9ac0080B668514eE01F15b686bfCE;
+    address constant VERIFIER_ANDROID = 0x428074597be3D784535e40F9b1cDfe048AF57F03;
+    address constant VERIFIER_ANDROID_FACTORY = 0x465FAB030D82241BD95268704537A782B8109807;
+    // A realistic block time, so `NOW - 900` does not underflow.
+    uint256 constant NOW = 1_795_000_000;
     // Written out, not read from the contract: core's getPinnedOprfKeyHash('staging', 'giwa_attestation').
     bytes32 constant TESTNET_OPRF_KEY_HASH = 0x039ecd4ea1875bb5c7f7a1bfae692cab271e3f3f25df4e5ab691fcb17586e6d1;
     // core's reduceOprfName("demo.zkproofport.app"); its raw keccak256 is above the field modulus.
@@ -71,8 +78,11 @@ contract GiwaDemoVaultTest {
 
     function setUp() public {
         vm.chainId(91342);
-        VerifierDouble verifier = new VerifierDouble();
-        vm.etch(VERIFIER, address(verifier).code);
+        vm.warp(NOW);
+        bytes memory double = address(new VerifierDouble()).code;
+        vm.etch(VERIFIER_STANDARD, double);
+        vm.etch(VERIFIER_ANDROID, double);
+        vm.etch(VERIFIER_ANDROID_FACTORY, double);
         token = new DemoKRW();
         vault = new GiwaDemoVault(address(token));
         token.mint(ALICE, 100_000_000);
@@ -81,7 +91,7 @@ contract GiwaDemoVaultTest {
     }
 
     function _inputs(GiwaDemoVault target, address account, uint256 amount) internal view returns (bytes32[] memory p) {
-        p = new bytes32[](132);
+        p = new bytes32[](133);
         bytes32[4] memory fields = [
             bytes32(0),
             _domain(address(target), block.chainid),
@@ -95,6 +105,7 @@ contract GiwaDemoVaultTest {
         p[129] = DEMO_DOMAIN_FIELD;
         p[130] = bytes32(uint256(keccak256(bytes(target.depositScope(account, amount)))) % P);
         p[131] = bytes32(uint256(2));
+        p[132] = bytes32(block.timestamp);
     }
 
     function _domain(address target, uint256 chainId) internal pure returns (bytes32) {
@@ -129,7 +140,7 @@ contract GiwaDemoVaultTest {
 
     function _deposit(GiwaDemoVault target, address caller, uint256 amount, bytes32[] memory p) internal {
         vm.prank(caller);
-        target.deposit(amount, hex"cafe", p);
+        target.deposit(amount, 0, hex"cafe", p);
     }
 
     function testDepositAndPartialWithdrawal() public {
@@ -145,7 +156,7 @@ contract GiwaDemoVaultTest {
     function testMissingProofRejectedBeforeAllowance() public {
         vm.expectRevert(GiwaDemoVault.ProofRequired.selector);
         vm.prank(BOB);
-        vault.deposit(AMOUNT, hex"", new bytes32[](0));
+        vault.deposit(AMOUNT, 0, hex"", new bytes32[](0));
         require(vault.totalDeposits() == 0 && vault.nonces(BOB) == 0);
     }
 
@@ -205,7 +216,7 @@ contract GiwaDemoVaultTest {
 
     function testFalseVerifierResultRejected() public {
         bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
-        VerifierDouble(VERIFIER).setMode(1);
+        VerifierDouble(VERIFIER_STANDARD).setMode(1);
         vm.expectRevert(GiwaDemoVault.InvalidProof.selector);
         _deposit(vault, ALICE, AMOUNT, p);
         require(vault.nonces(ALICE) == 0 && token.balanceOf(ALICE) == 100_000_000);
@@ -213,7 +224,7 @@ contract GiwaDemoVaultTest {
 
     function testVerifierRevertRejected() public {
         bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
-        VerifierDouble(VERIFIER).setMode(2);
+        VerifierDouble(VERIFIER_STANDARD).setMode(2);
         vm.expectRevert(GiwaDemoVault.InvalidProof.selector);
         _deposit(vault, ALICE, AMOUNT, p);
     }
@@ -222,7 +233,7 @@ contract GiwaDemoVaultTest {
         bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
         vm.expectRevert(GiwaDemoVault.InvalidProof.selector);
         vm.prank(ALICE);
-        vault.deposit(AMOUNT, hex"dead", p);
+        vault.deposit(AMOUNT, 0, hex"dead", p);
     }
 
     function testCannotWithdrawAnotherUsersDeposit() public {
@@ -290,8 +301,14 @@ contract GiwaDemoVaultTest {
     }
 
     function testMissingVerifierRejected() public {
-        vm.etch(VERIFIER, hex"");
-        vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.ContractNotDeployed.selector, VERIFIER));
+        address[3] memory verifiers = [VERIFIER_STANDARD, VERIFIER_ANDROID, VERIFIER_ANDROID_FACTORY];
+        for (uint256 i; i < verifiers.length; ++i) {
+            bytes memory code = verifiers[i].code;
+            vm.etch(verifiers[i], hex"");
+            vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.ContractNotDeployed.selector, verifiers[i]));
+            new GiwaDemoVault(address(token));
+            vm.etch(verifiers[i], code);
+        }
         new GiwaDemoVault(address(token));
     }
 
@@ -342,7 +359,7 @@ contract GiwaDemoVaultTest {
     function testPinnedOprfKeyHashAccepted() public {
         bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
         require(p[128] == TESTNET_OPRF_KEY_HASH);
-        require(vault.verifyEligibility(ALICE, AMOUNT, hex"cafe", p));
+        require(vault.verifyEligibility(ALICE, AMOUNT, 0, hex"cafe", p));
         _deposit(vault, ALICE, AMOUNT, p);
         require(vault.totalDeposits() == AMOUNT);
     }
@@ -394,13 +411,13 @@ contract GiwaDemoVaultTest {
         bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
         p[128] = keyHash;
         if (keyHash == TESTNET_OPRF_KEY_HASH) {
-            require(vault.verifyEligibility(ALICE, AMOUNT, hex"cafe", p));
+            require(vault.verifyEligibility(ALICE, AMOUNT, 0, hex"cafe", p));
         } else if (uint256(keyHash) >= P) {
             vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.InvalidPublicInputField.selector, 128));
-            vault.verifyEligibility(ALICE, AMOUNT, hex"cafe", p);
+            vault.verifyEligibility(ALICE, AMOUNT, 0, hex"cafe", p);
         } else {
             vm.expectRevert(GiwaDemoVault.WrongOprfKey.selector);
-            vault.verifyEligibility(ALICE, AMOUNT, hex"cafe", p);
+            vault.verifyEligibility(ALICE, AMOUNT, 0, hex"cafe", p);
         }
     }
 
@@ -514,8 +531,8 @@ contract GiwaDemoVaultTest {
 
     function testReadOnlyPreflightDoesNotConsumeNonce() public {
         bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
-        require(vault.verifyEligibility(ALICE, AMOUNT, hex"cafe", p));
-        require(vault.verifyEligibility(ALICE, AMOUNT, hex"cafe", p));
+        require(vault.verifyEligibility(ALICE, AMOUNT, 0, hex"cafe", p));
+        require(vault.verifyEligibility(ALICE, AMOUNT, 0, hex"cafe", p));
         require(vault.nonces(ALICE) == 0 && vault.totalDeposits() == 0);
         _deposit(vault, ALICE, AMOUNT, p);
         require(vault.nonces(ALICE) == 1);
@@ -523,12 +540,12 @@ contract GiwaDemoVaultTest {
 
     function testZeroAccountRejected() public {
         vm.expectRevert(GiwaDemoVault.ZeroAddress.selector);
-        vault.verifyEligibility(address(0), AMOUNT, hex"cafe", new bytes32[](132));
+        vault.verifyEligibility(address(0), AMOUNT, 0, hex"cafe", new bytes32[](133));
     }
 
     function testZeroDepositRejected() public {
         vm.expectRevert(GiwaDemoVault.ZeroAmount.selector);
-        _deposit(vault, ALICE, 0, new bytes32[](132));
+        _deposit(vault, ALICE, 0, new bytes32[](133));
     }
 
     function testZeroWithdrawalRejected() public {
@@ -554,5 +571,222 @@ contract GiwaDemoVaultTest {
         vm.prank(ALICE);
         target.withdraw(type(uint256).max);
         require(target.totalDeposits() == 0 && asset.balanceOf(ALICE) == type(uint256).max);
+    }
+
+    // ---------- signer packages: one verifier each ----------
+
+    function _depositAs(uint8 variant, bytes32[] memory p) internal {
+        vm.prank(ALICE);
+        vault.deposit(AMOUNT, variant, hex"cafe", p);
+    }
+
+    function _verifiers() internal pure returns (address[3] memory) {
+        return [VERIFIER_STANDARD, VERIFIER_ANDROID, VERIFIER_ANDROID_FACTORY];
+    }
+
+    function testPublishesTheThreeVerifiers() public view {
+        require(vault.VERIFIER_STANDARD() == VERIFIER_STANDARD, "standard");
+        require(vault.VERIFIER_ANDROID() == VERIFIER_ANDROID, "android");
+        require(vault.VERIFIER_ANDROID_FACTORY() == VERIFIER_ANDROID_FACTORY, "android factory");
+        require(
+            vault.SIGNER_STANDARD() == 0 && vault.SIGNER_ANDROID() == 1 && vault.SIGNER_ANDROID_FACTORY() == 2, "ids"
+        );
+        for (uint8 v; v < 3; ++v) {
+            require(vault.verifierFor(v) == _verifiers()[v], "verifierFor");
+        }
+        require(vault.PUBLIC_INPUT_COUNT() == 133, "count");
+        require(vault.ATTESTED_AT_MAX_AGE() == 900 && vault.ATTESTED_AT_MAX_FUTURE() == 300, "windows");
+    }
+
+    // Only the selected package's verifier answers: the others are set to refuse, so a
+    // deposit passes exactly when the call went to the selected one.
+    function testEachVariantRoutesToItsOwnVerifier() public {
+        address[3] memory verifiers = _verifiers();
+        for (uint8 v; v < 3; ++v) {
+            for (uint256 j; j < 3; ++j) {
+                VerifierDouble(verifiers[j]).setMode(j == v ? 0 : 1);
+            }
+            bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
+            vm.expectCall(verifiers[v], abi.encodeCall(VerifierDouble.verify, (hex"cafe", p)));
+            _depositAs(v, p);
+            require(vault.nonces(ALICE) == uint256(v) + 1, "nonce not consumed");
+        }
+        require(vault.totalDeposits() == 3 * AMOUNT, "deposits");
+    }
+
+    function testAProofIsRefusedOnAnotherPackagesVerifier() public {
+        address[3] memory verifiers = _verifiers();
+        for (uint8 v; v < 3; ++v) {
+            for (uint256 j; j < 3; ++j) {
+                VerifierDouble(verifiers[j]).setMode(j == v ? 1 : 0);
+            }
+            bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
+            vm.expectRevert(GiwaDemoVault.InvalidProof.selector);
+            _depositAs(v, p);
+        }
+        require(vault.nonces(ALICE) == 0 && vault.totalDeposits() == 0, "state moved");
+    }
+
+    function testUnknownVariantRejectedByName() public {
+        uint8[4] memory unknown = [uint8(3), 4, 128, 255];
+        for (uint256 i; i < unknown.length; ++i) {
+            bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
+            vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.UnknownSignerVariant.selector, unknown[i]));
+            _depositAs(unknown[i], p);
+            vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.UnknownSignerVariant.selector, unknown[i]));
+            vault.verifyEligibility(ALICE, AMOUNT, unknown[i], hex"cafe", p);
+            vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.UnknownSignerVariant.selector, unknown[i]));
+            vault.verifierFor(unknown[i]);
+        }
+        require(vault.nonces(ALICE) == 0 && vault.totalDeposits() == 0, "state moved");
+    }
+
+    function testUnknownVariantReportedBeforeLayout() public {
+        vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.UnknownSignerVariant.selector, uint8(3)));
+        vault.verifyEligibility(ALICE, AMOUNT, 3, hex"cafe", new bytes32[](4));
+    }
+
+    function testVariantOutsideUint8IsNotAccepted() public {
+        bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
+        bytes memory data = abi.encodeCall(GiwaDemoVault.verifyEligibility, (ALICE, AMOUNT, 0, hex"cafe", p));
+        // Overwrite the variant word (third argument) with 256, which no uint8 can hold.
+        assembly {
+            mstore(add(data, add(32, add(4, 64))), 256)
+        }
+        (bool success,) = address(vault).staticcall(data);
+        require(!success, "variant 256 accepted");
+    }
+
+    function testFuzzOnlyKnownVariantsResolve(uint8 variant) public {
+        bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
+        if (variant < 3) {
+            require(vault.verifyEligibility(ALICE, AMOUNT, variant, hex"cafe", p), "known variant refused");
+        } else {
+            vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.UnknownSignerVariant.selector, variant));
+            vault.verifyEligibility(ALICE, AMOUNT, variant, hex"cafe", p);
+        }
+    }
+
+    function testNonceConsumedForEveryVariantAndProofNotReusable() public {
+        for (uint8 v; v < 3; ++v) {
+            bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
+            _depositAs(v, p);
+            vm.expectRevert(GiwaDemoVault.WrongDepositAction.selector);
+            _depositAs(v, p);
+            // Nor under another package: the nonce in the signed action has moved on.
+            vm.expectRevert(GiwaDemoVault.WrongDepositAction.selector);
+            _depositAs((v + 1) % 3, p);
+        }
+        require(vault.nonces(ALICE) == 3, "nonce");
+    }
+
+    // ---------- layout: 133 inputs ----------
+
+    function testOneInputShortOrOverRejected() public {
+        uint256[2] memory counts = [uint256(132), 134];
+        for (uint256 i; i < counts.length; ++i) {
+            bytes32[] memory p = new bytes32[](counts[i]);
+            bytes32[] memory full = _inputs(vault, ALICE, AMOUNT);
+            for (uint256 j; j < counts[i] && j < full.length; ++j) {
+                p[j] = full[j];
+            }
+            vm.expectRevert(GiwaDemoVault.InvalidPublicInputCount.selector);
+            _deposit(vault, ALICE, AMOUNT, p);
+        }
+    }
+
+    function testPreStatement132InputProofRejected() public {
+        bytes32[] memory full = _inputs(vault, ALICE, AMOUNT);
+        bytes32[] memory p = new bytes32[](132);
+        for (uint256 j; j < 132; ++j) {
+            p[j] = full[j];
+        }
+        vm.expectRevert(GiwaDemoVault.InvalidPublicInputCount.selector);
+        vault.verifyEligibility(ALICE, AMOUNT, 0, hex"cafe", p);
+    }
+
+    // ---------- attested_at freshness ----------
+
+    function _at(uint256 attestedAt) internal view returns (bytes32[] memory p) {
+        p = _inputs(vault, ALICE, AMOUNT);
+        p[132] = bytes32(attestedAt);
+    }
+
+    function testAttestedAtExactlyMaxAgeAccepted() public {
+        _deposit(vault, ALICE, AMOUNT, _at(NOW - 900));
+        require(vault.nonces(ALICE) == 1, "not deposited");
+    }
+
+    function testAttestedAtOneSecondPastMaxAgeRejected() public {
+        bytes32[] memory p = _at(NOW - 901);
+        vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.AttestedAtTooOld.selector, NOW - 901, NOW));
+        _deposit(vault, ALICE, AMOUNT, p);
+        require(vault.nonces(ALICE) == 0 && vault.totalDeposits() == 0, "stale proof consumed the nonce");
+    }
+
+    function testAttestedAtExactlyMaxFutureAccepted() public {
+        _deposit(vault, ALICE, AMOUNT, _at(NOW + 300));
+        require(vault.nonces(ALICE) == 1, "not deposited");
+    }
+
+    function testAttestedAtOneSecondPastMaxFutureRejected() public {
+        bytes32[] memory p = _at(NOW + 301);
+        vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.AttestedAtInFuture.selector, NOW + 301, NOW));
+        _deposit(vault, ALICE, AMOUNT, p);
+    }
+
+    function testAttestedAtZeroRejected() public {
+        bytes32[] memory p = _at(0);
+        vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.AttestedAtTooOld.selector, 0, NOW));
+        vault.verifyEligibility(ALICE, AMOUNT, 0, hex"cafe", p);
+    }
+
+    function testAProofGoesStaleWhileWaiting() public {
+        bytes32[] memory p = _inputs(vault, ALICE, AMOUNT);
+        require(vault.verifyEligibility(ALICE, AMOUNT, 0, hex"cafe", p), "fresh proof refused");
+        vm.warp(NOW + 900);
+        require(vault.verifyEligibility(ALICE, AMOUNT, 0, hex"cafe", p), "proof at the edge refused");
+        vm.warp(NOW + 901);
+        vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.AttestedAtTooOld.selector, NOW, NOW + 901));
+        _deposit(vault, ALICE, AMOUNT, p);
+    }
+
+    function testAttestedAtMaxUint64IsInTheFuture() public {
+        bytes32[] memory p = _at(type(uint64).max);
+        vm.expectRevert(
+            abi.encodeWithSelector(GiwaDemoVault.AttestedAtInFuture.selector, uint256(type(uint64).max), NOW)
+        );
+        vault.verifyEligibility(ALICE, AMOUNT, 0, hex"cafe", p);
+    }
+
+    function testAttestedAtAtOrAbove2To64Rejected() public {
+        uint256[3] memory wrong = [uint256(1) << 64, (uint256(1) << 64) + NOW, P - 1];
+        for (uint256 i; i < wrong.length; ++i) {
+            bytes32[] memory p = _at(wrong[i]);
+            vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.AttestedAtNotUint64.selector, wrong[i]));
+            vault.verifyEligibility(ALICE, AMOUNT, 0, hex"cafe", p);
+        }
+    }
+
+    function testAttestedAtAtOrAboveFieldModulusRejected() public {
+        uint256[3] memory wrong = [P, P + NOW, type(uint256).max];
+        for (uint256 i; i < wrong.length; ++i) {
+            bytes32[] memory p = _at(wrong[i]);
+            vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.InvalidPublicInputField.selector, 132));
+            _deposit(vault, ALICE, AMOUNT, p);
+        }
+    }
+
+    function testFuzzAttestedAtWindow(uint64 attestedAt) public {
+        bytes32[] memory p = _at(attestedAt);
+        if (uint256(attestedAt) + 900 < NOW) {
+            vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.AttestedAtTooOld.selector, uint256(attestedAt), NOW));
+            vault.verifyEligibility(ALICE, AMOUNT, 0, hex"cafe", p);
+        } else if (uint256(attestedAt) > NOW + 300) {
+            vm.expectRevert(abi.encodeWithSelector(GiwaDemoVault.AttestedAtInFuture.selector, uint256(attestedAt), NOW));
+            vault.verifyEligibility(ALICE, AMOUNT, 0, hex"cafe", p);
+        } else {
+            require(vault.verifyEligibility(ALICE, AMOUNT, 0, hex"cafe", p), "in-window time refused");
+        }
     }
 }

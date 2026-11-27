@@ -195,15 +195,20 @@ DEMO_API_KEY=your-api-key
 ### Dedicated circuit demos
 
 Each circuit has an English proof flow. GIWA, KYC, country and work email use
-distinct example dApp layouts. Markets opens by default. **All demos** retains the original explorer and its
-request code. Switching tabs keeps form values and ongoing requests in memory;
-refreshing the page clears in-memory proof sessions.
+distinct example dApp layouts. The navigation shows Gotgan and Ssiat, and
+Gotgan opens by default; which tabs appear is set by `SHOWN_TABS` in
+`app/components/DemoTabs.tsx`. The other tabs below open by their direct URL.
+**All demos** retains the original explorer and its request code. Switching
+tabs keeps form values and ongoing requests in memory; refreshing the page
+clears in-memory proof sessions.
 
 Markets shows the received proof's byte count, abbreviated bytes and public-input count alongside a note that the original KYC account address is not included in the proof. Expand **What remains public?** for the public values and wallet-linkability boundary. Markets remain locked until cryptographic verification succeeds; success opens the lock icons and briefly highlights each market row. Failed verification keeps access locked, and reset relocks it. The transitions respect reduced-motion settings.
 
 | Tab | Example dApp | Direct URL | Circuit |
 | --- | --- | --- | --- |
 | GIWA | Gotgan: action-authorized dKRW testnet vault | `/?tab=giwa` | `giwa_attestation` |
+| Seed drop | Ssiat: testnet seed drop for GIWA Playground faucet wallets | `/?tab=ssiat` | `dojang_playground` |
+| Human Passport | Townhall: human-only discussion board | `/?tab=passport` | `human_passport_score` |
 | KYC | Common: Coinbase KYC DeFi interface | `/?tab=kyc` | `coinbase_attestation` |
 | Country | Borderless: country blocklist exclusion | `/?tab=country` | `coinbase_country_attestation` |
 | Work email | zk blind: anonymous workplace community | `/?tab=email` | `oidc_domain_attestation` |

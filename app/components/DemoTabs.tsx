@@ -13,8 +13,8 @@ import { ZKPROOFPORT_SYMBOL } from '@/lib/brand';
 
 type Tab = DemoId | 'all';
 type Theme = 'system' | 'light' | 'dark';
-const DEFAULT_TAB: Tab = 'kyc';
-const tabs: { id: Tab; label: string; status?: 'Live' | 'PoC' }[] = [
+type TabRow = { id: Tab; label: string; status?: 'Live' | 'PoC' };
+const TABS: readonly TabRow[] = [
   { id: 'kyc', label: 'Markets', status: 'Live' },
   { id: 'country', label: 'Borderless', status: 'Live' },
   { id: 'email', label: 'zk blind', status: 'Live' },
@@ -23,6 +23,26 @@ const tabs: { id: Tab; label: string; status?: 'Live' | 'PoC' }[] = [
   { id: 'ssiat', label: 'Ssiat', status: 'PoC' },
   { id: 'all', label: 'All demos' },
 ];
+
+/**
+ * The tabs a visitor sees, in this order. This list is the one switch: a tab
+ * left out keeps its demo code, its catalog row and its tests, but gets no
+ * button, and its panel is not in the page. All demos is left out with the
+ * others because its page is the Markets, Borderless and zk blind cards.
+ *
+ * Opening `?tab=<id>` for a left-out tab still shows it: the browser E2E
+ * (e2e/relay-outcomes-browser.test.ts) checks how a relay request ends through
+ * `?tab=kyc` and `?tab=all`, and neither shown screen can stand in for that.
+ */
+export const SHOWN_TABS: readonly [Tab, ...Tab[]] = ['giwa', 'ssiat'];
+function tabRow(id: Tab): TabRow {
+  const row = TABS.find(item => item.id === id);
+  if (!row) throw new Error(`No tab '${id}'. Known: ${TABS.map(item => item.id).join(', ')}.`);
+  return row;
+}
+const tabs = SHOWN_TABS.map(tabRow);
+const isShown = (id: Tab) => SHOWN_TABS.includes(id);
+const DEFAULT_TAB: Tab = SHOWN_TABS[0];
 
 /**
  * Demos with a screen of their own instead of the shared CircuitDemo, with the
@@ -91,7 +111,7 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
     <nav className="demo-switcher" aria-label="ZKProofport demos">
       <button className="demo-switcher-brand" onClick={() => select(DEFAULT_TAB)} aria-label="ZKProofport demo home"><img src={ZKPROOFPORT_SYMBOL} alt="" width={32} height={32} /><span><ZKProofportWordmark /><small>Live demos</small></span></button>
       <div role="tablist" aria-label="Choose a demo">
-        {tabs.map((item, index) => <button key={item.id} id={`demo-tab-${item.id}`} role="tab" aria-selected={tab === item.id} aria-controls={`demo-panel-${item.id}`} tabIndex={tab === item.id ? 0 : -1} onClick={() => select(item.id)} onKeyDown={event => navigate(event, index)}>
+        {tabs.map((item, index) => <button key={item.id} id={`demo-tab-${item.id}`} role="tab" aria-selected={tab === item.id} aria-controls={`demo-panel-${item.id}`} tabIndex={item.id === (isShown(tab) ? tab : DEFAULT_TAB) ? 0 : -1} onClick={() => select(item.id)} onKeyDown={event => navigate(event, index)}>
           {item.label}
           {item.status && <span className="demo-status-badge" data-status={item.status}>{item.status}</span>}
         </button>)}
@@ -99,8 +119,8 @@ export default function DemoTabs({ children }: { children: ReactNode }) {
       <label className="theme-control"><CircleHalf size={18} /><span className="sr-only">Color theme</span><select aria-label="Color theme" value={theme} onChange={event => changeTheme(event.target.value as Theme)}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
     </nav>
     {tab !== 'all' && <AppDownloads />}
-    {DEMOS.map(demo => <div key={demo.id} id={`demo-panel-${demo.id}`} role="tabpanel" aria-labelledby={`demo-tab-${demo.id}`} hidden={tab !== demo.id}>{visited.has(demo.id) && <DemoScreen demo={demo} />}</div>)}
-    <div id="demo-panel-all" className="explorer-panel" role="tabpanel" aria-labelledby="demo-tab-all" tabIndex={-1} hidden={tab !== 'all'}>{children}</div>
+    {DEMOS.filter(demo => isShown(demo.id) || visited.has(demo.id)).map(demo => <div key={demo.id} id={`demo-panel-${demo.id}`} role="tabpanel" aria-labelledby={`demo-tab-${demo.id}`} hidden={tab !== demo.id}>{visited.has(demo.id) && <DemoScreen demo={demo} />}</div>)}
+    {(isShown('all') || visited.has('all')) && <div id="demo-panel-all" className="explorer-panel" role="tabpanel" aria-labelledby="demo-tab-all" tabIndex={-1} hidden={tab !== 'all'}>{children}</div>}
   </div>;
 }
 

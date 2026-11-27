@@ -43,11 +43,11 @@ describe('every tab renders its own screen', () => {
     });
   }
 
-  it('opens Markets on the initial render', () => {
+  it('opens Gotgan on the initial render', () => {
     const html = renderToStaticMarkup(<DemoTabs><p>all demos</p></DemoTabs>);
-    expect(html).toContain('data-active="kyc"');
-    expect(html).toContain('Unlock the markets');
-    expect(html).not.toContain('Total vault deposits');
+    expect(html).toContain('data-active="giwa"');
+    expect(html).toContain(SCREEN_MARKERS.giwa);
+    expect(html).not.toContain('Unlock the markets');
   });
 
   it('says which demo has no screen rather than showing another one', () => {
